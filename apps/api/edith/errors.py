@@ -42,6 +42,10 @@ class AssetNotFound(EdithError):
     status, code = 404, "asset_not_found"
 
 
+class FontNotFound(EdithError):
+    status, code = 404, "font_not_found"
+
+
 class DocExpired(EdithError):
     status, code = 410, "doc_expired"
 

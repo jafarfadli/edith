@@ -113,3 +113,18 @@ def make_edit_pdf() -> bytes:
     pix.set_rect(pix.irect, (0, 0, 255))
     page.insert_image(pymupdf.Rect(300, 90, 340, 115), pixmap=pix)
     return doc.tobytes(garbage=3, deflate=True)
+
+
+def make_layout_pdf() -> bytes:
+    """Wrapped paragraphs (standard Helvetica/Times/Courier, every alignment) plus hand-broken lines."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    boxes = [("helv", pymupdf.TEXT_ALIGN_LEFT), ("tiro", pymupdf.TEXT_ALIGN_JUSTIFY), ("helv", pymupdf.TEXT_ALIGN_CENTER),
+             ("cour", pymupdf.TEXT_ALIGN_LEFT), ("tiro", pymupdf.TEXT_ALIGN_RIGHT)]
+    for i, (font, align) in enumerate(boxes):
+        rest = page.insert_textbox(pymupdf.Rect(72, 60 + i * 140, 320, 190 + i * 140), LOREM, fontname=font,
+                                   fontsize=10.5, align=align)
+        assert rest >= 0, "text did not fit its box"
+    for i, text in enumerate(["Jl. Merdeka Barat No. 17, Jakarta", "Pusat", "Indonesia"]):  # an address: hard breaks
+        page.insert_text((360, 80 + i * 13), text, fontname="helv", fontsize=11)
+    return doc.tobytes(garbage=3, deflate=True)
