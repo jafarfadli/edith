@@ -7,6 +7,7 @@ import { newId } from "@/lib/id";
 import { fitImage } from "@/lib/image";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore, useEditor, type Tool } from "@/store/editor";
+import { SignatureModal } from "./marks/SignatureModal";
 import { StampPicker } from "./marks/StampPicker";
 import { currentPage, placeObject } from "./placement";
 import { SplitButton } from "./SplitButton";
@@ -30,6 +31,7 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
   const canRedo = useEditor((s) => s.future.length > 0);
   const file = useRef<HTMLInputElement>(null);
   const [stampOpen, setStampOpen] = useState(false);
+  const [signatureOpen, setSignatureOpen] = useState(false);
   const s = editorStore.getState();
   const pick = (x: Tool) => s.setTool(x);
 
@@ -79,6 +81,10 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
       ]} />
       <ToolButton tool="check" label={t.annot.check} icon="✓" active={tool} />
       <ToolButton tool="cross" label={t.annot.cross} icon="✗" active={tool} />
+      <button aria-label={t.annot.signature} title={t.annot.signature} onClick={() => setSignatureOpen(true)} className="flex h-9 items-center gap-1 rounded-md px-2 text-sm hover:bg-bg">
+        <span aria-hidden>✍</span><span className="hidden lg:inline">{t.annot.signature}</span>
+      </button>
+      {signatureOpen && <SignatureModal onClose={() => setSignatureOpen(false)} onNotice={onNotice} />}
       <ToolButton tool="note" label={t.annot.note} icon="🗒" active={tool} />
       <ToolButton tool="link" label={t.annot.link} icon="🔗" active={tool} />
     </div>
