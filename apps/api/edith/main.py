@@ -7,7 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from edith.errors import install_error_handlers
-from edith.routes import assets, documents
+from edith.fonts import FontRegistry
+from edith.routes import assets, documents, export
 from edith.settings import Settings
 from edith.storage import Storage
 
@@ -38,6 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Edith API", lifespan=lifespan)
     app.state.settings = settings
     app.state.storage = storage
+    app.state.fonts = FontRegistry(settings.fonts_dir)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -48,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_error_handlers(app)
     app.include_router(documents.router)
     app.include_router(assets.router)
+    app.include_router(export.router)
 
     @app.get("/health")
     def health() -> dict:
