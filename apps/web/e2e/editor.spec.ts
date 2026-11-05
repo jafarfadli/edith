@@ -46,10 +46,6 @@ test("edit and download a PDF", async ({ page }) => {
   const editor = page.getByTestId("text-editor");
   await expect(editor).toBeVisible();
   await editor.fill("Halo Edith");
-  // Committing is async until the font is loaded; wait for it so undo/redo/download don't race the commit.
-  await expect
-    .poll(() => page.evaluate(() => [...document.fonts].some((f) => f.family.includes("edith-Arimo-regular"))))
-    .toBe(true);
   await page.mouse.click(p1.x + 500, p1.y + 700); // blur → commit
   await expect(editor).toHaveCount(0);
 
