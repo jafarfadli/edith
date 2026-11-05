@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from edith.errors import install_error_handlers
-from edith.routes import documents
+from edith.routes import assets, documents
 from edith.settings import Settings
 from edith.storage import Storage
 
@@ -47,6 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     install_error_handlers(app)
     app.include_router(documents.router)
+    app.include_router(assets.router)
 
     @app.get("/health")
     def health() -> dict:

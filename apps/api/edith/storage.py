@@ -9,9 +9,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable
 
-from edith.errors import DocExpired, DocNotFound
+from edith.errors import AssetNotFound, DocExpired, DocNotFound
 
 _ID = re.compile(r"^[A-Za-z0-9_-]{22}$")
+_ASSET = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 @dataclass
@@ -88,6 +89,24 @@ class Storage:
         if not path.is_file():  # removed between the TTL check and now
             raise DocExpired()
         return path
+
+    def save_asset(self, doc_id: str, data: bytes, ext: str) -> str:
+        d = self._alive_dir(doc_id) / "assets"
+        asset_id = secrets.token_urlsafe(12)
+        try:
+            (d / f"{asset_id}.{ext}").write_bytes(data)
+        except FileNotFoundError:  # doc removed concurrently (e.g. by cleanup)
+            raise DocExpired() from None
+        return asset_id
+
+    def asset_path(self, doc_id: str, asset_id: str) -> Path:
+        d = self._alive_dir(doc_id) / "assets"
+        if not _ASSET.fullmatch(asset_id):
+            raise AssetNotFound()
+        matches = sorted(d.glob(f"{asset_id}.*"))
+        if not matches:
+            raise AssetNotFound()
+        return matches[0]
 
     def meta(self, doc_id: str) -> DocMeta:
         try:
