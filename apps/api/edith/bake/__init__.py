@@ -11,7 +11,7 @@ from edith.errors import BakeFailed, EdithError, InvalidOp
 from edith.ops import DocSrc, LayoutPage, PagesLayout
 
 # Handler modules register themselves on import (later tasks add more, e.g. text):
-from edith.bake import draw, text  # noqa: F401,E402  (registers handlers)
+from edith.bake import draw, stamps, symbols, text  # noqa: F401,E402  (registers handlers)
 
 # text.edit removes only the glyphs of the edited lines; images and vector art stay.
 TEXT_ONLY = dict(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
