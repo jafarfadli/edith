@@ -2,8 +2,23 @@
 
 import { Arrow, Ellipse, Image as KImage, Line, Rect } from "react-konva";
 import type { ContentOp, Rect as R } from "@edith/ops";
-import { arrowHead } from "@/lib/objects";
+import { arrowHead, NOTE_SIZE } from "@/lib/objects";
+import { symbolPaths } from "@/lib/symbols";
+import { MarkupShape } from "./marks/MarkupShape";
+import { StampNode } from "./marks/StampNode";
 import { useImageAsset } from "./useImageAsset";
+
+const LINK_COLOR = "#2563eb";
+
+/** MuPDF's Note icon: a filled square with a 1 pt black border and four 8 x 1 pt black lines. */
+function NoteIcon({ x, y, color }: { x: number; y: number; color: string }) {
+  return (
+    <>
+      <Rect x={x + 0.5} y={y + 0.5} width={NOTE_SIZE - 1} height={NOTE_SIZE - 1} fill={color} stroke="#000000" strokeWidth={1} />
+      {[4, 6, 8, 10].map((dy) => <Rect key={dy} x={x + 4} y={y + dy} width={8} height={1} fill="#000000" listening={false} />)}
+    </>
+  );
+}
 
 function ImageObject({ docId, assetId, rect }: { docId: string; assetId: string; rect: R }) {
   const img = useImageAsset(docId, assetId);
@@ -23,8 +38,27 @@ export function ObjectShape({ op, docId }: { op: ContentOp; docId: string }) {
       const r = o.rect as R;
       return <Rect x={r.x} y={r.y} width={r.w} height={r.h} fill={o.fill === "white" ? "#ffffff" : "#000000"} opacity={0.75} stroke="#c2410c" strokeWidth={1} dash={[4, 3]} strokeScaleEnabled={false} />;
     }
-    case "image.add":
+    case "image.add": case "signature.add":
       return <ImageObject docId={docId} assetId={o.assetId as string} rect={o.rect as R} />;
+    case "stamp.add":
+      return <StampNode op={op} />;
+    case "symbol.add": {
+      const { paths, width } = symbolPaths(op.kind, op.rect);
+      return <>
+        <Rect x={op.rect.x} y={op.rect.y} width={op.rect.w} height={op.rect.h} fill="transparent" />
+        {paths.map((p, i) => <Line key={i} points={p.flat()} stroke={op.color} strokeWidth={width} lineCap="round" lineJoin="round" listening={false} />)}
+      </>;
+    }
+    case "link.add": {
+      const r = op.rect;
+      // Links have no appearance in the PDF; on screen a light dashed box shows the click area.
+      return <Rect x={r.x} y={r.y} width={r.w} height={r.h} fill="rgba(37,99,235,0.08)" stroke={LINK_COLOR} strokeWidth={1} dash={[4, 3]} strokeScaleEnabled={false} />;
+    }
+    case "annot.add": {
+      if (op.kind !== "note") return <MarkupShape op={op} />;
+      const [x, y] = op.point ?? [0, 0];
+      return <NoteIcon x={x} y={y} color={op.color} />;
+    }
     case "ink.add":
       return <>{(o.paths as number[][][]).map((path, i) =>
         path.length === 1

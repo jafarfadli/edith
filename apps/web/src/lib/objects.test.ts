@@ -91,6 +91,15 @@ describe("objects (M3)", () => {
     expect(isResizable(hl)).toBe(false);
   });
 
+  it("bounds of markup without quads (or a note without a point) are a zero rect, not NaN/Infinity", () => {
+    const base = { id: "e", type: "annot.add", pageKey: "o0", color: "#ffeb3b" };
+    for (const quads of [[], null, undefined]) {
+      expect(opBounds({ ...base, kind: "highlight", quads } as unknown as ContentOp)).toEqual({ x: 0, y: 0, w: 0, h: 0 });
+    }
+    expect(opBounds({ ...base, kind: "underline", quads: [], point: [5, 7] } as unknown as ContentOp)).toEqual({ x: 5, y: 7, w: 0, h: 0 });
+    expect(opBounds({ ...base, kind: "note", point: null } as ContentOp)).toEqual({ x: 0, y: 0, w: NOTE_SIZE, h: NOTE_SIZE });
+  });
+
   it("places notes and symbols on the page", () => {
     const note = noteAt([590, 10], style, "o0", "n", page);
     expect(note).toEqual({ id: "n", type: "annot.add", pageKey: "o0", kind: "note", point: [595 - NOTE_SIZE, 10], color: style.noteColor, content: "" });

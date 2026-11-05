@@ -51,8 +51,10 @@ export function opBounds(op: ContentOp): Rect {
   switch (op.type) {
     case "text.add": case "text.edit": return (o.box as { rect: Rect }).rect;
     case "annot.add": {
-      if (op.kind === "note") return { x: op.point![0], y: op.point![1], w: NOTE_SIZE, h: NOTE_SIZE };
-      const qs = op.quads!;
+      const [px, py] = op.point ?? [0, 0];
+      if (op.kind === "note") return { x: px, y: py, w: NOTE_SIZE, h: NOTE_SIZE };
+      const qs = op.quads ?? [];
+      if (!qs.length) return { x: px, y: py, w: 0, h: 0 }; // malformed markup: no NaN/Infinity bounds
       const x = Math.min(...qs.map((q) => q.x)), y = Math.min(...qs.map((q) => q.y));
       return { x, y, w: Math.max(...qs.map((q) => q.x + q.w)) - x, h: Math.max(...qs.map((q) => q.y + q.h)) - y };
     }

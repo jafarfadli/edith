@@ -7,12 +7,19 @@ import { useStore } from "zustand";
 import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
 import { groupTransform, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
-import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, isTextOp, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
+import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, isMarkup, isResizable, isTextOp, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
 import { editorStore, useEditor } from "@/store/editor";
+import { MarkupShape } from "./marks/MarkupShape";
 import { ObjectShape } from "./ObjectShape";
 import { textEditStore } from "./text/textEdit";
 
 type TextOp = TextAdd | TextEdit;
+
+/** Highlights multiply over the pdf.js canvas below (as their /BM /Multiply appearance does in a
+ *  viewer), so text under them stays dark: the markup layer's canvas blends with the page. */
+function multiplyLayer(layer: Konva.Layer | null) {
+  if (layer) layer.getNativeCanvasElement().style.mixBlendMode = "multiply";
+}
 
 export const overlayHooks: {
   onTextPointerDown?: (pageKey: string, at: Pt) => void;
@@ -43,6 +50,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   const drawing = useRef<{ start: Pt; draft: ContentOp | null; stop: () => void } | null>(null);
 
   const mine = order.map((id) => objects[id]).filter((op): op is ContentOp => !!op && op.pageKey === pageKey);
+  // Text markup is drawn in its own (multiplying) layer, over the objects: in the PDF it is an annotation.
+  const objs = mine.filter((op) => !isMarkup(op));
+  const markups = mine.filter(isMarkup);
 
   useEffect(() => {
     const node = selection ? nodes.current.get(selection) : undefined;
@@ -146,7 +156,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
         <Layer>
           <Group ref={pageRef} x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale}>
             {overlayHooks.renderUnder?.(pageKey)}
-            {mine.map((op) => (
+            {objs.map((op) => (
               <Group
                 key={op.id}
                 ref={(n) => { if (n) nodes.current.set(op.id, n); else nodes.current.delete(op.id); }}
@@ -184,12 +194,15 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
                   : <ObjectShape op={op} docId={docId} />}
               </Group>
             ))}
-            {draft && <ObjectShape op={draft} docId={docId} />}
+            {draft && !isMarkup(draft) && <ObjectShape op={draft} docId={docId} />}
             {overlayHooks.renderOver?.(pageKey)}
           </Group>
           <Transformer
             ref={trRef}
             rotateEnabled={false}
+            resizeEnabled={!selection || isResizable(objects[selection])}
+            // A note's icon is as big as its selection box: pad it so the border shows outside the icon's.
+            padding={selection && !isResizable(objects[selection]) ? 3 : 0}
             ignoreStroke
             keepRatio={false}
             enabledAnchors={selection && isTextOp(objects[selection])
@@ -199,6 +212,20 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
             anchorStroke="#0f766e"
             anchorSize={8}
           />
+        </Layer>
+        <Layer ref={multiplyLayer} listening={tool === "select"}>
+          <Group x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale}>
+            {markups.map((op) => (
+              <Group key={op.id} onPointerDown={(e) => {
+                e.cancelBubble = true;
+                textEditStore.getState().selectParagraph(null);
+                editorStore.getState().select(op.id);
+              }}>
+                <MarkupShape op={op} selected={selection === op.id} />
+              </Group>
+            ))}
+            {draft && isMarkup(draft) && <MarkupShape op={draft} />}
+          </Group>
         </Layer>
       </Stage>
     </div>
