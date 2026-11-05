@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import type Konva from "konva";
 import { Group, Layer, Stage, Transformer } from "react-konva";
+import { useStore } from "zustand";
 import type { ContentOp, TextAdd } from "@edith/ops";
 import { groupTransform, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
 import { createFromDrag, DRAG_TOOLS, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
 import { editorStore, useEditor } from "@/store/editor";
 import { ObjectShape } from "./ObjectShape";
+import { textEditStore } from "./text/textEdit";
 
 export const overlayHooks: {
   onTextPointerDown?: (pageKey: string, at: Pt) => void;
@@ -25,6 +27,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   const selection = useEditor((s) => s.selection);
   const tool = useEditor((s) => s.tool);
   const docId = useEditor((s) => s.info?.docId ?? "");
+  // renderText reads the editing id at render time (the edited op is hidden), so re-render when it changes.
+  useStore(textEditStore, (s) => s.editing?.id);
   const pageRef = useRef<Konva.Group>(null);
   const trRef = useRef<Konva.Transformer>(null);
   const nodes = useRef(new Map<string, Konva.Group>());

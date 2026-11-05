@@ -1,9 +1,11 @@
 "use client";
 
 import type { ContentOp } from "@edith/ops";
+import { useStore } from "zustand";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor, type ToolStyle } from "@/store/editor";
 import { ColorField } from "./ColorField";
+import { textEditStore } from "./text/textEdit";
 
 export const textPropsSlot: { render?: () => React.ReactNode } = {};
 
@@ -30,7 +32,8 @@ export function PropertiesBar() {
   const op = useEditor((s) => (s.selection ? s.doc.objects[s.selection] : undefined));
   const tool = useEditor((s) => s.tool);
   const style = useEditor((s) => s.style);
-  const kind = kindOf(op, tool);
+  const editingText = useStore(textEditStore, (st) => !!st.editing);
+  const kind = editingText ? "text" : kindOf(op, tool);
   const o = op as (ContentOp & Record<string, unknown>) | undefined;
   const s = editorStore.getState();
 

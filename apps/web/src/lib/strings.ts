@@ -44,6 +44,8 @@ export const t = {
     strokeWidth: "Tebal garis",
     font: "Font",
     fontSize: "Ukuran",
+    bold: "Tebal",
+    italic: "Miring",
     alignLeft: "Rata kiri",
     alignCenter: "Rata tengah",
     alignRight: "Rata kanan",
