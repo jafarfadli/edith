@@ -14,3 +14,4 @@ class BakeContext:
     asset_path: Callable[[str], Path]
     fonts: FontRegistry
     source: "SourcePages | None" = None  # set by bake() for the duration of one bake
+    page_index: dict[str, int] | None = None  # pageKey → output page index, set by bake() (links)
