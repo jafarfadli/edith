@@ -1,6 +1,9 @@
 import pymupdf
 
+from edith.doc_fonts import collect_fonts, fill_substitutes, name_key, span_fonts
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
+from edith.fonts import FontRegistry
+from edith.paragraphs import extract_paragraphs
 
 
 def open_pdf(data: bytes, max_pages: int) -> pymupdf.Document:
@@ -38,3 +41,24 @@ def extract_structure(doc: pymupdf.Document) -> dict:
             "hasText": bool(page.get_text("text").strip()),
         })
     return {"page_count": doc.page_count, "pages": pages}
+
+
+def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
+    """Paragraphs of every page plus the fonts they use. A run whose font is reusable gets
+    `{"kind": "original", "ref"}`; any other run gets its bundled substitute."""
+    fonts = collect_fonts(doc)
+    pages = []
+    for page in doc:
+        by_name = span_fonts(page, fonts)
+
+        def resolve(span: dict, by_name=by_name) -> dict:
+            font = by_name.get(name_key(span["font"]))
+            if font is None:
+                return registry.substitute(span["font"], span["flags"])
+            if font.substitute is None:  # BaseFont names map better than program names
+                font.substitute = registry.substitute(font.name, span["flags"])
+            return {"kind": "original", "ref": font.ref} if font.reusable else dict(font.substitute)
+
+        pages.append({"index": page.number, "paragraphs": extract_paragraphs(page, resolve)})
+    fill_substitutes(fonts, registry)
+    return {"pages": pages, "fonts": [f.to_json() for f in fonts.values()]}

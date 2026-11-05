@@ -1,3 +1,4 @@
+import json
 import math
 
 import pymupdf
@@ -5,11 +6,14 @@ import pytest
 
 from edith.bake import bake
 from edith.bake.context import BakeContext
+from edith.bake.tounicode import glyph_to_unicode, to_unicode_cmap
 from edith.errors import BakeFailed
 from edith.fonts import FontRegistry
 from edith.ops import ExportRequest
 from edith.settings import Settings
-from tests.pdfs import make_pdf, unrotated
+from edith.bake.text import quantized_width
+from edith.doc_fonts import collect_fonts
+from tests.pdfs import FONT_FILES, SUBSET_TTF, make_fonts_pdf, make_pdf, unrotated
 
 DOC = "D" * 22
 
@@ -112,3 +116,102 @@ def test_text_on_page_with_offset_mediabox(ctx):
     out = bake(src.tobytes(), ops, ctx)
     _, origin, *_ = chars(unrotated(out))[0]
     assert origin == pytest.approx((105, 215), abs=0.01)
+
+
+def _bundled_styles():
+    manifest = json.loads((Settings().fonts_dir / "manifest.json").read_text())
+    return [(family, style) for family, info in manifest["families"].items() for style in info["files"]]
+
+
+@pytest.mark.parametrize(("family", "style"), _bundled_styles())
+def test_bundled_text_round_trips_with_plain_spaces(ctx, family, style):
+    """MuPDF's ToUnicode inverts the font's cmap and the last code point of a shared glyph wins, so
+    Tinos spaces read back as U+00A0 and Arimo hyphens as U+00AD; the bake makes ASCII win."""
+    text = "".join(chr(c) for c in range(0x20, 0x7F))
+    r = run(text, family=family, bold="bold" in style, italic="italic" in style, size=8)
+    ops = text_op([r], [{"baseline": 15, "segments": [{"x": 0, "text": text, "runIndex": 0}]}], x=10)
+    out = pymupdf.open(stream=bake(make_pdf(pages=1, text=False), ops, ctx).tobytes(garbage=3), filetype="pdf")
+    assert "".join(c[0] for c in chars(out[0])) == text
+    assert out[0].get_text().strip("\n") == text
+
+
+def test_to_unicode_cmap_prefers_ascii_and_encodes_utf16(fonts):
+    tinos = fonts.font("Tinos", False, False)
+    mapping = glyph_to_unicode(tinos)
+    assert mapping[tinos.has_glyph(0x20)] == 0x20 and mapping[tinos.has_glyph(0x2D)] == 0x2D
+    cmap = to_unicode_cmap({3: 0x20, 5: 0x1F600})
+    assert b"<0003> <0020>" in cmap and b"<0005> <d83dde00>" in cmap  # surrogate pair beyond the BMP
+
+
+def test_fonts_of_the_source_pdf_keep_their_to_unicode(ctx):
+    data = make_fonts_pdf()
+    src = pymupdf.open(stream=data, filetype="pdf")
+    before = {x: src.xref_get_key(x, "ToUnicode") for x, *_ in src[0].get_fonts(full=True)}
+    streams = {x: src.xref_stream(int(v.split()[0])) for x, (k, v) in before.items() if k == "xref"}
+    out = bake(data, text_op([run("a b", family="Tinos")], [{"baseline": 15, "segments": [{"x": 0, "text": "a b", "runIndex": 0}]}], y=400), ctx)
+    assert streams and all(out.xref_stream(int(before[x][1].split()[0])) == s for x, s in streams.items())
+    assert "a b" in out[0].get_text()
+
+
+def test_decorations_follow_the_shared_geometry(ctx, fonts):
+    r = {**run("Garis", size=20, color="#00ff00"), "underline": True, "strike": True, "bgColor": "#ffff00"}
+    ops = text_op([r], [{"baseline": 15, "segments": [{"x": 5, "text": "Garis", "runIndex": 0}]}])
+    page = pymupdf.open(stream=bake(make_pdf(pages=1, text=False), ops, ctx).tobytes(), filetype="pdf")[0]
+    w = quantized_width(fonts.font("Arimo", False, False), "Garis", 20)
+    x, y = 105, 215  # rect (100, 200) + segment x 5, baseline 15
+    drawings = sorted(page.get_drawings(), key=lambda d: d["seqno"])
+    assert [d["fill"] for d in drawings] == [(1.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 1.0, 0.0)]
+    bg, under, strike = (d["rect"] for d in drawings)
+    assert tuple(bg) == pytest.approx((x, y - 18, x + w, y + 5), abs=0.01)       # −0.9·size … +0.25·size
+    assert tuple(under) == pytest.approx((x, y + 1.5, x + w, y + 2.7), abs=0.01)  # +0.075·size, 0.06·size thick
+    assert tuple(strike) == pytest.approx((x, y - 6, x + w, y - 4.8), abs=0.01)   # −0.3·size
+    text_seq = page.get_texttrace()[0]["seqno"]
+    assert drawings[0]["seqno"] < text_seq < drawings[1]["seqno"]  # background under the glyphs, lines over
+
+
+def test_quantized_width_matches_the_client_rule(fonts):
+    assert quantized_width(fonts.font("Arimo", False, False), "A", 20) == pytest.approx(13.32)  # floor(666.99)/1000·20
+
+
+def _ref(data: bytes, name: str) -> str:
+    return next(f.ref for f in collect_fonts(pymupdf.open(stream=data, filetype="pdf")).values() if f.name == name)
+
+
+def _original_op(data: bytes, text: str, name: str = "Tinos Regular"):
+    r = {"text": text, "font": {"kind": "original", "ref": _ref(data, name)}, "size": 12, "color": "#000000"}
+    return text_op([r], [{"baseline": 15, "segments": [{"x": 0, "text": text, "runIndex": 0}]}], y=400)
+
+
+def test_original_font_is_reused(ctx):
+    data = make_fonts_pdf()
+    out = pymupdf.open(stream=bake(data, _original_op(data, "lorem dolor"), ctx).tobytes(garbage=3), filetype="pdf")
+    span = next(s for b in out[0].get_text("dict")["blocks"] for ln in b.get("lines", []) for s in ln["spans"]
+                if s["text"] == "lorem dolor")
+    assert "Tinos" in span["font"] and span["origin"] == pytest.approx((100, 415), abs=0.01)
+    sizes = {len(out.extract_font(x[0])[3]) for x in out[0].get_fonts(full=True)}
+    assert len(SUBSET_TTF.read_bytes()) in sizes  # the subset embedded in the PDF, not the bundled Tinos
+
+
+def test_original_font_missing_a_glyph_fails(ctx):
+    data = make_fonts_pdf()
+    with pytest.raises(BakeFailed) as e:
+        bake(data, _original_op(data, "xyz"), ctx)  # the subset has no x, y, z
+    assert e.value.extra["op_id"] == "t"
+
+
+def test_non_reusable_original_font_fails(ctx):
+    data = make_fonts_pdf()
+    with pytest.raises(BakeFailed):
+        bake(data, _original_op(data, "Halo", name="Helvetica"), ctx)
+
+
+def test_reused_original_font_extracts_ascii_spaces_and_hyphens(ctx):
+    """An embedded full Tinos maps U+0020/U+00A0 (and U+002D/U+00AD) to shared glyphs, like many
+    producer fonts; reusing it must not turn the new text's spaces into U+00A0."""
+    src = pymupdf.open()
+    page = src.new_page(width=595, height=842)
+    page.insert_font(fontname="FT", fontfile=str(FONT_FILES / "Tinos-Regular.ttf"))
+    page.insert_text((72, 100), "Original Tinos line", fontname="FT", fontsize=12)
+    data = src.tobytes(garbage=3, deflate=True)
+    out = bake(data, _original_op(data, "baru a-b c"), ctx)
+    assert "baru a-b c" in out[0].get_text().splitlines()

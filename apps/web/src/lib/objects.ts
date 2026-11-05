@@ -1,4 +1,4 @@
-import type { ContentOp, Rect } from "@edith/ops";
+import type { ContentOp, Rect, TextAdd, TextEdit } from "@edith/ops";
 import type { ToolStyle } from "@/store/editor";
 
 export type Pt = [number, number];
@@ -27,10 +27,14 @@ function boundsOfPoints(pts: number[][]): Rect {
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }
 
+export function isTextOp(op: ContentOp | undefined): op is TextAdd | TextEdit {
+  return op?.type === "text.add" || op?.type === "text.edit";
+}
+
 export function opBounds(op: ContentOp): Rect {
   const o = op as Any;
   switch (op.type) {
-    case "text.add": return (o.box as { rect: Rect }).rect;
+    case "text.add": case "text.edit": return (o.box as { rect: Rect }).rect;
     case "ink.add": return boundsOfPoints((o.paths as number[][][]).flat());
     case "shape.add": return o.points ? boundsOfPoints(o.points as number[][]) : (o.rect as Rect);
     default: return o.rect as Rect;
@@ -42,7 +46,7 @@ export function moveOp<T extends ContentOp>(op: T, dx: number, dy: number): T {
   const mv = (p: number[]) => [p[0] + dx, p[1] + dy];
   const mr = (r: Rect): Rect => ({ ...r, x: r.x + dx, y: r.y + dy });
   switch (op.type) {
-    case "text.add": { const box = o.box as { rect: Rect }; return { ...op, box: { ...box, rect: mr(box.rect) } }; }
+    case "text.add": case "text.edit": { const box = o.box as { rect: Rect }; return { ...op, box: { ...box, rect: mr(box.rect) } }; }
     case "ink.add": return { ...op, paths: (o.paths as number[][][]).map((path) => path.map(mv)) };
     case "shape.add": return o.points ? { ...op, points: (o.points as number[][]).map(mv) } : { ...op, rect: mr(o.rect as Rect) };
     default: return { ...op, rect: mr(o.rect as Rect) };
@@ -55,7 +59,7 @@ export function resizeOp<T extends ContentOp>(op: T, to: Rect): T {
   const sx = b.w ? to.w / b.w : 1, sy = b.h ? to.h / b.h : 1;
   const sc = (p: number[]) => [to.x + (p[0] - b.x) * sx, to.y + (p[1] - b.y) * sy];
   switch (op.type) {
-    case "text.add": { const box = o.box as { rect: Rect }; return { ...op, box: { ...box, rect: { ...box.rect, x: to.x, y: to.y, w: to.w } } }; }
+    case "text.add": case "text.edit": { const box = o.box as { rect: Rect }; return { ...op, box: { ...box, rect: { ...box.rect, x: to.x, y: to.y, w: to.w } } }; }
     case "ink.add": return { ...op, paths: (o.paths as number[][][]).map((path) => path.map(sc)) };
     case "shape.add": return o.points ? { ...op, points: (o.points as number[][]).map(sc) } : { ...op, rect: to };
     default: return { ...op, rect: to };

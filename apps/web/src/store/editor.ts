@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { ContentOp } from "@edith/ops";
+import type { ContentOp, TextEdit } from "@edith/ops";
 import { normRotation, type PageGeom, type Rotation } from "@/lib/coords";
 import { newId } from "@/lib/id";
 
@@ -21,7 +21,10 @@ export interface EditorState {
   selection: string | null; tool: Tool; zoom: number; style: ToolStyle; currentPage: string | null;
   init(info: DocInfo, restored?: EditorDoc | null): void;
   addObject(op: ContentOp): void;
-  updateObject(id: string, patch: Partial<ContentOp>): void;
+  /** `coalesce`: successive updates with the same key within COALESCE_MS are one undo step (slider drags, typing a size). */
+  updateObject(id: string, patch: Partial<ContentOp>, opts?: { coalesce?: string }): void;
+  /** Adds or replaces several objects as one undo step (Replace All). */
+  putObjects(ops: ContentOp[]): void;
   deleteObject(id: string): void;
   rotatePage(pageKey: string, delta: 90 | -90): void;
   deletePage(pageKey: string): void;
@@ -33,6 +36,7 @@ export interface EditorState {
 }
 
 export const HISTORY_LIMIT = 100;
+export const COALESCE_MS = 1000;
 const A4 = { width: 595, height: 842 };
 const EMPTY: EditorDoc = { pages: [], objects: {}, order: [] };
 const DEFAULT_STYLE: ToolStyle = {
@@ -67,13 +71,29 @@ function reconcile(doc: EditorDoc, s: { selection: string | null; currentPage: s
   return out;
 }
 
-export function createEditorStore(): StoreApi<EditorState> {
+/** The text.edit op replacing original paragraph `paragraphId` on `pageKey`, if any. */
+export function textEditFor(doc: EditorDoc, pageKey: string, paragraphId: string): TextEdit | undefined {
+  for (const id of doc.order) {
+    const op = doc.objects[id];
+    if (op?.type === "text.edit" && op.pageKey === pageKey && (op as TextEdit).paragraphId === paragraphId) return op as TextEdit;
+  }
+  return undefined;
+}
+
+export function createEditorStore(now: () => number = Date.now): StoreApi<EditorState> {
   return createStore<EditorState>()((set, get) => {
-    const commit = (fn: (d: EditorDoc) => EditorDoc) => {
+    let last: { key: string; at: number } | null = null;
+    const commit = (fn: (d: EditorDoc) => EditorDoc, coalesce?: string) => {
       const prev = get().doc;
       const next = fn(prev);
       if (next === prev) return;
-      set({ doc: next, past: [...get().past, prev].slice(-HISTORY_LIMIT), future: [] });
+      const t = now();
+      if (coalesce !== undefined && last?.key === coalesce && t - last.at <= COALESCE_MS && get().past.length) {
+        set({ doc: next, future: [] }); // same undo step as the previous update
+      } else {
+        set({ doc: next, past: [...get().past, prev].slice(-HISTORY_LIMIT), future: [] });
+      }
+      last = coalesce !== undefined ? { key: coalesce, at: t } : null;
     };
     const mapPage = (key: string, fn: (p: PageEntry) => PageEntry) =>
       commit((d) => ({ ...d, pages: d.pages.map((p) => (p.pageKey === key ? fn(p) : p)) }));
@@ -97,11 +117,24 @@ export function createEditorStore(): StoreApi<EditorState> {
         }));
       },
 
-      updateObject(id, patch) {
+      updateObject(id, patch, opts) {
         commit((d) => {
           const cur = d.objects[id];
           if (!cur) return d;
           return { ...d, objects: { ...d.objects, [id]: { ...cur, ...patch, id: cur.id, type: cur.type } as ContentOp } };
+        }, opts?.coalesce);
+      },
+
+      putObjects(ops) {
+        if (!ops.length) return;
+        commit((d) => {
+          const objects = { ...d.objects };
+          const order = [...d.order];
+          for (const op of ops) {
+            if (!objects[op.id]) order.push(op.id);
+            objects[op.id] = op;
+          }
+          return { ...d, objects, order };
         });
       },
 
@@ -151,6 +184,7 @@ export function createEditorStore(): StoreApi<EditorState> {
       },
 
       undo() {
+        last = null;
         const { past, doc, future } = get();
         if (!past.length) return;
         const prev = past[past.length - 1];
@@ -159,6 +193,7 @@ export function createEditorStore(): StoreApi<EditorState> {
       },
 
       redo() {
+        last = null;
         const { past, doc, future } = get();
         if (!future.length) return;
         const next = future[0];

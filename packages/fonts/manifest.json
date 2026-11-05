@@ -1,20 +1,126 @@
 {
   "default": "Arimo",
+  "fallback": {"sans": "Arimo", "serif": "Tinos", "mono": "Cousine"},
   "families": {
     "Arimo": {
       "category": "sans",
-      "files": { "regular": "Arimo-Regular.ttf", "bold": "Arimo-Bold.ttf", "italic": "Arimo-Italic.ttf", "bolditalic": "Arimo-BoldItalic.ttf" },
-      "aliases": ["arimo", "helvetica", "helv", "arial", "arialmt", "liberationsans"]
+      "files": {"regular": "Arimo-Regular.ttf", "bold": "Arimo-Bold.ttf", "italic": "Arimo-Italic.ttf", "bolditalic": "Arimo-BoldItalic.ttf"},
+      "aliases": ["arimo", "helvetica", "helv", "arial", "arialmt", "liberationsans", "nimbussans", "nimbussansl", "helveticaneue"]
     },
     "Tinos": {
       "category": "serif",
-      "files": { "regular": "Tinos-Regular.ttf", "bold": "Tinos-Bold.ttf", "italic": "Tinos-Italic.ttf", "bolditalic": "Tinos-BoldItalic.ttf" },
-      "aliases": ["tinos", "times", "timesroman", "timesnewroman", "timesnewromanpsmt", "tiro", "liberationserif"]
+      "files": {"regular": "Tinos-Regular.ttf", "bold": "Tinos-Bold.ttf", "italic": "Tinos-Italic.ttf", "bolditalic": "Tinos-BoldItalic.ttf"},
+      "aliases": ["tinos", "times", "timesroman", "timesnewroman", "timesnewromanps", "timesnewromanpsmt", "tiro", "liberationserif", "nimbusroman", "nimbusromanno9l"]
     },
     "Cousine": {
       "category": "mono",
-      "files": { "regular": "Cousine-Regular.ttf", "bold": "Cousine-Bold.ttf", "italic": "Cousine-Italic.ttf", "bolditalic": "Cousine-BoldItalic.ttf" },
-      "aliases": ["cousine", "courier", "couriernew", "cour", "liberationmono"]
+      "files": {"regular": "Cousine-Regular.ttf", "bold": "Cousine-Bold.ttf", "italic": "Cousine-Italic.ttf", "bolditalic": "Cousine-BoldItalic.ttf"},
+      "aliases": ["cousine", "courier", "couriernew", "couriernewps", "couriernewpsmt", "cour", "liberationmono", "nimbusmono", "nimbusmonops"]
+    },
+    "Carlito": {
+      "category": "sans",
+      "files": {"regular": "Carlito-Regular.ttf", "bold": "Carlito-Bold.ttf", "italic": "Carlito-Italic.ttf", "bolditalic": "Carlito-BoldItalic.ttf"},
+      "aliases": ["carlito", "calibri"]
+    },
+    "Caladea": {
+      "category": "serif",
+      "files": {"regular": "Caladea-Regular.ttf", "bold": "Caladea-Bold.ttf", "italic": "Caladea-Italic.ttf", "bolditalic": "Caladea-BoldItalic.ttf"},
+      "aliases": ["caladea", "cambria"]
+    },
+    "Inter": {
+      "category": "sans",
+      "files": {"regular": "Inter-Regular.ttf", "bold": "Inter-Bold.ttf", "italic": "Inter-Italic.ttf", "bolditalic": "Inter-BoldItalic.ttf"},
+      "aliases": ["inter"]
+    },
+    "Roboto": {
+      "category": "sans",
+      "files": {"regular": "Roboto-Regular.ttf", "bold": "Roboto-Bold.ttf", "italic": "Roboto-Italic.ttf", "bolditalic": "Roboto-BoldItalic.ttf"},
+      "aliases": ["roboto"]
+    },
+    "Open Sans": {
+      "category": "sans",
+      "files": {"regular": "OpenSans-Regular.ttf", "bold": "OpenSans-Bold.ttf", "italic": "OpenSans-Italic.ttf", "bolditalic": "OpenSans-BoldItalic.ttf"},
+      "aliases": ["opensans"]
+    },
+    "Lato": {
+      "category": "sans",
+      "files": {"regular": "Lato-Regular.ttf", "bold": "Lato-Bold.ttf", "italic": "Lato-Italic.ttf", "bolditalic": "Lato-BoldItalic.ttf"},
+      "aliases": ["lato"]
+    },
+    "Montserrat": {
+      "category": "sans",
+      "files": {"regular": "Montserrat-Regular.ttf", "bold": "Montserrat-Bold.ttf", "italic": "Montserrat-Italic.ttf", "bolditalic": "Montserrat-BoldItalic.ttf"},
+      "aliases": ["montserrat"]
+    },
+    "Poppins": {
+      "category": "sans",
+      "files": {"regular": "Poppins-Regular.ttf", "bold": "Poppins-Bold.ttf", "italic": "Poppins-Italic.ttf", "bolditalic": "Poppins-BoldItalic.ttf"},
+      "aliases": ["poppins"]
+    },
+    "Source Sans 3": {
+      "category": "sans",
+      "files": {"regular": "SourceSans3-Regular.ttf", "bold": "SourceSans3-Bold.ttf", "italic": "SourceSans3-Italic.ttf", "bolditalic": "SourceSans3-BoldItalic.ttf"},
+      "aliases": ["sourcesans3", "sourcesanspro"]
+    },
+    "Lora": {
+      "category": "serif",
+      "files": {"regular": "Lora-Regular.ttf", "bold": "Lora-Bold.ttf", "italic": "Lora-Italic.ttf", "bolditalic": "Lora-BoldItalic.ttf"},
+      "aliases": ["lora"]
+    },
+    "Playfair Display": {
+      "category": "serif",
+      "files": {"regular": "PlayfairDisplay-Regular.ttf", "bold": "PlayfairDisplay-Bold.ttf", "italic": "PlayfairDisplay-Italic.ttf", "bolditalic": "PlayfairDisplay-BoldItalic.ttf"},
+      "aliases": ["playfairdisplay"]
+    },
+    "Source Serif 4": {
+      "category": "serif",
+      "files": {"regular": "SourceSerif4-Regular.ttf", "bold": "SourceSerif4-Bold.ttf", "italic": "SourceSerif4-Italic.ttf", "bolditalic": "SourceSerif4-BoldItalic.ttf"},
+      "aliases": ["sourceserif4", "sourceserifpro"]
+    },
+    "PT Serif": {
+      "category": "serif",
+      "files": {"regular": "PTSerif-Regular.ttf", "bold": "PTSerif-Bold.ttf", "italic": "PTSerif-Italic.ttf", "bolditalic": "PTSerif-BoldItalic.ttf"},
+      "aliases": ["ptserif"]
+    },
+    "JetBrains Mono": {
+      "category": "mono",
+      "files": {"regular": "JetBrainsMono-Regular.ttf", "bold": "JetBrainsMono-Bold.ttf", "italic": "JetBrainsMono-Italic.ttf", "bolditalic": "JetBrainsMono-BoldItalic.ttf"},
+      "aliases": ["jetbrainsmono"]
+    },
+    "Noto Sans": {
+      "category": "sans",
+      "files": {"regular": "NotoSans-Regular.ttf", "bold": "NotoSans-Bold.ttf", "italic": "NotoSans-Italic.ttf", "bolditalic": "NotoSans-BoldItalic.ttf"},
+      "aliases": ["notosans"]
+    },
+    "Noto Serif": {
+      "category": "serif",
+      "files": {"regular": "NotoSerif-Regular.ttf", "bold": "NotoSerif-Bold.ttf", "italic": "NotoSerif-Italic.ttf", "bolditalic": "NotoSerif-BoldItalic.ttf"},
+      "aliases": ["notoserif"]
+    },
+    "Merriweather": {
+      "category": "serif",
+      "files": {"regular": "Merriweather-Regular.ttf", "bold": "Merriweather-Bold.ttf", "italic": "Merriweather-Italic.ttf", "bolditalic": "Merriweather-BoldItalic.ttf"},
+      "aliases": ["merriweather"]
+    },
+    "Dancing Script": {
+      "category": "script",
+      "files": {"regular": "DancingScript-Regular.ttf", "bold": "DancingScript-Bold.ttf"},
+      "aliases": ["dancingscript"]
+    },
+    "Caveat": {
+      "category": "script",
+      "files": {"regular": "Caveat-Regular.ttf", "bold": "Caveat-Bold.ttf"},
+      "aliases": ["caveat"]
+    },
+    "Great Vibes": {
+      "category": "script",
+      "files": {"regular": "GreatVibes-Regular.ttf"},
+      "aliases": ["greatvibes"]
+    },
+    "Sacramento": {
+      "category": "script",
+      "files": {"regular": "Sacramento-Regular.ttf"},
+      "aliases": ["sacramento"]
     }
   }
 }

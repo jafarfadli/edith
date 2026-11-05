@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
-import { arrowHead, clampToPage, createFromDrag, inkWidth, MIN_INK_WIDTH, moveOp, normalizeRect, opBounds, resizeOp } from "@/lib/objects";
+import { arrowHead, clampToPage, createFromDrag, inkWidth, isTextOp, MIN_INK_WIDTH, moveOp, normalizeRect, opBounds, resizeOp } from "@/lib/objects";
 import type { ToolStyle } from "@/store/editor";
 
 const style: ToolStyle = { stroke: "#ff0000", fill: "#00ff00", width: 3, color: "#111111", fontFamily: "Arimo", fontSize: 14, bold: false, italic: false, align: "left" };
@@ -62,5 +62,18 @@ describe("objects", () => {
     expect(inkWidth(0)).toBe(0.5);
     expect(inkWidth(0.2)).toBe(0.5);
     expect(inkWidth(4)).toBe(4);
+  });
+});
+
+describe("text.edit ops", () => {
+  const box = { rect: { x: 10, y: 20, w: 100, h: 30 }, align: "left" as const, lineHeight: 12, paragraphs: [], layout: [] };
+  const op = { id: "e", type: "text.edit", pageKey: "o0", paragraphId: "g0", box } as ContentOp;
+
+  it("are text ops placed by their box", () => {
+    expect(isTextOp(op)).toBe(true);
+    expect(isTextOp({ id: "w", type: "whiteout.add", pageKey: "o0", rect: box.rect } as ContentOp)).toBe(false);
+    expect(opBounds(op)).toEqual(box.rect);
+    expect(opBounds(moveOp(op, 5, -5))).toEqual({ x: 15, y: 15, w: 100, h: 30 });
+    expect(opBounds(resizeOp(op, { x: 0, y: 20, w: 50, h: 99 }))).toEqual({ x: 0, y: 20, w: 50, h: 30 }); // width only
   });
 });

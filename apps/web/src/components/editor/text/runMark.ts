@@ -1,0 +1,60 @@
+import { Mark } from "@tiptap/core";
+import { runCss, type RunAttrs } from "@/lib/richtext";
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    run: {
+      /** Restyles every text in the selection with `fn` (or the style typed next, when the selection is empty). */
+      updateRuns: (fn: (a: RunAttrs) => RunAttrs) => ReturnType;
+    };
+  }
+}
+
+const KEYS = ["font", "size", "color", "bgColor", "underline", "strike"] as const;
+
+function readRun(el: HTMLElement): Partial<RunAttrs> {
+  try { return JSON.parse(el.getAttribute("data-run") || "{}") as Partial<RunAttrs>; } catch { return {}; }
+}
+
+/** The one mark of the rich editor: a run's whole character style. `fallback` styles text that has none yet. */
+export function createRunMark(fallback: () => RunAttrs) {
+  return Mark.create({
+    name: "run",
+    inclusive: true,
+    addAttributes() {
+      const defaults: RunAttrs = { font: { kind: "bundled", family: "Arimo", bold: false, italic: false }, size: 12, color: "#000000", bgColor: null, underline: false, strike: false };
+      return Object.fromEntries(KEYS.map((k) => [k, {
+        default: defaults[k],
+        rendered: false,
+        parseHTML: (el: HTMLElement) => readRun(el)[k] ?? defaults[k],
+      }]));
+    },
+    // Copy/paste inside the editor keeps styles: the attributes travel as JSON in data-run.
+    parseHTML() { return [{ tag: "span[data-run]" }]; },
+    renderHTML({ mark }) {
+      const a = mark.attrs as RunAttrs;
+      return ["span", { "data-run": JSON.stringify(a), style: runCss(a) }, 0];
+    },
+    addCommands() {
+      return {
+        updateRuns: (fn) => ({ state, tr, dispatch }) => {
+          const type = state.schema.marks.run;
+          const { from, to, empty } = state.selection;
+          if (!dispatch) return true;
+          if (empty) {
+            const marks = state.storedMarks ?? state.selection.$from.marks();
+            const cur = marks.find((m) => m.type === type)?.attrs as RunAttrs | undefined;
+            tr.addStoredMark(type.create(fn(cur ?? fallback())));
+            return true;
+          }
+          state.doc.nodesBetween(from, to, (node, pos) => {
+            if (!node.isText) return;
+            const cur = node.marks.find((m) => m.type === type)?.attrs as RunAttrs | undefined;
+            tr.addMark(Math.max(from, pos), Math.min(to, pos + node.nodeSize), type.create(fn(cur ?? fallback())));
+          });
+          return true;
+        },
+      };
+    },
+  });
+}

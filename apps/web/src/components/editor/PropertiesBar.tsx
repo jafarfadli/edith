@@ -2,7 +2,7 @@
 
 import type { ContentOp } from "@edith/ops";
 import { useStore } from "zustand";
-import { inkWidth } from "@/lib/objects";
+import { inkWidth, isTextOp } from "@/lib/objects";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor, type ToolStyle } from "@/store/editor";
 import { ColorField } from "./ColorField";
@@ -17,7 +17,7 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
     if (op.type === "shape.add") return (op as { kind: string }).kind === "line" || (op as { kind: string }).kind === "arrow" ? "line" : "shape";
     if (op.type === "ink.add") return "ink";
     if (op.type === "redact.add") return "redact";
-    if (op.type === "text.add") return "text";
+    if (isTextOp(op)) return "text";
     return null;
   }
   if (tool === "rect" || tool === "ellipse") return "shape";
@@ -35,6 +35,11 @@ export function PropertiesBar() {
   const style = useEditor((s) => s.style);
   const editingText = useStore(textEditStore, (st) => !!st.editing);
   const kind = editingText ? "text" : kindOf(op, tool);
+  // The text tool on a page without text (a scan): say why there is nothing to edit.
+  const scanned = useEditor((st) => {
+    const entry = st.doc.pages.find((p) => p.pageKey === st.currentPage);
+    return tool === "text" && !!entry && "doc" in entry.src && st.info?.pages[entry.src.index]?.hasText === false;
+  });
   const o = op as (ContentOp & Record<string, unknown>) | undefined;
   const s = editorStore.getState();
 
@@ -50,7 +55,7 @@ export function PropertiesBar() {
       if (patch.width !== undefined) p.width = o.type === "ink.add" ? inkWidth(patch.width) : patch.width;
       if (patch.fill !== undefined) p.fill = patch.fill;
       if (patch.redactFill !== undefined) p.fill = patch.redactFill;
-      s.updateObject(o.id, p as Partial<ContentOp>);
+      s.updateObject(o.id, p as Partial<ContentOp>, { coalesce: `props:${o.id}` }); // a slider drag is one undo step
     } else {
       const next: Partial<ToolStyle> = {};
       if (patch.stroke !== undefined) next.stroke = patch.stroke;
@@ -92,10 +97,12 @@ export function PropertiesBar() {
         </label>
       )}
       {kind === "text" && textPropsSlot.render?.()}
+      {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
       <div className="flex-1" />
       {selection && (
-        <button onClick={() => s.deleteObject(selection)} aria-label={t.editor.delete} className="rounded-md px-2 py-1 text-danger hover:bg-danger/10">
-          🗑 {t.editor.delete}
+        // Deleting a text.edit op brings the original paragraph back.
+        <button onClick={() => s.deleteObject(selection)} aria-label={op?.type === "text.edit" ? t.text.revert : t.editor.delete} className="rounded-md px-2 py-1 text-danger hover:bg-danger/10">
+          🗑 {op?.type === "text.edit" ? t.text.revert : t.editor.delete}
         </button>
       )}
     </div>

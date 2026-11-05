@@ -7,6 +7,7 @@ import { compact, failedOpId } from "@/lib/compact";
 import { downloadBlob } from "@/lib/download";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
+import { openFind } from "./find/findStore";
 import { whenTextCommitted } from "./text/textEdit";
 
 export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; text: string }) => void }) {
@@ -51,6 +52,9 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
         className="min-w-0 max-w-xs flex-1 truncate rounded-md border border-transparent px-2 py-1 text-sm hover:border-line focus:border-accent focus:outline-none"
       />
       <div className="flex-1" />
+      <button onClick={openFind} disabled={!info} className="rounded-lg px-3 py-2 text-sm hover:bg-bg disabled:opacity-60">
+        🔍 {t.find.open}
+      </button>
       <button
         onClick={download}
         disabled={busy || !info}

@@ -4,19 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import type Konva from "konva";
 import { Group, Layer, Stage, Transformer } from "react-konva";
 import { useStore } from "zustand";
-import type { ContentOp, TextAdd } from "@edith/ops";
+import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
 import { groupTransform, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
-import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
+import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, isTextOp, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
 import { editorStore, useEditor } from "@/store/editor";
 import { ObjectShape } from "./ObjectShape";
 import { textEditStore } from "./text/textEdit";
 
+type TextOp = TextAdd | TextEdit;
+
 export const overlayHooks: {
   onTextPointerDown?: (pageKey: string, at: Pt) => void;
-  renderText?: (op: TextAdd, selected: boolean) => React.ReactNode;
-  resizeText?: (op: TextAdd, to: { x: number; y: number; w: number; h: number }) => TextAdd;
+  renderText?: (op: TextOp, selected: boolean) => React.ReactNode;
+  resizeText?: (op: TextOp, to: { x: number; y: number; w: number; h: number }) => TextOp;
   onDoubleClick?: (op: ContentOp) => void;
+  /** Konva nodes drawn under the page's objects (original paragraphs). */
+  renderUnder?: (pageKey: string) => React.ReactNode;
+  /** Konva nodes drawn over the page's objects (search highlights). */
+  renderOver?: (pageKey: string) => React.ReactNode;
 } = {};
 
 export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
@@ -114,7 +120,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   function onDown(e: Konva.KonvaEventObject<PointerEvent>) {
     const s = editorStore.getState();
     if (tool === "select") {
-      if (e.target === e.target.getStage()) s.select(null);
+      if (e.target === e.target.getStage()) { s.select(null); textEditStore.getState().selectParagraph(null); }
       return;
     }
     const at = pos();
@@ -139,13 +145,19 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       >
         <Layer>
           <Group ref={pageRef} x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale}>
+            {overlayHooks.renderUnder?.(pageKey)}
             {mine.map((op) => (
               <Group
                 key={op.id}
                 ref={(n) => { if (n) nodes.current.set(op.id, n); else nodes.current.delete(op.id); }}
                 draggable={tool === "select"}
                 listening={tool === "select"}
-                onPointerDown={(e) => { if (tool === "select") { e.cancelBubble = true; editorStore.getState().select(op.id); } }}
+                onPointerDown={(e) => {
+                  if (tool !== "select") return;
+                  e.cancelBubble = true;
+                  textEditStore.getState().selectParagraph(null);
+                  editorStore.getState().select(op.id);
+                }}
                 onDragEnd={(e) => {
                   const g = e.currentTarget as Konva.Group;
                   const dx = g.x(), dy = g.y();
@@ -160,26 +172,27 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
                   const cur = editorStore.getState().doc.objects[op.id];
                   if (!cur) return;
                   const to = { x: box.x, y: box.y, w: box.width, h: box.height };
-                  const next = cur.type === "text.add" && overlayHooks.resizeText
-                    ? overlayHooks.resizeText(cur as TextAdd, to)
+                  const next = isTextOp(cur) && overlayHooks.resizeText
+                    ? overlayHooks.resizeText(cur, to)
                     : resizeOp(cur, to);
                   editorStore.getState().updateObject(op.id, next);
                 }}
                 onDblClick={() => overlayHooks.onDoubleClick?.(op)}
               >
-                {op.type === "text.add"
-                  ? overlayHooks.renderText?.(op as TextAdd, selection === op.id) ?? null
+                {isTextOp(op)
+                  ? overlayHooks.renderText?.(op, selection === op.id) ?? null
                   : <ObjectShape op={op} docId={docId} />}
               </Group>
             ))}
             {draft && <ObjectShape op={draft} docId={docId} />}
+            {overlayHooks.renderOver?.(pageKey)}
           </Group>
           <Transformer
             ref={trRef}
             rotateEnabled={false}
             ignoreStroke
             keepRatio={false}
-            enabledAnchors={selection && objects[selection]?.type === "text.add"
+            enabledAnchors={selection && isTextOp(objects[selection])
               ? ["middle-left", "middle-right"]
               : ["top-left", "top-center", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-center", "bottom-right"]}
             borderStroke="#0f766e"

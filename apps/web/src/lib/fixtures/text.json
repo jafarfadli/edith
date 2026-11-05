@@ -1,0 +1,486 @@
+{
+ "doc_id": "fixture",
+ "pages": [
+  {
+   "index": 0,
+   "paragraphs": [
+    {
+     "id": "g0",
+     "rect": {
+      "x": 72.0,
+      "y": 60.0,
+      "w": 243.36,
+      "h": 60.95
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 60.0,
+        "w": 228.77,
+        "h": 14.43
+       },
+       "baseline": 71.29,
+       "size": 10.5,
+       "start": 0,
+       "end": 48
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 75.51,
+        "w": 226.44,
+        "h": 14.43
+       },
+       "baseline": 86.8,
+       "size": 10.5,
+       "start": 49,
+       "end": 97
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 91.02,
+        "w": 243.36,
+        "h": 14.43
+       },
+       "baseline": 102.31,
+       "size": 10.5,
+       "start": 98,
+       "end": 151
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 106.53,
+        "w": 97.46,
+        "h": 14.43
+       },
+       "baseline": 117.81,
+       "size": 10.5,
+       "start": 152,
+       "end": 170
+      }
+     ],
+     "runs": [
+      {
+       "text": "Edith menyunting paragraf asli dengan rapi. Teks mengalir ulang di dalam kotak selebar tetap, dan gaya bisa diatur per kata tanpa merusak baris lain di halaman yang sama.",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 10.5,
+       "color": "#000000"
+      }
+     ],
+     "align": "left",
+     "lineHeight": 15.51,
+     "editable": true
+    },
+    {
+     "id": "g1",
+     "rect": {
+      "x": 72.0,
+      "y": 200.0,
+      "w": 248.0,
+      "h": 43.51
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 200.0,
+        "w": 248.0,
+        "h": 14.01
+       },
+       "baseline": 211.06,
+       "size": 10.5,
+       "start": 0,
+       "end": 57
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 214.75,
+        "w": 248.0,
+        "h": 14.01
+       },
+       "baseline": 225.81,
+       "size": 10.5,
+       "start": 58,
+       "end": 114
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 229.5,
+        "w": 237.36,
+        "h": 14.01
+       },
+       "baseline": 240.56,
+       "size": 10.5,
+       "start": 115,
+       "end": 170
+      }
+     ],
+     "runs": [
+      {
+       "text": "Edith menyunting paragraf asli dengan rapi. Teks mengalir ulang di dalam kotak selebar tetap, dan gaya bisa diatur per kata tanpa merusak baris lain di halaman yang sama.",
+       "font": {
+        "kind": "bundled",
+        "family": "Tinos",
+        "bold": false,
+        "italic": false
+       },
+       "size": 10.5,
+       "color": "#000000"
+      }
+     ],
+     "align": "justify",
+     "lineHeight": 14.75,
+     "editable": true
+    },
+    {
+     "id": "g2",
+     "rect": {
+      "x": 74.32,
+      "y": 340.0,
+      "w": 243.36,
+      "h": 60.95
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 81.61,
+        "y": 340.0,
+        "w": 228.77,
+        "h": 14.43
+       },
+       "baseline": 351.29,
+       "size": 10.5,
+       "start": 0,
+       "end": 48
+      },
+      {
+       "rect": {
+        "x": 82.78,
+        "y": 355.51,
+        "w": 226.44,
+        "h": 14.43
+       },
+       "baseline": 366.8,
+       "size": 10.5,
+       "start": 49,
+       "end": 97
+      },
+      {
+       "rect": {
+        "x": 74.32,
+        "y": 371.02,
+        "w": 243.36,
+        "h": 14.43
+       },
+       "baseline": 382.31,
+       "size": 10.5,
+       "start": 98,
+       "end": 151
+      },
+      {
+       "rect": {
+        "x": 147.27,
+        "y": 386.53,
+        "w": 97.46,
+        "h": 14.43
+       },
+       "baseline": 397.81,
+       "size": 10.5,
+       "start": 152,
+       "end": 170
+      }
+     ],
+     "runs": [
+      {
+       "text": "Edith menyunting paragraf asli dengan rapi. Teks mengalir ulang di dalam kotak selebar tetap, dan gaya bisa diatur per kata tanpa merusak baris lain di halaman yang sama.",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 10.5,
+       "color": "#000000"
+      }
+     ],
+     "align": "center",
+     "lineHeight": 15.51,
+     "editable": true
+    },
+    {
+     "id": "g3",
+     "rect": {
+      "x": 72.0,
+      "y": 480.0,
+      "w": 233.1,
+      "h": 62.01
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 480.0,
+        "w": 233.1,
+        "h": 13.11
+       },
+       "baseline": 489.79,
+       "size": 10.5,
+       "start": 0,
+       "end": 37
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 492.22,
+        "w": 214.2,
+        "h": 13.11
+       },
+       "baseline": 502.01,
+       "size": 10.5,
+       "start": 38,
+       "end": 72
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 504.45,
+        "w": 214.2,
+        "h": 13.11
+       },
+       "baseline": 514.23,
+       "size": 10.5,
+       "start": 73,
+       "end": 107
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 516.67,
+        "w": 220.5,
+        "h": 13.11
+       },
+       "baseline": 526.45,
+       "size": 10.5,
+       "start": 108,
+       "end": 143
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 528.89,
+        "w": 163.8,
+        "h": 13.11
+       },
+       "baseline": 538.68,
+       "size": 10.5,
+       "start": 144,
+       "end": 170
+      }
+     ],
+     "runs": [
+      {
+       "text": "Edith menyunting paragraf asli dengan rapi. Teks mengalir ulang di dalam kotak selebar tetap, dan gaya bisa diatur per kata tanpa merusak baris lain di halaman yang sama.",
+       "font": {
+        "kind": "bundled",
+        "family": "Cousine",
+        "bold": false,
+        "italic": false
+       },
+       "size": 10.5,
+       "color": "#000000"
+      }
+     ],
+     "align": "left",
+     "lineHeight": 12.22,
+     "editable": true
+    },
+    {
+     "id": "g4",
+     "rect": {
+      "x": 72.13,
+      "y": 620.0,
+      "w": 247.87,
+      "h": 43.51
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 72.13,
+        "y": 620.0,
+        "w": 247.87,
+        "h": 14.01
+       },
+       "baseline": 631.06,
+       "size": 10.5,
+       "start": 0,
+       "end": 57
+      },
+      {
+       "rect": {
+        "x": 86.71,
+        "y": 634.75,
+        "w": 233.29,
+        "h": 14.01
+       },
+       "baseline": 645.81,
+       "size": 10.5,
+       "start": 58,
+       "end": 114
+      },
+      {
+       "rect": {
+        "x": 82.64,
+        "y": 649.5,
+        "w": 237.36,
+        "h": 14.01
+       },
+       "baseline": 660.56,
+       "size": 10.5,
+       "start": 115,
+       "end": 170
+      }
+     ],
+     "runs": [
+      {
+       "text": "Edith menyunting paragraf asli dengan rapi. Teks mengalir ulang di dalam kotak selebar tetap, dan gaya bisa diatur per kata tanpa merusak baris lain di halaman yang sama.",
+       "font": {
+        "kind": "bundled",
+        "family": "Tinos",
+        "bold": false,
+        "italic": false
+       },
+       "size": 10.5,
+       "color": "#000000"
+      }
+     ],
+     "align": "right",
+     "lineHeight": 14.75,
+     "editable": true
+    },
+    {
+     "id": "g5",
+     "rect": {
+      "x": 360.0,
+      "y": 68.18,
+      "w": 163.85,
+      "h": 41.11
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 360.0,
+        "y": 68.18,
+        "w": 163.85,
+        "h": 15.11
+       },
+       "baseline": 80.0,
+       "size": 11.0,
+       "start": 0,
+       "end": 33
+      },
+      {
+       "rect": {
+        "x": 360.0,
+        "y": 81.18,
+        "w": 28.13,
+        "h": 15.11
+       },
+       "baseline": 93.0,
+       "size": 11.0,
+       "start": 34,
+       "end": 39
+      },
+      {
+       "rect": {
+        "x": 360.0,
+        "y": 94.18,
+        "w": 47.7,
+        "h": 15.11
+       },
+       "baseline": 106.0,
+       "size": 11.0,
+       "start": 40,
+       "end": 49
+      }
+     ],
+     "runs": [
+      {
+       "text": "Jl. Merdeka Barat No. 17, Jakarta Pusat Indonesia",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 11.0,
+       "color": "#000000"
+      }
+     ],
+     "align": "left",
+     "lineHeight": 13.0,
+     "editable": true
+    }
+   ]
+  }
+ ],
+ "fonts": [
+  {
+   "ref": "f5",
+   "name": "Helvetica",
+   "embedded": false,
+   "format": null,
+   "reusable": false,
+   "family": "helvetica",
+   "bold": false,
+   "italic": false,
+   "substitute": {
+    "kind": "bundled",
+    "family": "Arimo",
+    "bold": false,
+    "italic": false
+   }
+  },
+  {
+   "ref": "f7",
+   "name": "Times-Roman",
+   "embedded": false,
+   "format": null,
+   "reusable": false,
+   "family": "times",
+   "bold": false,
+   "italic": false,
+   "substitute": {
+    "kind": "bundled",
+    "family": "Tinos",
+    "bold": false,
+    "italic": false
+   }
+  },
+  {
+   "ref": "f10",
+   "name": "Courier",
+   "embedded": false,
+   "format": null,
+   "reusable": false,
+   "family": "courier",
+   "bold": false,
+   "italic": false,
+   "substitute": {
+    "kind": "bundled",
+    "family": "Cousine",
+    "bold": false,
+    "italic": false
+   }
+  }
+ ]
+}

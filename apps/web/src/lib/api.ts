@@ -1,4 +1,4 @@
-import type { ExportRequest, RenderPageRequest } from "@edith/ops";
+import type { BundledFont, ExportRequest, Rect, RenderPageRequest, Run } from "@edith/ops";
 import type { StructurePage } from "@/store/editor";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
@@ -9,6 +9,18 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+/** One original line of a paragraph; `start`/`end` index the paragraph's joined run text (end excludes trailing spaces). */
+export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number }
+export interface Paragraph {
+  id: string; rect: Rect; lines: ParagraphLine[]; runs: Run[];
+  align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean;
+}
+export interface DocFont {
+  ref: string; name: string; embedded: boolean; format: string | null; reusable: boolean;
+  family: string; bold: boolean; italic: boolean; substitute: BundledFont;
+}
+export interface TextData { doc_id: string; pages: { index: number; paragraphs: Paragraph[] }[]; fonts: DocFont[] }
 
 export interface UploadResult { doc_id: string; sha256: string; page_count: number }
 export interface Structure { doc_id: string; sha256: string; page_count: number; pages: StructurePage[] }
@@ -38,6 +50,14 @@ export async function uploadDocument(file: File | Blob, name = "document.pdf"): 
 
 export async function getStructure(docId: string): Promise<Structure> {
   return (await request(`/documents/${docId}/structure`)).json();
+}
+
+export async function getText(docId: string): Promise<TextData> {
+  return (await request(`/documents/${docId}/text`)).json();
+}
+
+export function fontFileUrl(docId: string, ref: string): string {
+  return `${API_URL}/documents/${docId}/fonts/${ref}`;
 }
 
 export function fileUrl(docId: string): string {

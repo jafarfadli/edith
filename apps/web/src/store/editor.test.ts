@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
-import { createEditorStore, HISTORY_LIMIT, pageGeom, type DocInfo } from "@/store/editor";
+import { createEditorStore, HISTORY_LIMIT, pageGeom, textEditFor, type DocInfo } from "@/store/editor";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
@@ -138,5 +138,49 @@ describe("editor store", () => {
     s().movePage("o0", 99);
     s().movePage("o1", -5);
     expect(s().past.length).toBe(n);
+  });
+});
+
+describe("history coalescing and batches", () => {
+  it("merges updates with the same key inside the window into one undo step", () => {
+    let t = 0;
+    const st = createEditorStore(() => t);
+    st.getState().init(info);
+    st.getState().addObject(white("a"));
+    for (const x of [1, 2, 3]) { t += 300; st.getState().updateObject("a", { rect: { x, y: 0, w: 10, h: 10 } } as Partial<ContentOp>, { coalesce: "nudge:a" }); }
+    expect(st.getState().past.length).toBe(2); // add + one coalesced update
+    st.getState().undo();
+    expect((st.getState().doc.objects.a as { rect: { x: number } }).rect.x).toBe(0);
+  });
+
+  it("starts a new step after the window, with another key, or after undo", () => {
+    let t = 0;
+    const st = createEditorStore(() => t);
+    st.getState().init(info);
+    st.getState().addObject(white("a"));
+    const move = (x: number, key = "k") => st.getState().updateObject("a", { rect: { x, y: 0, w: 10, h: 10 } } as Partial<ContentOp>, { coalesce: key });
+    move(1); t += 2000; move(2);
+    expect(st.getState().past.length).toBe(3);
+    move(3, "other");
+    expect(st.getState().past.length).toBe(4);
+    st.getState().undo(); move(4, "other");
+    expect(st.getState().past.length).toBe(4);
+  });
+
+  it("putObjects adds and replaces in one step", () => {
+    s().addObject(white("a"));
+    s().putObjects([{ ...white("a"), rect: { x: 9, y: 9, w: 1, h: 1 } } as ContentOp, white("b")]);
+    expect(s().doc.order).toEqual(["a", "b"]);
+    expect((s().doc.objects.a as { rect: { x: number } }).rect.x).toBe(9);
+    s().undo();
+    expect(s().doc.order).toEqual(["a"]);
+    expect((s().doc.objects.a as { rect: { x: number } }).rect.x).toBe(0);
+  });
+
+  it("finds the text.edit of a paragraph", () => {
+    const box = { rect: { x: 0, y: 0, w: 10, h: 10 }, align: "left" as const, lineHeight: 12, paragraphs: [], layout: [] };
+    s().addObject({ id: "e", type: "text.edit", pageKey: "o1", paragraphId: "g2", box } as ContentOp);
+    expect(textEditFor(s().doc, "o1", "g2")?.id).toBe("e");
+    expect(textEditFor(s().doc, "o0", "g2")).toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { DocFont } from "@/lib/api";
 import type { FontMetrics } from "@/lib/fonts";
 import { boxFonts, newBox, plainText, relayout, withStyle, withText } from "@/lib/textbox";
 
@@ -22,7 +23,7 @@ describe("textbox", () => {
 
   it("applies style to all runs and updates line height", () => {
     const b = withStyle(withText(newBox([0, 0], style), "a\nb"), { size: 20, bold: true, align: "center" });
-    expect(b.paragraphs.flat().every((r) => r.size === 20 && r.font.bold)).toBe(true);
+    expect(b.paragraphs.flat().every((r) => r.size === 20 && r.font.kind !== "original" && r.font.bold)).toBe(true);
     expect(b.lineHeight).toBe(24);
     expect(b.align).toBe("center");
   });
@@ -36,5 +37,20 @@ describe("textbox", () => {
   it("lists fonts", () => {
     const b = withStyle(withText(newBox([0, 0], style), "x"), { family: "Tinos", italic: true });
     expect(boxFonts(b)).toEqual([{ kind: "bundled", family: "Tinos", bold: false, italic: true }]);
+  });
+});
+
+describe("withStyle with original fonts", () => {
+  const calibri = (ref: string, bold: boolean): DocFont => ({
+    ref, name: bold ? "Calibri-Bold" : "Calibri", embedded: true, format: "ttf", reusable: true, family: "calibri", bold, italic: false,
+    substitute: { kind: "bundled", family: "Carlito", bold, italic: false },
+  });
+  const fonts = { f1: calibri("f1", false), f2: calibri("f2", true) };
+  const box = { ...newBox([0, 0], style), paragraphs: [[{ text: "x", font: { kind: "original" as const, ref: "f1" }, size: 10, color: "#111111" }]] };
+
+  it("switches to the document's bold variant and keeps the font for other changes", () => {
+    expect(withStyle(box, { bold: true }, fonts).paragraphs[0][0].font).toEqual({ kind: "original", ref: "f2" });
+    expect(withStyle(box, { underline: true, bgColor: "#ffff00" }, fonts).paragraphs[0][0])
+      .toEqual({ text: "x", font: { kind: "original", ref: "f1" }, size: 10, color: "#111111", underline: true, bgColor: "#ffff00" });
   });
 });

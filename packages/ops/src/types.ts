@@ -10,12 +10,18 @@ export type H = number;
 export type Align = "left" | "center" | "right" | "justify";
 export type Lineheight = number;
 export type Text = string;
+export type Font = BundledFont | OriginalFont;
 export type Kind = "bundled";
 export type Family = string;
 export type Bold = boolean;
 export type Italic = boolean;
+export type Kind1 = "original";
+export type Ref = string;
 export type Size = number;
 export type Color = string;
+export type Bgcolor = string | null;
+export type Underline = boolean;
+export type Strike = boolean;
 export type Paragraphs = Run[][];
 export type Baseline = number;
 export type X1 = number;
@@ -25,40 +31,44 @@ export type Segments = Segment[];
 export type Layout = LayoutLine[];
 export type Id1 = string;
 export type Pagekey1 = string;
-export type Type1 = "image.add";
-export type Assetid = string;
+export type Type1 = "text.edit";
+export type Paragraphid = string;
 export type Id2 = string;
 export type Pagekey2 = string;
-export type Type2 = "shape.add";
-export type Kind1 = "rect" | "ellipse" | "line" | "arrow";
+export type Type2 = "image.add";
+export type Assetid = string;
+export type Id3 = string;
+export type Pagekey3 = string;
+export type Type3 = "shape.add";
+export type Kind2 = "rect" | "ellipse" | "line" | "arrow";
 export type Points = [number, number][] | null;
 export type Stroke = string;
 export type Fill = string | null;
 export type Width = number;
-export type Id3 = string;
-export type Pagekey3 = string;
-export type Type3 = "ink.add";
+export type Id4 = string;
+export type Pagekey4 = string;
+export type Type4 = "ink.add";
 /**
  * @minItems 1
  */
 export type Paths = [[[number, number], ...[number, number][]], ...[[number, number], ...[number, number][]][]];
 export type Color1 = string;
 export type Width1 = number;
-export type Id4 = string;
-export type Pagekey4 = string;
-export type Type4 = "whiteout.add";
 export type Id5 = string;
 export type Pagekey5 = string;
-export type Type5 = "redact.add";
-export type Fill1 = "black" | "white";
+export type Type5 = "whiteout.add";
 export type Id6 = string;
-export type Type6 = "pages.layout";
+export type Pagekey6 = string;
+export type Type6 = "redact.add";
+export type Fill1 = "black" | "white";
+export type Id7 = string;
+export type Type7 = "pages.layout";
 /**
  * @minItems 1
  * @maxItems 1000
  */
 export type Pages = [LayoutPage, ...LayoutPage[]];
-export type Pagekey6 = string;
+export type Pagekey7 = string;
 export type Src = DocSrc | BlankSrc;
 export type Doc = string;
 export type Index = number;
@@ -68,14 +78,14 @@ export type Rotate = 0 | 90 | 180 | 270;
 /**
  * @maxItems 5000
  */
-export type Ops = (TextAdd | ImageAdd | ShapeAdd | InkAdd | WhiteoutAdd | RedactAdd | PagesLayout)[];
+export type Ops = (TextAdd | TextEdit | ImageAdd | ShapeAdd | InkAdd | WhiteoutAdd | RedactAdd | PagesLayout)[];
 export type FlattenForms = boolean;
 export type Filename = string;
-export type Pagekey7 = string;
+export type Pagekey8 = string;
 /**
  * @maxItems 5000
  */
-export type Ops1 = (TextAdd | ImageAdd | ShapeAdd | InkAdd | WhiteoutAdd | RedactAdd | PagesLayout)[];
+export type Ops1 = (TextAdd | TextEdit | ImageAdd | ShapeAdd | InkAdd | WhiteoutAdd | RedactAdd | PagesLayout)[];
 
 export interface EdithSchema {
   export: ExportRequest;
@@ -127,9 +137,12 @@ export interface Rect {
  */
 export interface Run {
   text: Text;
-  font: BundledFont;
+  font: Font;
   size: Size;
   color: Color;
+  bgColor?: Bgcolor;
+  underline?: Underline;
+  strike?: Strike;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
@@ -140,6 +153,16 @@ export interface BundledFont {
   family: Family;
   bold?: Bold;
   italic?: Italic;
+}
+/**
+ * A font embedded in the uploaded PDF (`ref` from GET /documents/{id}/text), reused as is.
+ *
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "OriginalFont".
+ */
+export interface OriginalFont {
+  kind: Kind1;
+  ref: Ref;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
@@ -159,13 +182,26 @@ export interface Segment {
   runIndex: Runindex;
 }
 /**
+ * Replaces original paragraph `paragraphId` of the page's source page with `box`.
+ *
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "TextEdit".
+ */
+export interface TextEdit {
+  id: Id1;
+  pageKey: Pagekey1;
+  type: Type1;
+  paragraphId: Paragraphid;
+  box: TextBox;
+}
+/**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "ImageAdd".
  */
 export interface ImageAdd {
-  id: Id1;
-  pageKey: Pagekey1;
-  type: Type1;
+  id: Id2;
+  pageKey: Pagekey2;
+  type: Type2;
   rect: Rect;
   assetId: Assetid;
 }
@@ -174,10 +210,10 @@ export interface ImageAdd {
  * via the `definition` "ShapeAdd".
  */
 export interface ShapeAdd {
-  id: Id2;
-  pageKey: Pagekey2;
-  type: Type2;
-  kind: Kind1;
+  id: Id3;
+  pageKey: Pagekey3;
+  type: Type3;
+  kind: Kind2;
   rect?: Rect | null;
   points?: Points;
   stroke: Stroke;
@@ -189,9 +225,9 @@ export interface ShapeAdd {
  * via the `definition` "InkAdd".
  */
 export interface InkAdd {
-  id: Id3;
-  pageKey: Pagekey3;
-  type: Type3;
+  id: Id4;
+  pageKey: Pagekey4;
+  type: Type4;
   paths: Paths;
   color: Color1;
   width: Width1;
@@ -201,9 +237,9 @@ export interface InkAdd {
  * via the `definition` "WhiteoutAdd".
  */
 export interface WhiteoutAdd {
-  id: Id4;
-  pageKey: Pagekey4;
-  type: Type4;
+  id: Id5;
+  pageKey: Pagekey5;
+  type: Type5;
   rect: Rect;
 }
 /**
@@ -211,9 +247,9 @@ export interface WhiteoutAdd {
  * via the `definition` "RedactAdd".
  */
 export interface RedactAdd {
-  id: Id5;
-  pageKey: Pagekey5;
-  type: Type5;
+  id: Id6;
+  pageKey: Pagekey6;
+  type: Type6;
   rect: Rect;
   fill?: Fill1;
 }
@@ -222,8 +258,8 @@ export interface RedactAdd {
  * via the `definition` "PagesLayout".
  */
 export interface PagesLayout {
-  id: Id6;
-  type: Type6;
+  id: Id7;
+  type: Type7;
   pages: Pages;
 }
 /**
@@ -231,7 +267,7 @@ export interface PagesLayout {
  * via the `definition` "LayoutPage".
  */
 export interface LayoutPage {
-  pageKey: Pagekey6;
+  pageKey: Pagekey7;
   src: Src;
   rotate?: Rotate;
 }
@@ -263,6 +299,6 @@ export interface BlankSize {
  * via the `definition` "RenderPageRequest".
  */
 export interface RenderPageRequest {
-  pageKey: Pagekey7;
+  pageKey: Pagekey8;
   ops: Ops1;
 }

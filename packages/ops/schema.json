@@ -99,6 +99,7 @@
                 "redact.add": "#/$defs/RedactAdd",
                 "shape.add": "#/$defs/ShapeAdd",
                 "text.add": "#/$defs/TextAdd",
+                "text.edit": "#/$defs/TextEdit",
                 "whiteout.add": "#/$defs/WhiteoutAdd"
               },
               "propertyName": "type"
@@ -106,6 +107,9 @@
             "oneOf": [
               {
                 "$ref": "#/$defs/TextAdd"
+              },
+              {
+                "$ref": "#/$defs/TextEdit"
               },
               {
                 "$ref": "#/$defs/ImageAdd"
@@ -306,6 +310,28 @@
       "title": "LayoutPage",
       "type": "object"
     },
+    "OriginalFont": {
+      "additionalProperties": false,
+      "description": "A font embedded in the uploaded PDF (`ref` from GET /documents/{id}/text), reused as is.",
+      "properties": {
+        "kind": {
+          "const": "original",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "pattern": "^f\\d+$",
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "title": "OriginalFont",
+      "type": "object"
+    },
     "PagesLayout": {
       "additionalProperties": false,
       "properties": {
@@ -428,6 +454,7 @@
                 "redact.add": "#/$defs/RedactAdd",
                 "shape.add": "#/$defs/ShapeAdd",
                 "text.add": "#/$defs/TextAdd",
+                "text.edit": "#/$defs/TextEdit",
                 "whiteout.add": "#/$defs/WhiteoutAdd"
               },
               "propertyName": "type"
@@ -435,6 +462,9 @@
             "oneOf": [
               {
                 "$ref": "#/$defs/TextAdd"
+              },
+              {
+                "$ref": "#/$defs/TextEdit"
               },
               {
                 "$ref": "#/$defs/ImageAdd"
@@ -476,7 +506,15 @@
           "type": "string"
         },
         "font": {
-          "$ref": "#/$defs/BundledFont"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BundledFont"
+            },
+            {
+              "$ref": "#/$defs/OriginalFont"
+            }
+          ],
+          "title": "Font"
         },
         "size": {
           "exclusiveMinimum": 0,
@@ -488,6 +526,29 @@
           "pattern": "^#[0-9a-fA-F]{6}$",
           "title": "Color",
           "type": "string"
+        },
+        "bgColor": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9a-fA-F]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bgcolor"
+        },
+        "underline": {
+          "default": false,
+          "title": "Underline",
+          "type": "boolean"
+        },
+        "strike": {
+          "default": false,
+          "title": "Strike",
+          "type": "boolean"
         }
       },
       "required": [
@@ -699,6 +760,45 @@
         "layout"
       ],
       "title": "TextBox",
+      "type": "object"
+    },
+    "TextEdit": {
+      "additionalProperties": false,
+      "description": "Replaces original paragraph `paragraphId` of the page's source page with `box`.",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "text.edit",
+          "title": "Type",
+          "type": "string"
+        },
+        "paragraphId": {
+          "pattern": "^g\\d+$",
+          "title": "Paragraphid",
+          "type": "string"
+        },
+        "box": {
+          "$ref": "#/$defs/TextBox"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "paragraphId",
+        "box"
+      ],
+      "title": "TextEdit",
       "type": "object"
     },
     "WhiteoutAdd": {

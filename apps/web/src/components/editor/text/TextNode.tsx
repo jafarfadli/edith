@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Rect, Shape } from "react-konva";
-import type { TextAdd } from "@edith/ops";
-import { charOffsets, cssFamily, fontKey, fontStore } from "@/lib/fonts";
+import type { TextAdd, TextEdit } from "@edith/ops";
+import { charOffsets, cssFamily, fontKey, fontStore, textWidth } from "@/lib/fonts";
+import { decorBands } from "@/lib/textDecor";
 import { boxFonts } from "@/lib/textbox";
 import { fontsReady } from "./textEdit";
 
-/** Draws a text box glyph-by-glyph at the PDF-quantized offsets — the same positions the API bakes. */
-export function TextNode({ op, hidden }: { op: TextAdd; hidden: boolean }) {
+/** Draws a text box glyph-by-glyph at the PDF-quantized offsets — the same positions the API bakes —
+ *  with backgrounds under and underline/strike over the glyphs, as the bake does. */
+export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boolean }) {
   const { box } = op;
   const keys = boxFonts(box).map(fontKey).join("|");
   const [, setLoaded] = useState(0);
@@ -37,11 +39,25 @@ export function TextNode({ op, hidden }: { op: TextAdd; hidden: boolean }) {
           width={w}
           height={h}
           sceneFunc={(ctx) => {
-            const c = ctx._context as CanvasRenderingContext2D & { fontKerning?: string; fontVariantLigatures?: string };
+            const c = ctx._context as CanvasRenderingContext2D & { fontKerning?: string };
             c.save();
             c.textBaseline = "alphabetic";
             c.textAlign = "left";
             if ("fontKerning" in c) c.fontKerning = "none";
+            // Same order as the bake: every background, then the glyphs, then underline/strike.
+            const bands: { x: number; y: number; w: number; h: number; color: string; over: boolean }[] = [];
+            for (const line of box.layout) {
+              for (const seg of line.segments) {
+                const r = runs[seg.runIndex];
+                if (!r || !(r.bgColor || r.underline || r.strike)) continue;
+                const d = decorBands(seg.x, line.baseline, textWidth(seg.text, fontStore.get(r.font), r.size), r);
+                if (d.bg) bands.push({ ...d.bg, color: r.bgColor!, over: false });
+                if (d.underline) bands.push({ ...d.underline, color: r.color, over: true });
+                if (d.strike) bands.push({ ...d.strike, color: r.color, over: true });
+              }
+            }
+            const fill = (over: boolean) => bands.filter((b) => b.over === over).forEach((b) => { c.fillStyle = b.color; c.fillRect(b.x, b.y, b.w, b.h); });
+            fill(false);
             for (const line of box.layout) {
               for (const seg of line.segments) {
                 const r = runs[seg.runIndex];
@@ -57,6 +73,7 @@ export function TextNode({ op, hidden }: { op: TextAdd; hidden: boolean }) {
                 }
               }
             }
+            fill(true);
             c.restore();
           }}
         />

@@ -4,18 +4,18 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import type { TextAdd } from "@edith/ops";
 import { ApiError, fileUrl, getStructure } from "@/lib/api";
 import { toPage } from "@/lib/coords";
 import { fontStore } from "@/lib/fonts";
 import { loadDraft, saveDraft } from "@/lib/draft";
-import { moveOp } from "@/lib/objects";
+import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
 import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
+import { textStore } from "@/store/text";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
 import { PageList } from "./PageList";
@@ -31,6 +31,7 @@ const PageOverlay = dynamic(async () => {
   return import("./PageOverlay");
 }, { ssr: false });
 const TextEditor = dynamic(() => import("./text/TextEditor").then((m) => m.TextEditor), { ssr: false });
+const FindBar = dynamic(() => import("./find/FindBar").then((m) => m.FindBar), { ssr: false });
 
 const INFO_NOTICE_MS = 5000;
 
@@ -60,8 +61,9 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages }, draft);
       initialDoc.current = editorStore.getState().doc;
       if (draft) setNotice({ kind: "info", text: t.editor.restored });
+      void textStore.getState().load(docId); // original paragraphs + fonts, in the background
       // Preload fonts of restored text boxes (in parallel with the PDF; TextNode also loads on demand).
-      const texts = Object.values(editorStore.getState().doc.objects).filter((o): o is TextAdd => o.type === "text.add");
+      const texts = Object.values(editorStore.getState().doc.objects).filter(isTextOp);
       void Promise.all(texts.flatMap((o) => boxFonts(o.box)).map((f) => fontStore.load(f))).catch((e) => console.warn("font preload failed", e));
       try {
         const loaded = await loadPdf(fileUrl(docId));
@@ -115,7 +117,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     const g = pageGeom(entry, st.info);
     const [x0, y0] = toPage([0, 0], g, 1);
     const [x1, y1] = toPage([d[0] * step, d[1] * step], g, 1);
-    st.updateObject(op.id, moveOp(op, x1 - x0, y1 - y0));
+    st.updateObject(op.id, moveOp(op, x1 - x0, y1 - y0), { coalesce: `nudge:${op.id}` }); // held arrow keys: one undo step
     return true;
   }, []);
   useShortcuts(nudge);
@@ -156,6 +158,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
           {info && pdf ? <PageList pdf={pdf} overlay={(a) => <><PageOverlay {...a} /><TextEditor {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
         </main>
       </div>
+      <FindBar />
       <ZoomPill />
       {notice && <Notice kind={notice.kind} onClose={() => setNotice(null)}>{notice.text}</Notice>}
     </div>

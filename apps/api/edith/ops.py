@@ -29,11 +29,23 @@ class BundledFont(Model):
     italic: bool = False
 
 
+class OriginalFont(Model):
+    """A font embedded in the uploaded PDF (`ref` from GET /documents/{id}/text), reused as is."""
+    kind: Literal["original"]
+    ref: str = Field(pattern=r"^f\d+$")
+
+
+FontRef = Union[BundledFont, OriginalFont]
+
+
 class Run(Model):
     text: str
-    font: BundledFont
+    font: FontRef
     size: float = Field(gt=0, le=500)
     color: HexColor
+    bgColor: HexColor | None = None
+    underline: bool = False
+    strike: bool = False
 
 
 class Segment(Model):
@@ -71,6 +83,13 @@ class _Content(Model):
 
 class TextAdd(_Content):
     type: Literal["text.add"]
+    box: TextBox
+
+
+class TextEdit(_Content):
+    """Replaces original paragraph `paragraphId` of the page's source page with `box`."""
+    type: Literal["text.edit"]
+    paragraphId: str = Field(pattern=r"^g\d+$")
     box: TextBox
 
 
@@ -149,8 +168,11 @@ class PagesLayout(Model):
         return self
 
 
-ContentOp = Union[TextAdd, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd]
-Op = Annotated[Union[TextAdd, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd, PagesLayout], Field(discriminator="type")]
+ContentOp = Union[TextAdd, TextEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd]
+Op = Annotated[
+    Union[TextAdd, TextEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd, PagesLayout],
+    Field(discriminator="type"),
+]
 
 
 def _check_ops(ops: list) -> None:
@@ -159,6 +181,9 @@ def _check_ops(ops: list) -> None:
         raise ValueError("duplicate op id")
     if sum(1 for op in ops if op.type == "pages.layout") > 1:
         raise ValueError("at most one pages.layout")
+    edited = [(op.pageKey, op.paragraphId) for op in ops if op.type == "text.edit"]
+    if len(edited) != len(set(edited)):
+        raise ValueError("at most one text.edit per (pageKey, paragraphId)")
 
 
 class ExportRequest(Model):
