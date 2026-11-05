@@ -8,6 +8,7 @@ from edith.bake.pages import build_pages
 from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
 from edith.bake.source import SourcePages
 from edith.errors import BakeFailed, EdithError, InvalidOp
+from edith.forms import FieldValueError, fill_forms
 from edith.ops import DocSrc, LayoutPage, PageTarget, PagesLayout
 
 # Handler modules register themselves on import (later tasks add more, e.g. text):
@@ -36,7 +37,16 @@ def _run(handler, page, op, ctx) -> None:
         raise BakeFailed(str(exc), op_id=op.id) from exc
 
 
-def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
+def _fill(doc: pymupdf.Document, forms: list, flatten: bool) -> None:
+    try:
+        fill_forms(doc, forms)
+    except FieldValueError as exc:
+        raise BakeFailed(str(exc), op_id=exc.op_id) from exc
+    if flatten:
+        doc.bake(annots=False, widgets=True)  # widgets become page content; other annotations stay
+
+
+def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False) -> pymupdf.Document:
     doc = pymupdf.open(stream=source, filetype="pdf")
     pages_src = None
     try:
@@ -56,9 +66,6 @@ def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
 
         keys = {p.pageKey for p in layout.pages}
         content = [(i, op) for i, op in enumerate(ops) if op.type not in ("pages.layout", "form.set")]
-        for op in ops:
-            if op.type == "form.set":
-                raise BakeFailed("no handler for form.set", op_id=op.id)  # Task 4 fills forms
         for i, op in content:
             if op.pageKey not in keys:
                 raise InvalidOp(f"unknown pageKey {op.pageKey}", op_index=i)
@@ -91,6 +98,8 @@ def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
                 for op in page_ops:
                     if PHASE[op.type] == phase:
                         _run(HANDLERS[op.type], page, op, ctx)
+
+        _fill(doc, [op for op in ops if op.type == "form.set"], flatten_forms)
 
         for i, entry in enumerate(layout.pages):
             doc[i].set_rotation((base_rotation[i] + entry.rotate) % 360)

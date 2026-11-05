@@ -2,12 +2,14 @@ import pymupdf
 
 from edith.bake.context import BakeContext
 from edith.errors import InvalidOp
+from edith.forms import detach_acroform, reattach_acroform
 from edith.ops import DocSrc, PagesLayout
 
 
 def build_pages(doc: pymupdf.Document, layout: PagesLayout, layout_index: int,
                 ctx: BakeContext) -> tuple[dict[str, int], list[int]]:
     source_count = doc.page_count
+    acroform = detach_acroform(doc)
     seen: set[int] = set()
     selection: list[int] = []
     base_rotation: list[int] = []
@@ -28,6 +30,7 @@ def build_pages(doc: pymupdf.Document, layout: PagesLayout, layout_index: int,
             base_rotation.append(0)
         selection.append(idx)
     doc.select(selection)
+    reattach_acroform(doc, acroform)  # select() drops /AcroForm; the widgets stay on their pages
     # Ops are in unrotated-CropBox points: draw on unrotated pages, bake() re-applies the
     # rotation (base + layout) last.
     for page in doc:

@@ -128,3 +128,40 @@ def make_layout_pdf() -> bytes:
     for i, text in enumerate(["Jl. Merdeka Barat No. 17, Jakarta", "Pusat", "Indonesia"]):  # an address: hard breaks
         page.insert_text((360, 80 + i * 13), text, fontname="helv", fontsize=11)
     return doc.tobytes(garbage=3, deflate=True)
+
+
+def _widget(page: pymupdf.Page, kind: int, name: str, rect: tuple, **attrs) -> None:
+    w = pymupdf.Widget()
+    w.field_type, w.field_name, w.rect = kind, name, pymupdf.Rect(rect)
+    for key, value in attrs.items():
+        setattr(w, key, value)
+    page.add_widget(w)
+
+
+def make_form_pdf() -> bytes:
+    """AcroForm fixture. Page 0: text `nama`, multiline text `catatan`, checkbox `setuju` (on-state
+    `Yes`), radio group `warna` (`Merah`, `Biru`), combo `kota`, list `hari`, push button `kirim`.
+    Page 1: text `hal2`. PyMuPDF names every radio on-state "False", so the fixture renames them."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 90), "Formulir", fontname="helv", fontsize=12)
+    _widget(page, pymupdf.PDF_WIDGET_TYPE_TEXT, "nama", (72, 100, 272, 120), field_value="", text_fontsize=11)
+    _widget(page, pymupdf.PDF_WIDGET_TYPE_TEXT, "catatan", (300, 100, 500, 160), field_value="",
+            field_flags=pymupdf.PDF_TX_FIELD_IS_MULTILINE)
+    _widget(page, pymupdf.PDF_WIDGET_TYPE_CHECKBOX, "setuju", (72, 140, 86, 154), field_value=False)
+    for i in range(2):
+        _widget(page, pymupdf.PDF_WIDGET_TYPE_RADIOBUTTON, "warna", (72 + 30 * i, 170, 86 + 30 * i, 184), field_value=False)
+    _widget(page, pymupdf.PDF_WIDGET_TYPE_COMBOBOX, "kota", (72, 200, 222, 220),
+            choice_values=["Jakarta", "Bandung", "Surabaya"], field_value="Jakarta")
+    _widget(page, pymupdf.PDF_WIDGET_TYPE_LISTBOX, "hari", (72, 230, 222, 280), choice_values=["Senin", "Selasa"],
+            field_value="Senin")
+    _widget(page, pymupdf.PDF_WIDGET_TYPE_BUTTON, "kirim", (300, 200, 360, 220), button_caption="Kirim")
+    radios = [w for w in page.widgets() if w.field_name == "warna"]
+    for w, state in zip(radios, ("Merah", "Biru")):
+        off, on = doc.xref_get_key(w.xref, "AP/N/Off")[1], doc.xref_get_key(w.xref, "AP/N/False")[1]
+        doc.xref_set_key(w.xref, "AP/N", f"<</Off {off}/{state} {on}>>")
+        doc.xref_set_key(w.xref, "AS", "/Off")
+    doc.xref_set_key(int(doc.xref_get_key(radios[0].xref, "Parent")[1].split()[0]), "V", "/Off")
+    page2 = doc.new_page(width=595, height=842)
+    _widget(page2, pymupdf.PDF_WIDGET_TYPE_TEXT, "hal2", (72, 72, 272, 92), field_value="")
+    return doc.tobytes(garbage=3, deflate=True)
