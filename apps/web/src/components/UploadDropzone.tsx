@@ -18,7 +18,7 @@ export function UploadDropzone() {
   const [error, setError] = useState<string | null>(null);
 
   async function handle(file: File | undefined) {
-    if (inFlight.current) return;
+    if (busy || inFlight.current) return;
     try {
       if (!file) return;
       setError(null);
@@ -32,7 +32,6 @@ export function UploadDropzone() {
       } catch (e) {
         setError(errorMessage(e instanceof ApiError ? e.code : "generic"));
         setBusy(false);
-      } finally {
         inFlight.current = false;
       }
     } finally {
@@ -43,9 +42,9 @@ export function UploadDropzone() {
   return (
     <div
       data-testid="dropzone"
-      onDragOver={(e) => { e.preventDefault(); if (!inFlight.current) setOver(true); }}
+      onDragOver={(e) => { e.preventDefault(); if (!busy && !inFlight.current) setOver(true); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
-      onDrop={(e) => { e.preventDefault(); setOver(false); if (!inFlight.current) handle(e.dataTransfer.files[0]); }}
+      onDrop={(e) => { e.preventDefault(); setOver(false); if (!busy && !inFlight.current) handle(e.dataTransfer.files[0]); }}
       className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed px-8 py-14 text-center transition ${over ? "border-accent bg-accent/5" : "border-line bg-surface"}`}
     >
       <p className="text-lg font-medium">{t.upload.drop}</p>
