@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
 import { fontStore, metricsFromBuffer } from "@/lib/fonts";
-import { findMatches } from "@/lib/search";
+import { findMatches, nextMatchIndex } from "@/lib/search";
 import { buildTargets } from "@/lib/targets";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
@@ -58,6 +58,28 @@ describe("applyReplacements", () => {
     await applyReplacements([m], "DI");
     const edit = Object.values(editorStore.getState().doc.objects)[0] as TextEdit;
     expect(edit.box.paragraphs[0].map((r) => r.text).join("")).toBe("kata lama DI sini");
+  });
+
+  it("reports where a replacement ended so Find can move past a replacement containing the query", async () => {
+    editorStore.getState().addObject({ id: "t", type: "text.add", pageKey: "o0", box: box("lama dan lama") } as ContentOp);
+    const search = () => {
+      const targets = buildTargets(editorStore.getState().doc, textStore.getState().pages);
+      return { order: targets.map((x) => x.key), matches: findMatches(targets, "lama", true) };
+    };
+    // Original paragraph (first target): becomes a text.edit op, the next match is in the text box.
+    const [para] = search().matches;
+    const [r1] = await applyReplacements([para], "lama baru");
+    const edit = Object.values(editorStore.getState().doc.objects).find((o) => o.type === "text.edit")!;
+    expect(r1).toEqual({ key: `op:${edit.id}`, end: 14 });
+    let s = search();
+    let i = nextMatchIndex(s.matches, s.order, r1.key, r1.end);
+    expect(s.matches[i]).toMatchObject({ key: "op:t", start: 0 });
+    // Inside the text box: the next match is the box's second "lama", not the inserted one.
+    const [r2] = await applyReplacements([s.matches[i]], "lama baru");
+    expect(r2).toEqual({ key: "op:t", end: 9 });
+    s = search();
+    i = nextMatchIndex(s.matches, s.order, r2.key, r2.end);
+    expect(s.matches[i]).toMatchObject({ key: "op:t", start: 14 });
   });
 
   it("leaves a target alone when it changed while fonts were loading", async () => {

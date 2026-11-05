@@ -5,7 +5,7 @@ import { useStore } from "zustand";
 import type { BundledFont } from "@edith/ops";
 import { fontKey, fontStore } from "@/lib/fonts";
 import { substituteOf } from "@/lib/paragraphs";
-import { findMatches } from "@/lib/search";
+import { findMatches, nextMatchIndex } from "@/lib/search";
 import { t } from "@/lib/strings";
 import { buildTargets } from "@/lib/targets";
 import { editorStore, useEditor } from "@/store/editor";
@@ -24,6 +24,7 @@ export function FindBar() {
   const doc = useEditor((s) => s.doc);
   const pages = useText((s) => s.pages);
   const status = useText((s) => s.status);
+  const fonts = useText((s) => s.fonts);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
@@ -35,16 +36,16 @@ export function FindBar() {
 
   useEffect(() => {
     if (!f.open) return;
-    // Highlights of original paragraphs are measured with the bundled fonts their runs show in: load them.
-    const { fonts, pages: all } = textStore.getState();
+    // Highlights of original paragraphs are measured with the bundled fonts their runs show in: load
+    // them (again once the text finishes loading, when Find was opened before).
     const needed = new Map<string, BundledFont>();
-    for (const ps of Object.values(all)) for (const p of ps) for (const r of p.runs) {
+    for (const ps of Object.values(pages)) for (const p of ps) for (const r of p.runs) {
       const sub = substituteOf(r.font, fonts);
       needed.set(fontKey(sub), sub);
     }
     void Promise.allSettled([...needed.values()].map((font) => fontStore.load(font)))
       .then(() => findStore.getState().set({ fontsVersion: findStore.getState().fontsVersion + 1 }));
-  }, [f.open]);
+  }, [f.open, pages, fonts]);
 
   useEffect(() => {
     if (!f.open) return;
@@ -68,11 +69,20 @@ export function FindBar() {
       await commitOpenSession();
       await whenTextCommitted();
       const { query, caseSensitive, replacement, current } = findStore.getState();
-      const fresh = findMatches(buildTargets(editorStore.getState().doc, textStore.getState().pages), query, caseSensitive);
+      const search = () => {
+        const targets = buildTargets(editorStore.getState().doc, textStore.getState().pages);
+        return { order: targets.map((x) => x.key), matches: findMatches(targets, query, caseSensitive) };
+      };
+      const fresh = search().matches;
       if (!fresh.length) return;
       const one = fresh[Math.min(current, fresh.length - 1)];
-      await applyReplacements(all ? fresh : [one], replacement);
-      if (!all) reveal(one.pageKey);
+      const [done] = await applyReplacements(all ? fresh : [one], replacement);
+      if (all || !done) return;
+      // Continue after the new text (it may contain the query itself), in this target or a later one.
+      const after = search();
+      const next = nextMatchIndex(after.matches, after.order, done.key, done.end);
+      findStore.getState().set({ matches: after.matches, current: next });
+      if (after.matches[next]) reveal(after.matches[next].pageKey);
     } catch (err) {
       console.warn("replace failed", err);
     } finally {

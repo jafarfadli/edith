@@ -32,6 +32,15 @@ export function findMatches(targets: SearchTarget[], query: string, caseSensitiv
   return out;
 }
 
+/** Index of the first match at or after offset `pos` of target `key`, else the first match of a later
+ *  target (`order` = target keys in search order), else 0 (wrap around). */
+export function nextMatchIndex(matches: Match[], order: string[], key: string, pos: number): number {
+  const rank = new Map(order.map((k, i) => [k, i]));
+  const at = rank.get(key) ?? -1;
+  const i = matches.findIndex((m) => (m.key === key ? m.start >= pos : (rank.get(m.key) ?? -1) > at));
+  return i < 0 ? 0 : i;
+}
+
 /** (paragraph index, offset in it) of box-text offset `o`. */
 function locate(paragraphs: Run[][], o: number): [number, number] {
   let from = 0;

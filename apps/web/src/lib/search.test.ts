@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Run, TextBox } from "@edith/ops";
-import { boxText, findMatches, matchSegments, replaceMatches, replaceRange, type SearchTarget } from "@/lib/search";
+import { boxText, findMatches, matchSegments, nextMatchIndex, replaceMatches, replaceRange, type Match, type SearchTarget } from "@/lib/search";
 
 const font = { kind: "bundled" as const, family: "Arimo", bold: false, italic: false };
 const r = (text: string, color = "#000000"): Run => ({ text, font, size: 12, color });
@@ -69,5 +69,23 @@ describe("matchSegments", () => {
     // "aa bb cc\ndd": "b cc" = 4..8, "dd" = 9..11
     expect(matchSegments(box, 4, 8)).toEqual([{ line: 0, segment: 1, from: 1, to: 2 }, { line: 1, segment: 0, from: 0, to: 2 }]);
     expect(matchSegments(box, 9, 11)).toEqual([{ line: 2, segment: 0, from: 0, to: 2 }]);
+  });
+});
+
+describe("nextMatchIndex", () => {
+  const m = (key: string, start: number): Match => ({ key, pageKey: "o0", start, end: start + 4 });
+  const order = ["a", "b", "c"];
+  const ms = [m("a", 0), m("a", 9), m("c", 2)];
+
+  it("picks the first match at or after the position in the same target", () => {
+    expect(nextMatchIndex(ms, order, "a", 4)).toBe(1);
+    expect(nextMatchIndex(ms, order, "a", 0)).toBe(0);
+  });
+
+  it("moves to a later target, then wraps around", () => {
+    expect(nextMatchIndex(ms, order, "a", 10)).toBe(2);
+    expect(nextMatchIndex(ms, order, "b", 0)).toBe(2);
+    expect(nextMatchIndex(ms, order, "c", 3)).toBe(0);
+    expect(nextMatchIndex([], order, "a", 0)).toBe(0);
   });
 });
