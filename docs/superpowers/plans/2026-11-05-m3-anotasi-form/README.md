@@ -96,3 +96,11 @@ Tasks 1–5 (API) build on each other in order (Task 1's schema keeps the web gr
 - Skema Ops rows signature/stamp/symbol/link/annot/form.set → Task 1. Urutan bake 4–6 → Tasks 2–4.
 - Frontend: Toolbar items (Tasks 8–11), SignatureModal (11), StampPicker (10), LinkPopover (9), FormLayer (12); Ctrl/Cmd+K (9).
 - Owner decisions from the M2 backlog (overflow outline, unsupported characters with `covers()`) → Task 13.
+
+## Owner decisions (2026-11-05, after plan review) — override the text above where they conflict
+
+1. Typed signatures are rendered to PNG (as planned).
+2. **Stamp presets are bilingual:** keep the 17 English presets from the spec AND add Indonesian equivalents of all 17 (e.g. Approved → Disetujui, Not Approved → Tidak Disetujui, Draft → Draf, Final → Final, Completed → Selesai, Confidential → Rahasia, For Public Release → Untuk Publik, Not For Public Release → Tidak Untuk Publik, For Comment → Untuk Dikomentari, Void → Batal, Preliminary Results → Hasil Sementara, Information Only → Hanya Informasi, Witness → Saksi, Initial Here → Paraf di Sini, Sign Here → Tanda Tangan di Sini, Accepted → Diterima, Rejected → Ditolak). The StampPicker shows a language switch (Indonesia / English, default Indonesia) above the preset grid; both sets share colours. Preset ids stay stable and distinct per language (e.g. `approved` and `disetujui`), and API + web must agree on every preset's text and colour (Tasks 1, 2, 10, 14).
+3. Text markup works on original PDF text only (as planned).
+4. Annotation author (`/T`) stays empty (as planned).
+5. Planner defaults accepted: signature library 5 entries × ~300 KB; flatten off by default, not remembered.
