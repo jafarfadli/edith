@@ -11,7 +11,7 @@
 // fonts.ts
 export interface FontMetrics { unitsPerEm: number; ascent: number; descent: number; advance(ch: string): number } // font units; descent positive
 export function metricsFromBuffer(buf: ArrayBuffer | Uint8Array): FontMetrics;
-export function textWidth(text: string, m: FontMetrics, size: number): number;      // pt, sum of advances, no kerning
+export function textWidth(text: string, m: FontMetrics, size: number): number;      // pt, sum of PDF-quantized advances (floor 1/1000 em), no kerning
 export function charOffsets(text: string, m: FontMetrics, size: number): number[];   // x offset of each char from segment start
 export function fontKey(f: BundledFont): string;                                     // e.g. "Arimo-bold-italic"
 export function cssFamily(f: BundledFont): string;                                   // "edith-Arimo-bold-italic"
@@ -33,7 +33,7 @@ Layout rules (must match spec + Task 8 server):
 - First line baseline = max ascent (pt) of runs on that line; each next line baseline = previous + `lineHeight` (paragraph breaks too). Empty paragraph = one empty line (uses its first run size).
 - `height` = last baseline + max descent of last line. `contentWidth` = widest line width.
 - `justify` spreads extra space evenly across spaces on every line except a paragraph's last line; justified lines emit one segment per word.
-- No kerning, no ligatures: width = Σ advance(char) / unitsPerEm × size.
+- No kerning, no ligatures: width = Σ floor(advance(char) × 1000 / unitsPerEm) / 1000 × size (PDF-quantized, see Global Constraints).
 
 - [ ] **Step 1: Dependencies**
 
@@ -71,8 +71,9 @@ describe("fonts", () => {
     expect(arimo.descent).toBeGreaterThan(0);
   });
 
-  it("measures without kerning (matches PyMuPDF TextWriter)", () => {
-    expect(textWidth("A", arimo, 20)).toBeCloseTo(13.33984375, 5);
+  it("measures without kerning, with PDF-quantized widths (floor of 1/1000 em)", () => {
+    // Arimo "A" = 1366/2048 em = 666.99 milli-em → 666 → 13.32 pt at 20 pt, as stored in the baked PDF.
+    expect(textWidth("A", arimo, 20)).toBeCloseTo(13.32, 6);
     expect(textWidth("AV", arimo, 20)).toBeCloseTo(textWidth("A", arimo, 20) + textWidth("V", arimo, 20), 6);
   });
 
@@ -90,7 +91,7 @@ describe("fonts", () => {
 });
 ```
 
-Note: the expected `13.33984375` is Arimo's `A` advance (1366/2048 × 20). If the downloaded font version differs, replace it with `pymupdf.Font(fontfile=...).text_length("A", 20)` printed from Python, and keep both sides equal.
+Note: `13.32` = floor(1366 × 1000 / 2048) / 1000 × 20. If the downloaded Arimo version has a different `A` advance, recompute with the same formula (Python: `math.floor(pymupdf.Font(fontfile=...).glyph_advance(65) * 1000) / 1000 * 20`).
 
 Run: `npm test -w apps/web` → Expected: FAIL.
 
@@ -122,18 +123,23 @@ export function metricsFromBuffer(buf: ArrayBuffer | Uint8Array): FontMetrics {
   };
 }
 
+/** Glyph advance in thousandths of an em, truncated — exactly what PyMuPDF writes into the PDF /W array. */
+function milliEm(ch: string, m: FontMetrics): number {
+  return Math.floor((m.advance(ch) * 1000) / m.unitsPerEm);
+}
+
 export function textWidth(text: string, m: FontMetrics, size: number): number {
-  let units = 0;
-  for (const ch of text) units += m.advance(ch);
-  return (units / m.unitsPerEm) * size;
+  let milli = 0;
+  for (const ch of text) milli += milliEm(ch, m);
+  return (milli / 1000) * size;
 }
 
 export function charOffsets(text: string, m: FontMetrics, size: number): number[] {
   const out: number[] = [];
-  let units = 0;
+  let milli = 0;
   for (const ch of text) {
-    out.push((units / m.unitsPerEm) * size);
-    units += m.advance(ch);
+    out.push((milli / 1000) * size);
+    milli += milliEm(ch, m);
   }
   return out;
 }

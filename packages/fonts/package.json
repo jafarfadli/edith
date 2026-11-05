@@ -1,0 +1,6 @@
+{
+  "name": "@edith/fonts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": { "fetch": "node scripts/fetch.mjs" }
+}

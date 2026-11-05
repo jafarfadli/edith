@@ -1,0 +1,21 @@
+{
+  "ops": [
+    { "id": "L", "type": "pages.layout", "pages": [
+      { "pageKey": "o1", "src": { "doc": "DOC", "index": 1 }, "rotate": 90 },
+      { "pageKey": "o0", "src": { "doc": "DOC", "index": 0 } },
+      { "pageKey": "u-blank-1", "src": { "blank": { "width": 595, "height": 842 } } }
+    ] },
+    { "id": "t1", "type": "text.add", "pageKey": "o0", "box": {
+      "rect": { "x": 72, "y": 72, "w": 200, "h": 20 }, "align": "left", "lineHeight": 14.4,
+      "paragraphs": [[{ "text": "Halo dunia", "font": { "kind": "bundled", "family": "Arimo", "bold": false, "italic": false }, "size": 12, "color": "#111111" }]],
+      "layout": [{ "baseline": 11.0, "segments": [{ "x": 0, "text": "Halo dunia", "runIndex": 0 }] }]
+    } },
+    { "id": "s1", "type": "shape.add", "pageKey": "o0", "kind": "rect", "rect": { "x": 50, "y": 200, "w": 100, "h": 50 }, "stroke": "#ff0000", "fill": null, "width": 2 },
+    { "id": "i1", "type": "ink.add", "pageKey": "o1", "paths": [[[10, 10], [20, 25], [30, 12]]], "color": "#0000ff", "width": 3 },
+    { "id": "w1", "type": "whiteout.add", "pageKey": "o1", "rect": { "x": 0, "y": 0, "w": 40, "h": 20 } },
+    { "id": "r1", "type": "redact.add", "pageKey": "o0", "rect": { "x": 300, "y": 300, "w": 80, "h": 20 }, "fill": "black" },
+    { "id": "img1", "type": "image.add", "pageKey": "u-blank-1", "rect": { "x": 100, "y": 100, "w": 120, "h": 80 }, "assetId": "ASSET" }
+  ],
+  "flatten_forms": false,
+  "filename": "hasil.pdf"
+}

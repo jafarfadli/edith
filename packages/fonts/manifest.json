@@ -1,0 +1,20 @@
+{
+  "default": "Arimo",
+  "families": {
+    "Arimo": {
+      "category": "sans",
+      "files": { "regular": "Arimo-Regular.ttf", "bold": "Arimo-Bold.ttf", "italic": "Arimo-Italic.ttf", "bolditalic": "Arimo-BoldItalic.ttf" },
+      "aliases": ["arimo", "helvetica", "helv", "arial", "arialmt", "liberationsans"]
+    },
+    "Tinos": {
+      "category": "serif",
+      "files": { "regular": "Tinos-Regular.ttf", "bold": "Tinos-Bold.ttf", "italic": "Tinos-Italic.ttf", "bolditalic": "Tinos-BoldItalic.ttf" },
+      "aliases": ["tinos", "times", "timesroman", "timesnewroman", "timesnewromanpsmt", "tiro", "liberationserif"]
+    },
+    "Cousine": {
+      "category": "mono",
+      "files": { "regular": "Cousine-Regular.ttf", "bold": "Cousine-Bold.ttf", "italic": "Cousine-Italic.ttf", "bolditalic": "Cousine-BoldItalic.ttf" },
+      "aliases": ["cousine", "courier", "couriernew", "cour", "liberationmono"]
+    }
+  }
+}
