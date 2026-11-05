@@ -54,6 +54,11 @@ export const t = {
     prevPage: "Halaman sebelumnya",
     nextPage: "Halaman berikutnya",
     restored: "Perubahan sebelumnya dipulihkan",
+    tools: "Alat",
+    properties: "Properti",
+    options: "pilihan",
+    black: "Hitam",
+    white: "Putih",
   },
   errors: {
     generic: "Terjadi kesalahan. Coba lagi.",

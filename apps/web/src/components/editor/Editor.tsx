@@ -2,19 +2,23 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { ApiError, fileUrl, getStructure } from "@/lib/api";
+import { toPage } from "@/lib/coords";
 import { loadDraft, saveDraft } from "@/lib/draft";
+import { moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
-import { editorStore, useEditor, type EditorDoc } from "@/store/editor";
+import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
 import { PageList } from "./PageList";
+import { PropertiesBar } from "./PropertiesBar";
 import { Sidebar } from "./Sidebar";
+import { Toolbar } from "./Toolbar";
 import { ZoomPill } from "./ZoomPill";
 import { useShortcuts } from "./useShortcuts";
 
@@ -78,7 +82,23 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     return () => { window.removeEventListener("pagehide", onHide); unsub(); saver.flush(); };
   }, []);
 
-  useShortcuts();
+  const nudge = useCallback((e: KeyboardEvent) => {
+    const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const d = dirs[e.key];
+    const st = editorStore.getState();
+    if (!d || !st.selection || !st.info) return false;
+    const op = st.doc.objects[st.selection];
+    const entry = st.doc.pages.find((p) => p.pageKey === op?.pageKey);
+    if (!op || !entry) return false;
+    e.preventDefault();
+    const step = e.shiftKey ? 10 : 1;
+    const g = pageGeom(entry, st.info);
+    const [x0, y0] = toPage([0, 0], g, 1);
+    const [x1, y1] = toPage([d[0] * step, d[1] * step], g, 1);
+    st.updateObject(op.id, moveOp(op, x1 - x0, y1 - y0));
+    return true;
+  }, []);
+  useShortcuts(nudge);
 
   if (fatal) {
     return (
@@ -92,7 +112,8 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
   return (
     <div className="flex h-dvh flex-col">
       <Header onNotice={setNotice} />
-      <div className="h-12 shrink-0 border-b border-line bg-surface" data-slot="toolbar" />
+      <Toolbar onNotice={setNotice} />
+      <PropertiesBar />
       <div className="flex min-h-0 flex-1">
         {pdf ? <Sidebar pdf={pdf} /> : <aside className="w-48 shrink-0 border-r border-line bg-surface" />}
         <main
