@@ -28,4 +28,8 @@ def build_pages(doc: pymupdf.Document, layout: PagesLayout, layout_index: int,
             base_rotation.append(0)
         selection.append(idx)
     doc.select(selection)
+    # Ops are in unrotated-CropBox points: draw on unrotated pages, bake() re-applies the
+    # rotation (base + layout) last.
+    for page in doc:
+        page.set_rotation(0)
     return {e.pageKey: i for i, e in enumerate(layout.pages)}, base_rotation

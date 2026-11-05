@@ -94,7 +94,7 @@ def test_unknown_family_fails_with_op_id(ctx):
 CROP = (50, 60, 400, 700)
 
 
-@pytest.mark.parametrize("rotation", [0])
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
 def test_text_on_cropped_page_is_crop_relative(ctx, rotation):
     ops = text_op([run("Halo", size=20)], [{"baseline": 15, "segments": [{"x": 5, "text": "Halo", "runIndex": 0}]}])
     out = bake(make_pdf(pages=1, text=False, crop=CROP, rotation=rotation), ops, ctx)

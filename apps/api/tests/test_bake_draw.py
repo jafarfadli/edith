@@ -7,7 +7,7 @@ from edith.errors import AssetNotFound, BakeFailed
 from edith.fonts import FontRegistry
 from edith.ops import ExportRequest
 from edith.settings import Settings
-from tests.pdfs import make_pdf
+from tests.pdfs import make_pdf, unrotated
 
 DOC = "D" * 22
 
@@ -97,3 +97,61 @@ def test_missing_asset(ctx):
     with pytest.raises(BakeFailed) as e:
         bake(make_pdf(pages=1), ops({"id": "m", "type": "image.add", "pageKey": "o0", "rect": R(0, 0, 10, 10), "assetId": "nope"}), ctx)
     assert e.value.extra["op_id"] == "m"
+
+
+# Spec fixture: a page with /Rotate 90 whose CropBox differs from its MediaBox. Op coordinates
+# are relative to the top-left of the unrotated CropBox, so after removing /Rotate from the
+# baked page every mark must sit exactly where the op put it.
+CROP = (50, 60, 400, 700)
+
+
+@pytest.fixture(params=[90, 180, 270])
+def rotated_cropped(request) -> bytes:
+    return make_pdf(pages=1, text=False, crop=CROP, rotation=request.param)
+
+
+def test_rotated_cropped_whiteout(ctx, rotated_cropped):
+    out = bake(rotated_cropped, ops({"id": "w", "type": "whiteout.add", "pageKey": "o0", "rect": R(150, 137, 48, 16)}), ctx)
+    rects = [d["rect"] for d in unrotated(out).get_drawings() if d.get("fill") == (1.0, 1.0, 1.0)]
+    assert rects == [pymupdf.Rect(150, 137, 198, 153)]
+
+
+def test_rotated_cropped_shape_rect(ctx, rotated_cropped):
+    out = bake(rotated_cropped, ops({"id": "s", "type": "shape.add", "pageKey": "o0", "kind": "rect", "rect": R(150, 137, 48, 16), "stroke": "#ff0000", "fill": None, "width": 1}), ctx)
+    rect = next(d for d in unrotated(out).get_drawings() if d.get("color") == (1.0, 0.0, 0.0))
+    assert rect["rect"] == pymupdf.Rect(150, 137, 198, 153)
+
+
+def test_rotated_cropped_ink(ctx, rotated_cropped):
+    out = bake(rotated_cropped, ops({"id": "i", "type": "ink.add", "pageKey": "o0", "paths": [[[150, 137], [198, 153]]], "color": "#00ff00", "width": 2}), ctx)
+    ink = next(d for d in unrotated(out).get_drawings() if d.get("color") == (0.0, 1.0, 0.0))
+    assert [tuple(p) for p in ink["items"][0][1:3]] == [(150, 137), (198, 153)]
+
+
+def test_rotated_cropped_image(ctx, tmp_path, rotated_cropped):
+    pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 10, 10), 0)
+    pix.set_rect(pix.irect, (255, 0, 0))
+    (tmp_path / "img1.png").write_bytes(pix.tobytes("png"))
+    out = bake(rotated_cropped, ops({"id": "m", "type": "image.add", "pageKey": "o0", "rect": R(150, 137, 48, 16), "assetId": "img1"}), ctx)
+    page = unrotated(out)
+    assert page.get_image_rects(page.get_images()[0][0])[0] == pymupdf.Rect(150, 137, 198, 153)
+
+
+@pytest.mark.parametrize("rotation", [90, 180, 270])
+def test_rotated_cropped_redact_removes_only_covered_text(ctx, rotation):
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.set_cropbox(pymupdf.Rect(*CROP))
+    page.insert_text((150, 150), "SECRET", fontsize=12)
+    page.insert_text((150, 300), "PUBLIC", fontsize=12)
+    page.set_rotation(rotation)
+    out = bake(doc.tobytes(), ops({"id": "r", "type": "redact.add", "pageKey": "o0", "rect": R(148, 135, 54, 20), "fill": "black"}), ctx)
+    text = unrotated(out).get_text()
+    assert "SECRET" not in text and "PUBLIC" in text
+    assert pixel(unrotated(out), 175, 145) == (0, 0, 0)
+
+
+def test_rotated_cropped_keeps_rotation(ctx, rotated_cropped):
+    rotation = pymupdf.open(stream=rotated_cropped, filetype="pdf")[0].rotation
+    out = bake(rotated_cropped, ops({"id": "w", "type": "whiteout.add", "pageKey": "o0", "rect": R(0, 0, 1, 1)}), ctx)
+    assert out[0].rotation == rotation
