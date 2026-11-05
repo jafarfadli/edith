@@ -19,9 +19,9 @@ export function ZoomPill() {
 
   return (
     <div className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full bg-ink px-2 py-1 text-sm text-white shadow-lg">
-      <button className={btn} onClick={() => go(-1)} disabled={idx === 0} aria-label="Halaman sebelumnya">‹</button>
+      <button className={btn} onClick={() => go(-1)} disabled={idx === 0} aria-label={t.editor.prevPage}>‹</button>
       <span data-testid="page-indicator" className="min-w-14 text-center tabular-nums">{pages.length ? idx + 1 : 0}/{pages.length}</span>
-      <button className={btn} onClick={() => go(1)} disabled={idx >= pages.length - 1} aria-label="Halaman berikutnya">›</button>
+      <button className={btn} onClick={() => go(1)} disabled={idx >= pages.length - 1} aria-label={t.editor.nextPage}>›</button>
       <span className="mx-1 h-5 w-px bg-white/20" />
       <button className={btn} onClick={() => s.setZoom(Math.round((zoom - 0.1) * 10) / 10)} aria-label={t.editor.zoomOut}>−</button>
       <span className="min-w-12 text-center tabular-nums">{Math.round(zoom * 100)}%</span>

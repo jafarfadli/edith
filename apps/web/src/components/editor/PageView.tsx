@@ -29,7 +29,7 @@ export function PageView({ pdf, entry, geom, scale, overlay, onVisible }: {
     );
     io.observe(el);
     vis.observe(el);
-    return () => { io.disconnect(); vis.disconnect(); };
+    return () => { io.disconnect(); vis.disconnect(); onVisible?.(entry.pageKey, 0); };
   }, [entry.pageKey, onVisible]);
 
   useEffect(() => {
@@ -38,15 +38,20 @@ export function PageView({ pdf, entry, geom, scale, overlay, onVisible }: {
     let cancelled = false;
     const index = entry.src.index;
     (async () => {
-      const page = await pdf.getPage(index + 1);
-      if (cancelled || !canvas.current) return;
-      const dpr = window.devicePixelRatio || 1;
-      const viewport = page.getViewport({ scale: scale * dpr, rotation: geom.rotation });
-      const c = canvas.current;
-      c.width = Math.floor(viewport.width);
-      c.height = Math.floor(viewport.height);
-      task = page.render({ canvas: c, viewport });
-      try { await task.promise; } catch { /* cancelled */ }
+      try {
+        const page = await pdf.getPage(index + 1);
+        if (cancelled || !canvas.current) return;
+        const dpr = window.devicePixelRatio || 1;
+        const viewport = page.getViewport({ scale: scale * dpr, rotation: geom.rotation });
+        const c = canvas.current;
+        c.width = Math.floor(viewport.width);
+        c.height = Math.floor(viewport.height);
+        task = page.render({ canvas: c, viewport });
+        await task.promise;
+      } catch (e) {
+        if (cancelled || (e as { name?: string })?.name === "RenderingCancelledException") return;
+        console.warn("pdf.js render failed", e);
+      }
     })();
     return () => { cancelled = true; task?.cancel(); };
   }, [near, pdf, entry.src, geom.rotation, scale]);

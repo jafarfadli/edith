@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { pickVisible, pruneRatios } from "@/lib/visible";
 import { editorStore, pageGeom, useEditor } from "@/store/editor";
 import { PageView, type OverlayRender } from "./PageView";
 
@@ -11,10 +12,16 @@ export function PageList({ pdf, overlay }: { pdf: PDFDocumentProxy; overlay?: Ov
   const zoom = useEditor((s) => s.zoom);
   const ratios = useRef(new Map<string, number>());
 
+  const keys = useRef<ReadonlySet<string>>(new Set(pages.map((p) => p.pageKey)));
+
+  useEffect(() => {
+    keys.current = new Set(pages.map((p) => p.pageKey));
+    pruneRatios(ratios.current, keys.current);
+  }, [pages]);
+
   const onVisible = useCallback((key: string, ratio: number) => {
     ratios.current.set(key, ratio);
-    let best: string | null = null, bestRatio = 0;
-    for (const [k, r] of ratios.current) if (r > bestRatio) { best = k; bestRatio = r; }
+    const best = pickVisible(ratios.current, keys.current);
     if (best && best !== editorStore.getState().currentPage) editorStore.getState().setCurrentPage(best);
   }, []);
 

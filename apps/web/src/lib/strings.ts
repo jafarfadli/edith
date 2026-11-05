@@ -49,6 +49,9 @@ export const t = {
     delete: "Hapus",
     fileName: "Nama file",
     preview: "Preview akurat",
+    close: "Tutup",
+    prevPage: "Halaman sebelumnya",
+    nextPage: "Halaman berikutnya",
     restored: "Perubahan sebelumnya dipulihkan",
   },
   errors: {

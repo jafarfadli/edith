@@ -5,10 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { ApiError, fileUrl, getStructure } from "@/lib/api";
 import { loadDraft, saveDraft } from "@/lib/draft";
-import { loadPdf } from "@/lib/pdf";
+import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
-import { editorStore, useEditor } from "@/store/editor";
+import { createDebounced } from "@/lib/autosave";
+import { editorStore, useEditor, type EditorDoc } from "@/store/editor";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
 import { PageList } from "./PageList";
@@ -21,34 +22,56 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
   const [notice, setNotice] = useState<{ kind: "error" | "info"; text: string } | null>(null);
   const info = useEditor((s) => s.info);
   const tool = useEditor((s) => s.tool);
+  const initialDoc = useRef<EditorDoc | null>(null);
   const drag = useRef<{ x: number; y: number; l: number; t: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let doc: PDFDocumentProxy | null = null;
+    initialDoc.current = null;
     (async () => {
+      let st;
       try {
-        const st = await getStructure(docId);
-        const draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
-        editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages }, draft);
-        if (draft) setNotice({ kind: "info", text: t.editor.restored });
-        const doc = await loadPdf(fileUrl(docId));
-        if (!cancelled) setPdf(doc);
+        st = await getStructure(docId);
       } catch (e) {
         if (!cancelled) setFatal(e instanceof ApiError ? e.code : "generic");
+        return;
+      }
+      if (cancelled) return;
+      const draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
+      editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages }, draft);
+      initialDoc.current = editorStore.getState().doc;
+      if (draft) setNotice({ kind: "info", text: t.editor.restored });
+      try {
+        const loaded = await loadPdf(fileUrl(docId));
+        if (cancelled) { destroyPdf(loaded); return; }
+        doc = loaded;
+        setPdf(loaded);
+      } catch {
+        if (!cancelled) setFatal("network");
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (doc) destroyPdf(doc);
+      setPdf(null);
+      setFatal(null);
+    };
   }, [docId, initialName]);
 
-  // Autosave the undoable document, debounced.
+  // Autosave the undoable document (debounced), but not the document produced by init.
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const saver = createDebounced<{ sha: string; doc: EditorDoc }>((v) => saveDraft(v.sha, v.doc), 500);
+    let dirty = false;
     const unsub = editorStore.subscribe((s, prev) => {
-      if (s.doc === prev.doc || !s.info) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => saveDraft(s.info!.sha256, s.doc), 500);
+      if (s.doc === prev.doc || !s.info || !initialDoc.current) return;
+      if (!dirty && s.doc === initialDoc.current) return;
+      dirty = true;
+      saver.push({ sha: s.info.sha256, doc: s.doc });
     });
-    return () => { clearTimeout(timer); unsub(); };
+    const onHide = () => saver.flush();
+    window.addEventListener("pagehide", onHide);
+    return () => { window.removeEventListener("pagehide", onHide); unsub(); saver.flush(); };
   }, []);
 
   useShortcuts();
