@@ -104,3 +104,5 @@ Tasks 1–5 (API) build on each other in order (Task 1's schema keeps the web gr
 3. Text markup works on original PDF text only (as planned).
 4. Annotation author (`/T`) stays empty (as planned).
 5. Planner defaults accepted: signature library 5 entries × ~300 KB; flatten off by default, not remembered.
+
+**Update after Task 1:** `STAMP_PRESETS` (apps/api/edith/ops.py) has 34 ids — the 17 English ids in plan order, then the Indonesian ids in the same order: disetujui, tidak-disetujui, draf, final-id, selesai, rahasia, untuk-publik, tidak-untuk-publik, untuk-dikomentari, batal, hasil-sementara, hanya-informasi, saksi, paraf-di-sini, tanda-tangan-di-sini, diterima, ditolak. Each Indonesian preset uses the same colour as its English counterpart and the label from Owner decision #2. Wherever later tasks say "17 presets", read "34 presets". Tasks 2 and 10 must keep API and web preset tables identical (label + colour per id) and add a parity test (e.g. a JSON table in packages/ops or a test that compares the web table against the API table).
