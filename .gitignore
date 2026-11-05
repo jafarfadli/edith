@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+apps/api/.venv/
+apps/api/.data/
+__pycache__/
+*.pyc
+.pytest_cache/
+apps/web/public/fonts/
+test-results/
+playwright-report/
+.env*.local
+.DS_Store
