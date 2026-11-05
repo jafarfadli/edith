@@ -18,7 +18,8 @@
     "fontkit": "^2.0.4",
     "next": "16.4.5",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
