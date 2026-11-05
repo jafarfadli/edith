@@ -37,6 +37,7 @@ export const t = {
     moveUp: "Pindah ke atas",
     moveDown: "Pindah ke bawah",
     pages: "Halaman",
+    pageMenu: "Menu halaman",
     color: "Warna",
     fill: "Isi",
     noFill: "Tanpa isi",

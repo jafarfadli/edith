@@ -13,6 +13,7 @@ import { editorStore, useEditor, type EditorDoc } from "@/store/editor";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
 import { PageList } from "./PageList";
+import { Sidebar } from "./Sidebar";
 import { ZoomPill } from "./ZoomPill";
 import { useShortcuts } from "./useShortcuts";
 
@@ -90,7 +91,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       <Header onNotice={setNotice} />
       <div className="h-12 shrink-0 border-b border-line bg-surface" data-slot="toolbar" />
       <div className="flex min-h-0 flex-1">
-        <aside className="w-48 shrink-0 border-r border-line bg-surface" data-slot="sidebar" />
+        {pdf ? <Sidebar pdf={pdf} /> : <aside className="w-48 shrink-0 border-r border-line bg-surface" />}
         <main
           className="relative min-w-0 flex-1 overflow-auto bg-bg"
           id="page-scroller"
