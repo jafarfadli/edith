@@ -7,9 +7,10 @@ import { useStore } from "zustand";
 import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
 import { groupTransform, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
-import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, isMarkup, isResizable, isTextOp, MARKUP_TOOLS, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
+import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, isMarkup, isResizable, isTextOp, MARKUP_TOOLS, MIN_DRAG, moveOp, normalizeRect, noteAt, resizeOp, symbolAt, type DragTool, type Pt } from "@/lib/objects";
 import { charsStore } from "@/store/chars";
 import { editorStore, useEditor, type MarkupTool } from "@/store/editor";
+import { linkStore } from "./marks/linkStore";
 import { MarkupShape } from "./marks/MarkupShape";
 import { markupFromDrag, onMarkableText } from "./marks/markupTool";
 import { ObjectShape } from "./ObjectShape";
@@ -102,6 +103,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       if (cur.draft) setDrawDraft(extendInk(cur.draft, at));
     } else if (MARKUP_TOOLS.has(tool)) {
       setDrawDraft(markupFromDrag(tool as MarkupTool, pageKey, cur.start, at, "draft"));
+    } else if (tool === "link") {
+      setDrawDraft({ id: "draft", type: "link.add", pageKey, rect: normalizeRect(cur.start, at), target: { url: "https://" } });
     } else if (DRAG_TOOLS.has(tool)) {
       setDrawDraft(createFromDrag(tool as DragTool, cur.start, at, editorStore.getState().style, pageKey, "draft"));
     }
@@ -117,6 +120,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     } else if (MARKUP_TOOLS.has(tool)) {
       const op = markupFromDrag(tool as MarkupTool, pageKey, cur.start, at, newId());
       if (op) s.addObject(op); // the markup tools stay active
+    } else if (tool === "link") {
+      const rect = normalizeRect(cur.start, at);
+      if (rect.w >= MIN_DRAG && rect.h >= MIN_DRAG) { s.setTool("select"); linkStore.getState().open({ pageKey, rect }); }
     } else if (DRAG_TOOLS.has(tool)) {
       const op = createFromDrag(tool as DragTool, cur.start, at, s.style, pageKey, newId());
       if (op) { s.addObject(op); s.setTool("select"); s.select(op.id); }
@@ -155,7 +161,14 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     if (tool === "text") { overlayHooks.onTextPointerDown?.(pageKey, at); return; }
     if (MARKUP_TOOLS.has(tool)) {
       if (onMarkableText(pageKey, at)) beginDraw(at, null);
-    } else if (DRAG_TOOLS.has(tool)) {
+    } else if (tool === "check" || tool === "cross") {
+      s.addObject(symbolAt(tool, at, s.style, pageKey, newId(), geom)); // stays active for the next one
+    } else if (tool === "note") {
+      const note = noteAt(at, s.style, pageKey, newId(), geom);
+      s.addObject(note);
+      s.setTool("select");
+      s.select(note.id); // the properties bar shows its text field
+    } else if (tool === "link" || DRAG_TOOLS.has(tool)) {
       beginDraw(at, null);
     } else if (tool === "ink") {
       beginDraw(at, { id: "draft", type: "ink.add", pageKey, paths: [[at]], color: s.style.stroke, width: inkWidth(s.style.width) } as ContentOp);

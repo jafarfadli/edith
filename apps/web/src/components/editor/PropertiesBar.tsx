@@ -6,12 +6,14 @@ import { inkWidth, isMarkup, isTextOp, MARKUP_TOOLS } from "@/lib/objects";
 import { t } from "@/lib/strings";
 import { useChars } from "@/store/chars";
 import { editorStore, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
+import type { LinkTarget } from "@/lib/links";
 import { ColorField } from "./ColorField";
+import { LinkTargetFields } from "./marks/LinkTargetFields";
 import { textEditStore } from "./text/textEdit";
 
 export const textPropsSlot: { render?: () => React.ReactNode } = {};
 
-type Kind = "shape" | "line" | "ink" | "redact" | "text" | "markup" | null;
+type Kind = "shape" | "line" | "ink" | "redact" | "text" | "markup" | "symbol" | "note" | "link" | null;
 
 function kindOf(op: ContentOp | undefined, tool: string): Kind {
   if (op) {
@@ -20,9 +22,14 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
     if (op.type === "redact.add") return "redact";
     if (isTextOp(op)) return "text";
     if (isMarkup(op)) return "markup";
+    if (op.type === "symbol.add") return "symbol";
+    if (op.type === "annot.add") return "note";
+    if (op.type === "link.add") return "link";
     return null;
   }
   if (MARKUP_TOOLS.has(tool)) return "markup";
+  if (tool === "check" || tool === "cross") return "symbol";
+  if (tool === "note") return "note";
   if (tool === "rect" || tool === "ellipse") return "shape";
   if (tool === "line" || tool === "arrow") return "line";
   if (tool === "ink") return "ink";
@@ -57,6 +64,8 @@ export function PropertiesBar() {
   function setColor(v: string) {
     if (o) s.updateObject(o.id, { color: v } as Partial<ContentOp>, { coalesce: `props:${o.id}` });
     else if (MARKUP_TOOLS.has(tool)) s.setStyle({ markup: { ...style.markup, [tool]: v } });
+    else if (kind === "symbol") s.setStyle({ symbolColor: v });
+    else if (kind === "note") s.setStyle({ noteColor: v });
   }
 
   const stroke = (o?.type === "ink.add" ? (o.color as string) : (o?.stroke as string | undefined)) ?? style.stroke;
@@ -117,6 +126,18 @@ export function PropertiesBar() {
           onChange={(v) => setColor(v)} />
       )}
       {kind === "markup" && noText && <span className="text-xs text-muted">{t.annot.noText}</span>}
+      {kind === "symbol" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.symbolColor} onChange={setColor} />}
+      {kind === "note" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.noteColor} onChange={setColor} />}
+      {kind === "note" && o && (
+        <textarea key={o.id} aria-label={t.annot.noteContent} placeholder={t.annot.noteContent} autoFocus rows={1}
+          value={(o.content as string | null | undefined) ?? ""}
+          onChange={(e) => s.updateObject(o.id, { content: e.target.value } as Partial<ContentOp>, { coalesce: `note:${o.id}` })}
+          className="h-8 w-80 resize-none rounded border border-line px-1.5 py-1 text-ink" />
+      )}
+      {kind === "link" && o && (
+        <LinkTargetFields key={o.id} target={o.target as LinkTarget}
+          onChange={(target) => { if (target) s.updateObject(o.id, { target } as Partial<ContentOp>, { coalesce: `link:${o.id}` }); }} />
+      )}
       {kind === "text" && textPropsSlot.render?.()}
       {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
       <div className="flex-1" />

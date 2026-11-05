@@ -39,7 +39,7 @@ export const NOTE_SIZE = 16;
 export const SYMBOL_SIZE = 20;
 
 /** Highlight/underline/strike: attached to the text under it (cannot be moved or resized). */
-export function isMarkup(op: ContentOp | undefined): op is AnnotAdd {
+export function isMarkup(op: ContentOp | undefined): op is AnnotAdd & { kind: "highlight" | "underline" | "strike" } {
   return op?.type === "annot.add" && op.kind !== "note";
 }
 

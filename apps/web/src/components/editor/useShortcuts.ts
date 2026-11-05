@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { editorStore } from "@/store/editor";
 import { openFind } from "./find/findStore";
+import { linkStore } from "./marks/linkStore";
 import { afterTextCommitted, textEditStore } from "./text/textEdit";
 
 export function isTyping(target: EventTarget | null): boolean {
@@ -27,8 +28,9 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       const k = e.key.toLowerCase();
       if (mod && k === "z" && !e.shiftKey) { e.preventDefault(); afterTextCommitted(() => editorStore.getState().undo()); }
       else if ((mod && k === "z" && e.shiftKey) || (e.ctrlKey && k === "y")) { e.preventDefault(); afterTextCommitted(() => editorStore.getState().redo()); }
+      else if (mod && k === "k") { e.preventDefault(); s.setTool("link"); }
       else if ((e.key === "Delete" || e.key === "Backspace") && s.selection) { e.preventDefault(); s.deleteObject(s.selection); }
-      else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); }
+      else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); linkStore.getState().close(); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

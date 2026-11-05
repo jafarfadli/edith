@@ -76,6 +76,10 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
         { tool: "line", label: t.editor.line, icon: "╱" },
         { tool: "arrow", label: t.editor.arrow, icon: "→" },
       ]} />
+      <ToolButton tool="check" label={t.annot.check} icon="✓" active={tool} />
+      <ToolButton tool="cross" label={t.annot.cross} icon="✗" active={tool} />
+      <ToolButton tool="note" label={t.annot.note} icon="🗒" active={tool} />
+      <ToolButton tool="link" label={t.annot.link} icon="🔗" active={tool} />
     </div>
   );
 }
