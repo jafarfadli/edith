@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
-import { arrowHead, clampToPage, createFromDrag, inkWidth, isTextOp, MIN_INK_WIDTH, moveOp, normalizeRect, opBounds, resizeOp } from "@/lib/objects";
-import type { ToolStyle } from "@/store/editor";
+import { arrowHead, clampToPage, createFromDrag, inkWidth, isMarkup, isResizable, isTextOp, MIN_INK_WIDTH, moveOp, normalizeRect, NOTE_SIZE, noteAt, opBounds, resizeOp, SYMBOL_SIZE, symbolAt } from "@/lib/objects";
+import { DEFAULT_STYLE, type ToolStyle } from "@/store/editor";
 
-const style: ToolStyle = { stroke: "#ff0000", fill: "#00ff00", width: 3, color: "#111111", fontFamily: "Arimo", fontSize: 14, bold: false, italic: false, align: "left" };
+const style: ToolStyle = { ...DEFAULT_STYLE, stroke: "#ff0000", fill: "#00ff00", width: 3, color: "#111111" };
 
 describe("objects", () => {
   it("normalizes rects from any drag direction", () => {
@@ -75,5 +75,32 @@ describe("text.edit ops", () => {
     expect(opBounds(op)).toEqual(box.rect);
     expect(opBounds(moveOp(op, 5, -5))).toEqual({ x: 15, y: 15, w: 100, h: 30 });
     expect(opBounds(resizeOp(op, { x: 0, y: 20, w: 50, h: 99 }))).toEqual({ x: 0, y: 20, w: 50, h: 30 }); // width only
+  });
+});
+
+describe("objects (M3)", () => {
+  const page = { width: 595, height: 842 };
+  const hl = { id: "h", type: "annot.add", pageKey: "o0", kind: "highlight", color: "#ffeb3b",
+    quads: [{ x: 72, y: 90, w: 100, h: 14 }, { x: 72, y: 104, w: 40, h: 14 }] } as ContentOp;
+
+  it("markup bounds cover every quad; markup never moves or resizes", () => {
+    expect(opBounds(hl)).toEqual({ x: 72, y: 90, w: 100, h: 28 });
+    expect(moveOp(hl, 5, 5)).toBe(hl);
+    expect(resizeOp(hl, { x: 0, y: 0, w: 1, h: 1 })).toBe(hl);
+    expect(isMarkup(hl)).toBe(true);
+    expect(isResizable(hl)).toBe(false);
+  });
+
+  it("places notes and symbols on the page", () => {
+    const note = noteAt([590, 10], style, "o0", "n", page);
+    expect(note).toEqual({ id: "n", type: "annot.add", pageKey: "o0", kind: "note", point: [595 - NOTE_SIZE, 10], color: style.noteColor, content: "" });
+    expect(opBounds(note)).toEqual({ x: 579, y: 10, w: 16, h: 16 });
+    expect((moveOp(note, 1, 2) as { point: number[] }).point).toEqual([580, 12]);
+    expect(isMarkup(note)).toBe(false);
+    expect(isResizable(note)).toBe(false);
+    const check = symbolAt("check", [100, 5], style, "o0", "c", page);
+    expect(check).toEqual({ id: "c", type: "symbol.add", pageKey: "o0", kind: "check", rect: { x: 90, y: 0, w: SYMBOL_SIZE, h: SYMBOL_SIZE }, color: style.symbolColor });
+    expect(isResizable(check)).toBe(true);
+    expect((resizeOp(check, { x: 1, y: 2, w: 30, h: 30 }) as { rect: unknown }).rect).toEqual({ x: 1, y: 2, w: 30, h: 30 });
   });
 });

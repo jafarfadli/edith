@@ -183,4 +183,21 @@ describe("history coalescing and batches", () => {
     expect(textEditFor(s().doc, "o1", "g2")?.id).toBe("e");
     expect(textEditFor(s().doc, "o0", "g2")).toBeUndefined();
   });
+
+  it("sets form values with undo, coalescing typing into one step", () => {
+    let t = 0;
+    const st = createEditorStore(() => t);
+    st.getState().init(info);
+    st.getState().setFormValue("nama", "B", { coalesce: "form:nama" });
+    t = 300; st.getState().setFormValue("nama", "Bu", { coalesce: "form:nama" });
+    t = 600; st.getState().setFormValue("setuju", true);
+    expect(st.getState().doc.forms).toEqual({ nama: "Bu", setuju: true });
+    st.getState().undo();
+    expect(st.getState().doc.forms).toEqual({ nama: "Bu" });
+    st.getState().undo();
+    expect(st.getState().doc.forms).toBeUndefined();
+    const before = st.getState().past.length;
+    st.getState().redo(); st.getState().setFormValue("nama", "Bu"); // same value: no new step
+    expect(st.getState().past.length).toBe(before + 1);
+  });
 });

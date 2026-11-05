@@ -71,6 +71,31 @@ export const t = {
     originalFont: (name: string) => `${name} (asli)`,
     revert: "Kembalikan teks asli",
     scanned: "Halaman ini berupa gambar; OCR belum tersedia",
+    overflow: "Teks lebih panjang dari paragraf asli dan bisa menimpa teks di bawahnya",
+    unsupported: "beberapa karakter tidak didukung font ini",
+  },
+  annot: {
+    markup: "Penanda", highlight: "Stabilo", underline: "Garis bawah", strike: "Coret",
+    check: "Centang", cross: "Silang", note: "Catatan", noteContent: "Isi catatan", link: "Link",
+    signature: "Tanda Tangan", stamp: "Stamp", uploadImage: "Unggah gambar",
+    noText: "Tidak ada teks asli yang bisa ditandai di halaman ini",
+  },
+  link: {
+    title: "Tambah link", toUrl: "Ke URL", toPage: "Ke halaman", url: "Alamat web", page: "Halaman tujuan",
+    pageN: (n: number) => `Halaman ${n}`, save: "Simpan link", cancel: "Batal", invalidUrl: "Masukkan alamat web yang valid",
+  },
+  stamp: {
+    title: "Pilih stamp", presets: "Standar", custom: "Kustom", text: "Teks stamp", date: "Tanggal", time: "Jam", add: "Tambahkan stamp",
+  },
+  signature: {
+    title: "Tanda tangan", draw: "Gambar", type: "Ketik", upload: "Unggah", clear: "Bersihkan", name: "Nama Anda",
+    font: "Gaya tulisan", save: "Simpan tanda tangan", saved: "Tanda tangan tersimpan", use: "Pakai tanda tangan",
+    remove: "Hapus tanda tangan tersimpan", add: "Tambahkan", tooBig: "Tanda tangan ini terlalu besar untuk disimpan di browser",
+    colors: { "#111111": "Hitam", "#1d4ed8": "Biru", "#b91c1c": "Merah" } as Record<string, string>,
+  },
+  form: {
+    flatten: "Ratakan form",
+    flattenHint: "Isian form menjadi bagian halaman dan tidak bisa diubah lagi",
   },
   find: {
     open: "Cari",

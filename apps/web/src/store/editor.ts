@@ -1,19 +1,26 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
 import type { ContentOp, TextEdit } from "@edith/ops";
+import type { FormField } from "@/lib/api";
 import { normRotation, type PageGeom, type Rotation } from "@/lib/coords";
 import { newId } from "@/lib/id";
 
 export interface StructurePage { index: number; width: number; height: number; rotation: number; hasText: boolean }
-export interface DocInfo { docId: string; sha256: string; fileName: string; pages: StructurePage[] }
+export interface DocInfo { docId: string; sha256: string; fileName: string; pages: StructurePage[]; fields?: FormField[] }
 export type PageSrc = { doc: string; index: number } | { blank: { width: number; height: number } };
 export interface PageEntry { pageKey: string; src: PageSrc; rotate: Rotation }
-export interface EditorDoc { pages: PageEntry[]; objects: Record<string, ContentOp>; order: string[] }
-export type Tool = "select" | "text" | "whiteout" | "redact" | "ink" | "image" | "rect" | "ellipse" | "line" | "arrow" | "pan";
+export type FormValue = string | boolean;
+/** `forms`: AcroForm values the user set, by field name (sent as form.set ops); absent in M1/M2 drafts. */
+export interface EditorDoc { pages: PageEntry[]; objects: Record<string, ContentOp>; order: string[]; forms?: Record<string, FormValue> }
+export type MarkupTool = "highlight" | "underline" | "strike";
+export type Tool = "select" | "text" | "whiteout" | "redact" | "ink" | "image" | "rect" | "ellipse" | "line" | "arrow" | "pan"
+  | MarkupTool | "check" | "cross" | "note" | "link";
 export interface ToolStyle {
   stroke: string; fill: string | null; width: number; color: string;
   fontFamily: string; fontSize: number; bold: boolean; italic: boolean;
   align: "left" | "center" | "right" | "justify";
+  /** Colors of new text markup, symbols and notes. */
+  markup: Record<MarkupTool, string>; symbolColor: string; noteColor: string;
 }
 
 export interface EditorState {
@@ -26,6 +33,8 @@ export interface EditorState {
   /** Adds or replaces several objects as one undo step (Replace All). */
   putObjects(ops: ContentOp[]): void;
   deleteObject(id: string): void;
+  /** Sets AcroForm field `name` (every widget of that name); `coalesce` as in updateObject (typing). */
+  setFormValue(name: string, value: FormValue, opts?: { coalesce?: string }): void;
   rotatePage(pageKey: string, delta: 90 | -90): void;
   deletePage(pageKey: string): void;
   insertBlankAfter(pageKey: string | null): string;
@@ -39,9 +48,10 @@ export const HISTORY_LIMIT = 100;
 export const COALESCE_MS = 1000;
 const A4 = { width: 595, height: 842 };
 const EMPTY: EditorDoc = { pages: [], objects: {}, order: [] };
-const DEFAULT_STYLE: ToolStyle = {
+export const DEFAULT_STYLE: ToolStyle = {
   stroke: "#e11d48", fill: null, width: 2, color: "#111111",
   fontFamily: "Arimo", fontSize: 14, bold: false, italic: false, align: "left",
+  markup: { highlight: "#ffeb3b", underline: "#e11d48", strike: "#e11d48" }, symbolColor: "#1d4ed8", noteColor: "#facc15",
 };
 
 export function pageGeom(entry: PageEntry, info: DocInfo): PageGeom {
@@ -146,6 +156,10 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
           return { ...d, objects, order: d.order.filter((x) => x !== id) };
         });
         if (get().selection === id) set({ selection: null });
+      },
+
+      setFormValue(name, value, opts) {
+        commit((d) => (d.forms?.[name] === value ? d : { ...d, forms: { ...d.forms, [name]: value } }), opts?.coalesce);
       },
 
       rotatePage(key, delta) {
