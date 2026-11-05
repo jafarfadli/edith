@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from edith.ops import ExportRequest, PagesLayout, ShapeAdd, TextAdd
+from edith.ops import BundledFont, ExportRequest, OriginalFont, PagesLayout, Run, ShapeAdd, TextAdd, TextEdit
 from edith.settings import REPO_ROOT
 from scripts.export_schema import build_schema
 
@@ -15,8 +15,13 @@ def test_example_validates():
     data = json.loads((OPS_DIR / "examples" / "basic.json").read_text())
     req = ExportRequest.model_validate(data)
     types = [op.type for op in req.ops]
-    assert types == ["pages.layout", "text.add", "shape.add", "ink.add", "whiteout.add", "redact.add", "image.add"]
+    assert types == ["pages.layout", "text.add", "shape.add", "ink.add", "whiteout.add", "redact.add", "image.add", "text.edit"]
     assert isinstance(req.ops[1], TextAdd)
+    edit = req.ops[-1]
+    assert isinstance(edit, TextEdit) and edit.paragraphId == "g0"
+    first, second = edit.box.paragraphs[0]
+    assert isinstance(first.font, OriginalFont) and first.font.ref == "f12"
+    assert isinstance(second.font, BundledFont) and second.underline and second.bgColor == "#ffff00"
 
 
 def test_schema_file_is_fresh():
@@ -73,3 +78,25 @@ def test_layout_pages_are_bounded():
     with pytest.raises(ValidationError):
         PagesLayout.model_validate({"id": "L", "type": "pages.layout", "pages": pages})
     PagesLayout.model_validate({"id": "L", "type": "pages.layout", "pages": pages[:1000]})
+
+
+def _edit(op_id: str, page_key: str = "o0", paragraph_id: str = "g0") -> dict:
+    return {"id": op_id, "type": "text.edit", "pageKey": page_key, "paragraphId": paragraph_id,
+            "box": {"rect": {"x": 0, "y": 0, "w": 10, "h": 10}, "lineHeight": 12, "paragraphs": [], "layout": []}}
+
+
+def test_one_text_edit_per_paragraph():
+    ExportRequest.model_validate({"ops": [_edit("a"), _edit("b", paragraph_id="g1"), _edit("c", page_key="u-dup")]})
+    with pytest.raises(ValidationError):
+        ExportRequest.model_validate({"ops": [_edit("a"), _edit("b")]})
+
+
+def test_paragraph_id_and_font_ref_patterns():
+    with pytest.raises(ValidationError):
+        TextEdit.model_validate(_edit("a", paragraph_id="p0"))
+    run = {"text": "x", "size": 10, "color": "#000000"}
+    assert Run.model_validate({**run, "font": {"kind": "original", "ref": "f3"}}).font == OriginalFont(kind="original", ref="f3")
+    assert Run.model_validate({**run, "font": {"kind": "bundled", "family": "Arimo"}}).underline is False
+    for bad in ({"kind": "original", "ref": "3"}, {"kind": "original"}, {"family": "Arimo", "ref": "f1"}):
+        with pytest.raises(ValidationError):
+            Run.model_validate({**run, "font": bad})

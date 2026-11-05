@@ -27,6 +27,7 @@ beforeEach(() => {
   editorStore.getState().init(info);
   textEditStore.setState({ editing: null });
   vi.spyOn(fontStore, "load").mockImplementation(async () => { await gate.promise; fontsLoaded = true; return arimo; });
+  vi.spyOn(fontStore, "peek").mockImplementation(() => (fontsLoaded ? arimo : null));
   vi.spyOn(fontStore, "get").mockImplementation((): FontMetrics => {
     if (!fontsLoaded) throw new Error("font not loaded");
     return arimo;

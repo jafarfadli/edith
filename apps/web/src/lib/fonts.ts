@@ -1,11 +1,17 @@
 import * as fontkit from "fontkit";
-import type { BundledFont } from "@edith/ops";
+import type { BundledFont, FontRef, OriginalFont } from "@edith/ops";
 
-export interface FontMetrics { unitsPerEm: number; ascent: number; descent: number; advance(ch: string): number }
+export interface FontMetrics {
+  unitsPerEm: number; ascent: number; descent: number;
+  advance(ch: string): number;
+  /** Whether the font maps code point `cp` to a glyph (its cmap). Test doubles may omit it (= every glyph). */
+  hasGlyph?(cp: number): boolean;
+}
 
 export function metricsFromBuffer(buf: ArrayBuffer | Uint8Array): FontMetrics {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   const font = fontkit.create(bytes as Buffer) as unknown as fontkit.Font;
+  if (typeof font.glyphsForString !== "function") throw new Error("font collection, not a font");
   const cache = new Map<string, number>();
   return {
     unitsPerEm: font.unitsPerEm,
@@ -19,7 +25,15 @@ export function metricsFromBuffer(buf: ArrayBuffer | Uint8Array): FontMetrics {
       }
       return w;
     },
+    hasGlyph: (cp: number) => font.hasGlyphForCodePoint(cp),
   };
+}
+
+/** True when `m` has a glyph for every character of `text`. */
+export function covers(m: FontMetrics, text: string): boolean {
+  if (!m.hasGlyph) return true;
+  for (const ch of text) if (!m.hasGlyph(ch.codePointAt(0)!)) return false;
+  return true;
 }
 
 /** Glyph advance in thousandths of an em, truncated — exactly what PyMuPDF writes into the PDF /W array. */
@@ -45,6 +59,10 @@ export function charOffsets(text: string, m: FontMetrics, size: number): number[
 
 export type Style = "regular" | "bold" | "italic" | "bolditalic";
 
+export function isOriginal(f: FontRef): f is OriginalFont {
+  return f.kind === "original";
+}
+
 function style(f: BundledFont): Style {
   if (f.bold && f.italic) return "bolditalic";
   if (f.bold) return "bold";
@@ -65,12 +83,13 @@ export function pickFile(files: Partial<Record<Style, string>>, wanted: Style): 
   throw new Error("font family has no regular style");
 }
 
-export function fontKey(f: BundledFont): string {
+export function fontKey(f: FontRef): string {
+  if (isOriginal(f)) return `orig-${f.ref}`;
   const s = style(f);
   return `${f.family}-${s === "bolditalic" ? "bold-italic" : s}`;
 }
 
-export function cssFamily(f: BundledFont): string {
+export function cssFamily(f: FontRef): string {
   return `edith-${fontKey(f)}`;
 }
 
@@ -80,8 +99,17 @@ export class FontStore {
   private manifest?: Promise<Manifest>;
   private loaded = new Map<string, FontMetrics>();
   private pending = new Map<string, Promise<FontMetrics>>();
+  private originalUrl: ((ref: string) => string) | null = null;
 
   constructor(private baseUrl = "/fonts") {}
+
+  /** Where original (embedded) fonts of the open document come from; forgets the previous document's. */
+  setOriginalSource(url: ((ref: string) => string) | null): void {
+    this.originalUrl = url;
+    for (const key of [...this.loaded.keys(), ...this.pending.keys()]) {
+      if (key.startsWith("orig-")) { this.loaded.delete(key); this.pending.delete(key); }
+    }
+  }
 
   private getManifest(): Promise<Manifest> {
     if (!this.manifest) {
@@ -100,17 +128,24 @@ export class FontStore {
     return Object.keys((await this.getManifest()).families);
   }
 
-  load(f: BundledFont): Promise<FontMetrics> {
+  private async url(f: FontRef): Promise<string> {
+    if (isOriginal(f)) {
+      if (!this.originalUrl) throw new Error(`no source for original font ${f.ref}`);
+      return this.originalUrl(f.ref);
+    }
+    const fam = (await this.getManifest()).families[f.family];
+    if (!fam) throw new Error(`unknown font family ${f.family}`);
+    return `${this.baseUrl}/${pickFile(fam.files, style(f))}`;
+  }
+
+  load(f: FontRef): Promise<FontMetrics> {
     const key = fontKey(f);
     const done = this.loaded.get(key);
     if (done) return Promise.resolve(done);
     let p = this.pending.get(key);
     if (!p) {
       p = (async () => {
-        const manifest = await this.getManifest();
-        const fam = manifest.families[f.family];
-        if (!fam) throw new Error(`unknown font family ${f.family}`);
-        const url = `${this.baseUrl}/${pickFile(fam.files, style(f))}`;
+        const url = await this.url(f);
         const res = await fetch(url);
         if (!res.ok) throw new Error(`font fetch failed: ${url} (${res.status})`);
         const buf = await res.arrayBuffer();
@@ -120,17 +155,25 @@ export class FontStore {
           await face.load();
           document.fonts.add(face);
         }
-        this.loaded.set(key, metrics);
+        // Not stored when setOriginalSource() dropped this load meanwhile (another document).
+        if (this.pending.get(key) === p) this.loaded.set(key, metrics);
         return metrics;
       })();
-      this.pending.set(key, p);
-      p.catch(() => { if (this.pending.get(key) === p) this.pending.delete(key); });
+      const settled = p;
+      this.pending.set(key, settled);
+      const clear = () => { if (this.pending.get(key) === settled) this.pending.delete(key); };
+      settled.then(clear, clear);
     }
     return p;
   }
 
-  get(f: BundledFont): FontMetrics {
-    const m = this.loaded.get(fontKey(f));
+  /** Metrics of a loaded font, or null. */
+  peek(f: FontRef): FontMetrics | null {
+    return this.loaded.get(fontKey(f)) ?? null;
+  }
+
+  get(f: FontRef): FontMetrics {
+    const m = this.peek(f);
     if (!m) throw new Error(`font not loaded: ${fontKey(f)}`);
     return m;
   }

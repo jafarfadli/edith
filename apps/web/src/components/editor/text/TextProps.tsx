@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import type { TextAdd } from "@edith/ops";
-import { fontStore } from "@/lib/fonts";
+import { fontStore, isOriginal } from "@/lib/fonts";
 import { t } from "@/lib/strings";
 import { boxFonts, relayout, withStyle, type TextStyle } from "@/lib/textbox";
 import { editorStore, useEditor, type ToolStyle } from "@/store/editor";
@@ -38,8 +38,9 @@ export function TextProps() {
 
   const box = editing?.box ?? (selected?.type === "text.add" ? (selected as TextAdd).box : null);
   const run = box?.paragraphs[0]?.[0];
+  const font = run && !isOriginal(run.font) ? run.font : null;
   const cur: TextStyle = run && box
-    ? { family: run.font.family, bold: run.font.bold ?? false, italic: run.font.italic ?? false, size: run.size, color: run.color, align: box.align ?? "left" }
+    ? { family: font?.family ?? style.fontFamily, bold: font?.bold ?? false, italic: font?.italic ?? false, size: run.size, color: run.color, align: box.align ?? "left" }
     : { family: style.fontFamily, bold: style.bold, italic: style.italic, size: style.fontSize, color: style.color, align: style.align };
 
   function set(patch: Partial<TextStyle>) {

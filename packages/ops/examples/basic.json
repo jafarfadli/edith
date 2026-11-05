@@ -14,7 +14,15 @@
     { "id": "i1", "type": "ink.add", "pageKey": "o1", "paths": [[[10, 10], [20, 25], [30, 12]]], "color": "#0000ff", "width": 3 },
     { "id": "w1", "type": "whiteout.add", "pageKey": "o1", "rect": { "x": 0, "y": 0, "w": 40, "h": 20 } },
     { "id": "r1", "type": "redact.add", "pageKey": "o0", "rect": { "x": 300, "y": 300, "w": 80, "h": 20 }, "fill": "black" },
-    { "id": "img1", "type": "image.add", "pageKey": "u-blank-1", "rect": { "x": 100, "y": 100, "w": 120, "h": 80 }, "assetId": "ASSET" }
+    { "id": "img1", "type": "image.add", "pageKey": "u-blank-1", "rect": { "x": 100, "y": 100, "w": 120, "h": 80 }, "assetId": "ASSET" },
+    { "id": "e1", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
+      "rect": { "x": 72, "y": 90, "w": 300, "h": 16 }, "align": "justify", "lineHeight": 14.4,
+      "paragraphs": [[
+        { "text": "Teks ", "font": { "kind": "original", "ref": "f12" }, "size": 12, "color": "#111111" },
+        { "text": "baru", "font": { "kind": "bundled", "family": "Arimo", "bold": true, "italic": false }, "size": 12, "color": "#111111", "bgColor": "#ffff00", "underline": true, "strike": false }
+      ]],
+      "layout": [{ "baseline": 11.0, "segments": [{ "x": 0, "text": "Teks ", "runIndex": 0 }, { "x": 26.0, "text": "baru", "runIndex": 1 }] }]
+    } }
   ],
   "flatten_forms": false,
   "filename": "hasil.pdf"

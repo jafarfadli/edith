@@ -1,4 +1,4 @@
-import type { BundledFont, LayoutLine, Run, Segment } from "@edith/ops";
+import type { FontRef, LayoutLine, Run, Segment } from "@edith/ops";
 import { textWidth, type FontMetrics } from "@/lib/fonts";
 
 export interface LayoutInput { width: number; align: "left" | "center" | "right" | "justify"; lineHeight: number; paragraphs: Run[][] }
@@ -6,7 +6,7 @@ export interface LayoutResult { lines: LayoutLine[]; height: number; contentWidt
 
 interface Token { text: string; runIndex: number; width: number; space: boolean }
 
-export function layoutText(input: LayoutInput, metricsFor: (f: BundledFont) => FontMetrics): LayoutResult {
+export function layoutText(input: LayoutInput, metricsFor: (f: FontRef) => FontMetrics): LayoutResult {
   const flat = input.paragraphs.flat();
   const ascentOf = (i: number) => { const r = flat[i]; const m = metricsFor(r.font); return (m.ascent / m.unitsPerEm) * r.size; };
   const descentOf = (i: number) => { const r = flat[i]; const m = metricsFor(r.font); return (m.descent / m.unitsPerEm) * r.size; };

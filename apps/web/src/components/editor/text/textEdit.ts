@@ -1,7 +1,7 @@
 "use client";
 
 import { createStore } from "zustand/vanilla";
-import type { BundledFont, TextAdd, TextBox } from "@edith/ops";
+import type { TextAdd, TextBox } from "@edith/ops";
 import { fontStore } from "@/lib/fonts";
 import { boxFonts, newBox, relayout, withText } from "@/lib/textbox";
 import { newId } from "@/lib/id";
@@ -22,7 +22,7 @@ export const textEditStore = createStore<TextEditState>()((set, get) => ({
 
 /** True when every font of `box` is already loaded (metrics available synchronously). */
 export function fontsReady(box: TextBox): boolean {
-  return boxFonts(box).every((f: BundledFont) => { try { fontStore.get(f); return true; } catch { return false; } });
+  return boxFonts(box).every((f) => fontStore.peek(f) !== null);
 }
 
 /** The commit that is waiting for its fonts (the text box is not in the document yet). */

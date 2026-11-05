@@ -22,7 +22,7 @@ describe("textbox", () => {
 
   it("applies style to all runs and updates line height", () => {
     const b = withStyle(withText(newBox([0, 0], style), "a\nb"), { size: 20, bold: true, align: "center" });
-    expect(b.paragraphs.flat().every((r) => r.size === 20 && r.font.bold)).toBe(true);
+    expect(b.paragraphs.flat().every((r) => r.size === 20 && r.font.kind !== "original" && r.font.bold)).toBe(true);
     expect(b.lineHeight).toBe(24);
     expect(b.align).toBe("center");
   });

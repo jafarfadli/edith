@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FontStore, charOffsets, cssFamily, fontKey, metricsFromBuffer, pickFile, textWidth } from "@/lib/fonts";
+import { FontStore, charOffsets, covers, cssFamily, fontKey, metricsFromBuffer, pickFile, textWidth } from "@/lib/fonts";
 
 const ttf = (name: string) => readFileSync(path.resolve(__dirname, "../../../../packages/fonts/files", name));
 
@@ -78,5 +78,41 @@ describe("pickFile", () => {
     expect(pickFile({ regular: "R.ttf", bold: "B.ttf" }, "italic")).toBe("R.ttf");
     expect(pickFile({ regular: "R.ttf" }, "bold")).toBe("R.ttf");
     expect(() => pickFile({}, "regular")).toThrow("no regular style");
+  });
+});
+
+describe("FontRef support", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const bytes = () => {
+    const b = ttf("Arimo-Regular.ttf");
+    return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+  };
+
+  it("keys original fonts by ref", () => {
+    expect(fontKey({ kind: "original", ref: "f12" })).toBe("orig-f12");
+    expect(cssFamily({ kind: "original", ref: "f12" })).toBe("edith-orig-f12");
+  });
+
+  it("loads an original font from the document source and checks glyph coverage", async () => {
+    const fetchMock = vi.fn(async () => new Response(bytes(), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const store = new FontStore("/fonts");
+    const orig = { kind: "original" as const, ref: "f9" };
+    await expect(store.load(orig)).rejects.toThrow("no source for original font f9");
+    store.setOriginalSource((ref) => `/api/fonts/${ref}`);
+    const m = await store.load(orig);
+    expect(fetchMock).toHaveBeenCalledWith("/api/fonts/f9");
+    expect(store.peek(orig)).toBe(m);
+    expect(covers(m, "Halo Ж")).toBe(true);
+    expect(covers(m, "漢")).toBe(false);
+    store.setOriginalSource(null); // another document: its fonts are gone
+    expect(store.peek(orig)).toBeNull();
+  });
+
+  it("rejects bytes fontkit cannot parse", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array([1, 2, 3, 4]), { status: 200 })));
+    const store = new FontStore("/fonts");
+    store.setOriginalSource((ref) => `/api/fonts/${ref}`);
+    await expect(store.load({ kind: "original", ref: "f1" })).rejects.toThrow();
   });
 });
