@@ -12,6 +12,9 @@
 
 `apps/api/tests/test_bake_text.py`:
 ```python
+import math
+
+import pymupdf
 import pytest
 
 from edith.bake import bake
@@ -70,11 +73,14 @@ def test_single_segment_position_font_color(ctx):
     assert size == pytest.approx(20)
 
 
-def test_no_kerning_advance_matches_registry(ctx, fonts):
+def test_no_kerning_advance_is_quantized_glyph_width(ctx, fonts):
+    """Saved PDFs store widths in floor(1000/em) units; the web client measures the same way."""
     ops = text_op([run("AV", size=20)], [{"baseline": 15, "segments": [{"x": 0, "text": "AV", "runIndex": 0}]}])
-    out = bake(make_pdf(pages=1, text=False), ops, ctx)
+    out = pymupdf.open(stream=bake(make_pdf(pages=1, text=False), ops, ctx).tobytes(), filetype="pdf")
     (_, a, *_), (_, v, *_) = chars(out[0])
-    assert v[0] - a[0] == pytest.approx(fonts.font("Arimo", False, False).text_length("A", fontsize=20), abs=0.01)
+    font = fonts.font("Arimo", False, False)
+    quantized = math.floor(font.glyph_advance(ord("A")) * 1000) / 1000 * 20
+    assert v[0] - a[0] == pytest.approx(quantized, abs=0.001)  # 13.32 for Arimo "A" (1366/2048 em)
 
 
 def test_multi_run_multi_line(ctx):

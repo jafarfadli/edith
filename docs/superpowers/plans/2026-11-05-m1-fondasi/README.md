@@ -20,6 +20,7 @@ Spec: `docs/superpowers/specs/2026-11-05-pdf-editor-design.md` (sections relevan
 - Page identity: `pageKey` = `o{n}` (original page n of main doc) or `u{uuid}` (client-created). Regex `^(o\d+|u[0-9A-Za-z-]+)$`.
 - Colors: `#rrggbb` hex strings.
 - Text layout is done by the client; kerning and ligatures are **off** everywhere (PyMuPDF TextWriter does not kern; client measures with fontkit `glyphsForString` advance widths and draws glyph-by-glyph).
+- Glyph advances are **quantized**: the saved PDF stores widths as whole units per 1000 em, truncated (`floor(advanceWidth * 1000 / unitsPerEm)`), and viewers position glyphs by those widths. Both sides must use `advance_pt = floor(advanceWidth * 1000 / unitsPerEm) / 1000 * size` (verified: 60/60 glyphs across Arimo, Tinos, Cousine match floor; round matches only 44/60).
 - PyMuPDF facts verified by spike: `doc.select([...])` with repeated indices makes pages **share one page object** (drawing on one shows on both) → duplicates must use `doc.fullcopy_page(i)`. Drawing/insert methods and `get_text` use unrotated coordinates. Coordinates are relative to CropBox top-left. Redaction constants: `PDF_REDACT_IMAGE_PIXELS`, `PDF_REDACT_LINE_ART_REMOVE_IF_TOUCHED`, `PDF_REDACT_TEXT_REMOVE`.
 - All UI text in Bahasa Indonesia, collected in `apps/web/src/lib/strings.ts`. No pdfguru name/logo/assets anywhere.
 - API base URL in web: `process.env.NEXT_PUBLIC_API_URL` (default `http://localhost:8000`). API CORS allows `http://localhost:3000`.
