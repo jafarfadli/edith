@@ -9,7 +9,7 @@ from edith.errors import BakeFailed
 from edith.fonts import FontRegistry
 from edith.ops import ExportRequest
 from edith.settings import Settings
-from tests.pdfs import make_pdf
+from tests.pdfs import make_pdf, unrotated
 
 DOC = "D" * 22
 
@@ -89,3 +89,26 @@ def test_unknown_family_fails_with_op_id(ctx):
     with pytest.raises(BakeFailed) as e:
         bake(make_pdf(pages=1), ops, ctx)
     assert e.value.extra["op_id"] == "t"
+
+
+CROP = (50, 60, 400, 700)
+
+
+@pytest.mark.parametrize("rotation", [0])
+def test_text_on_cropped_page_is_crop_relative(ctx, rotation):
+    ops = text_op([run("Halo", size=20)], [{"baseline": 15, "segments": [{"x": 5, "text": "Halo", "runIndex": 0}]}])
+    out = bake(make_pdf(pages=1, text=False, crop=CROP, rotation=rotation), ops, ctx)
+    assert out[0].rotation == rotation
+    _, origin, *_ = chars(unrotated(out))[0]
+    assert origin == pytest.approx((105, 215), abs=0.01)
+
+
+def test_text_on_page_with_offset_mediabox(ctx):
+    src = pymupdf.open()
+    page = src.new_page(width=595, height=842)
+    page.set_mediabox(pymupdf.Rect(10, 20, 605, 862))
+    page.set_cropbox(pymupdf.Rect(50, 60, 400, 700))
+    ops = text_op([run("Halo", size=20)], [{"baseline": 15, "segments": [{"x": 5, "text": "Halo", "runIndex": 0}]}])
+    out = bake(src.tobytes(), ops, ctx)
+    _, origin, *_ = chars(unrotated(out))[0]
+    assert origin == pytest.approx((105, 215), abs=0.01)
