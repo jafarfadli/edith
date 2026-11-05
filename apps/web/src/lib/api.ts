@@ -1,11 +1,12 @@
 import type { ExportRequest, RenderPageRequest } from "@edith/ops";
 import type { StructurePage } from "@/store/editor";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 
 export class ApiError extends Error {
   constructor(public code: string, public status: number, public extra: Record<string, unknown> = {}) {
     super(code);
+    this.name = "ApiError";
   }
 }
 
