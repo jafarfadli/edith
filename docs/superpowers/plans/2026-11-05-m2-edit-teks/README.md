@@ -79,3 +79,9 @@ M1 backlog items folded in where M2 touches the code: history coalescing (Task 1
 | 15 | task-15-e2e-docs.md | E2E: edit a paragraph (bold word), Find & Replace, download, verify; README |
 
 Tasks 1–7 (API) depend only on earlier tasks in their track; Task 2 also updates the web types so every commit stays green. Tasks 8–11 (web libraries) need Tasks 2 and 5 (fixture JSON). Task 12 needs 8–11; 13 needs 12; 14 needs 9–13; 15 needs everything.
+
+## Owner decisions (2026-11-05, after plan review) — override the text above where they conflict
+
+1. **Fonts:** keep fonts as normal git files (no LFS) and **add Noto Sans, Noto Serif and Merriweather** (4 static styles each) to the registry in Task 1 (~+6.3 MB). They join the user-selectable font list; Noto Sans/Serif also become the Unicode fallback after Arimo/Tinos in the client fallback chain (original → substitute → Arimo → Noto Sans).
+2. **Redaction order:** unchanged — `redact.add` removes only original PDF content; objects the user adds on top stay visible (current M1 behaviour).
+3. **Spaces as U+00A0:** fix in M2 (Task 6). Requirement: text baked with ANY bundled font (incl. Tinos and reused originals where possible) must extract spaces as U+0020 with PyMuPDF `get_text()` and pdf.js. Investigate the cause (likely the font cmap maps both U+0020 and U+00A0 to the same glyph so the generated ToUnicode picks U+00A0); preferred fix is at font-preparation time (e.g. fontTools: give U+00A0 its own glyph copy in the bundled TTFs via `packages/fonts/scripts`) or by writing an explicit ToUnicode; add a bake test asserting `" "` (U+0020) round-trips for every bundled family.
