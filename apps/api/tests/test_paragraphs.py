@@ -78,3 +78,34 @@ def test_runs_merge_same_style_and_split_on_color():
     runs = paragraphs(page_with(draw), resolve=lambda span: {"kind": "bundled", "family": "Arimo"})[0]["runs"]
     assert [(r["text"], r["color"], r["size"]) for r in runs] == [("Merah ", "#ff0000", 12), ("biru", "#0000ff", 12)]
     assert runs[0]["font"] == {"kind": "bundled", "family": "Arimo"}
+
+
+def test_clean_maps_nbsp_and_tab_to_space():
+    from edith.paragraphs import _clean
+    assert _clean("a\xa0b\tc") == "a b c"
+
+
+def test_hyphenated_soft_break_joins_without_space():
+    def draw(pg):
+        pg.insert_text((72, 100), "sambung-", fontname="helv", fontsize=12)
+        pg.insert_text((72, 114.4), "an teks", fontname="helv", fontsize=12)
+    p = paragraphs(page_with(draw))[0]
+    assert text(p) == "sambung-an teks"
+
+
+def test_soft_break_space_lands_in_previous_run_when_styles_differ():
+    def draw(pg):
+        pg.insert_text((72, 100), "Merah", fontname="helv", fontsize=12, color=(1, 0, 0))
+        pg.insert_text((72, 114.4), "biru", fontname="helv", fontsize=12, color=(0, 0, 1))
+    p = paragraphs(page_with(draw))[0]
+    assert [(r["text"], r["color"]) for r in p["runs"]] == [("Merah ", "#ff0000"), ("biru", "#0000ff")]
+    assert [(ln["start"], ln["end"]) for ln in p["lines"]] == [(0, 5), (6, 10)]
+
+
+def test_line_ending_in_space_excludes_it_from_end():
+    def draw(pg):
+        pg.insert_text((72, 100), "satu dua ", fontname="helv", fontsize=12)
+        pg.insert_text((72, 114.4), "tiga", fontname="helv", fontsize=12)
+    p = paragraphs(page_with(draw))[0]
+    assert text(p) == "satu dua tiga"
+    assert [(ln["start"], ln["end"]) for ln in p["lines"]] == [(0, 8), (9, 13)]
