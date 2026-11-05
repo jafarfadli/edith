@@ -62,13 +62,85 @@ export type Pagekey6 = string;
 export type Type6 = "redact.add";
 export type Fill1 = "black" | "white";
 export type Id7 = string;
-export type Type7 = "pages.layout";
+export type Pagekey7 = string;
+export type Type7 = "signature.add";
+export type Assetid1 = string;
+export type Id8 = string;
+export type Pagekey8 = string;
+export type Type8 = "stamp.add";
+export type Preset =
+  | (
+      | "approved"
+      | "not-approved"
+      | "draft"
+      | "final"
+      | "completed"
+      | "confidential"
+      | "for-public-release"
+      | "not-for-public-release"
+      | "for-comment"
+      | "void"
+      | "preliminary-results"
+      | "information-only"
+      | "witness"
+      | "initial-here"
+      | "sign-here"
+      | "accepted"
+      | "rejected"
+      | "disetujui"
+      | "tidak-disetujui"
+      | "draf"
+      | "final-id"
+      | "selesai"
+      | "rahasia"
+      | "untuk-publik"
+      | "tidak-untuk-publik"
+      | "untuk-dikomentari"
+      | "batal"
+      | "hasil-sementara"
+      | "hanya-informasi"
+      | "saksi"
+      | "paraf-di-sini"
+      | "tanda-tangan-di-sini"
+      | "diterima"
+      | "ditolak"
+    )
+  | null;
+export type Text2 = string;
+export type Date = string | null;
+export type Time = string | null;
+export type Color2 = string;
+export type Id9 = string;
+export type Pagekey9 = string;
+export type Type9 = "symbol.add";
+export type Kind3 = "check" | "cross";
+export type Color3 = string;
+export type Id10 = string;
+export type Pagekey10 = string;
+export type Type10 = "link.add";
+export type Target = UrlTarget | PageTarget;
+export type Url = string;
+export type Pagekey11 = string;
+export type Id11 = string;
+export type Pagekey12 = string;
+export type Type11 = "annot.add";
+export type Kind4 = "highlight" | "underline" | "strike" | "note";
+export type Quads = [Rect, ...Rect[]] | null;
+export type Point = [number, number] | null;
+export type Color4 = string;
+export type Content = string | null;
+export type Id12 = string;
+export type Type12 = "form.set";
+export type Fieldname = string;
+export type Value = string | boolean;
+export type Id13 = string;
+export type Type13 = "pages.layout";
 /**
  * @minItems 1
  * @maxItems 1000
  */
 export type Pages = [LayoutPage, ...LayoutPage[]];
-export type Pagekey7 = string;
+export type Pagekey13 = string;
 export type Src = DocSrc | BlankSrc;
 export type Doc = string;
 export type Index = number;
@@ -78,14 +150,44 @@ export type Rotate = 0 | 90 | 180 | 270;
 /**
  * @maxItems 5000
  */
-export type Ops = (TextAdd | TextEdit | ImageAdd | ShapeAdd | InkAdd | WhiteoutAdd | RedactAdd | PagesLayout)[];
+export type Ops = (
+  | TextAdd
+  | TextEdit
+  | ImageAdd
+  | ShapeAdd
+  | InkAdd
+  | WhiteoutAdd
+  | RedactAdd
+  | SignatureAdd
+  | StampAdd
+  | SymbolAdd
+  | LinkAdd
+  | AnnotAdd
+  | FormSet
+  | PagesLayout
+)[];
 export type FlattenForms = boolean;
 export type Filename = string;
-export type Pagekey8 = string;
+export type Pagekey14 = string;
 /**
  * @maxItems 5000
  */
-export type Ops1 = (TextAdd | TextEdit | ImageAdd | ShapeAdd | InkAdd | WhiteoutAdd | RedactAdd | PagesLayout)[];
+export type Ops1 = (
+  | TextAdd
+  | TextEdit
+  | ImageAdd
+  | ShapeAdd
+  | InkAdd
+  | WhiteoutAdd
+  | RedactAdd
+  | SignatureAdd
+  | StampAdd
+  | SymbolAdd
+  | LinkAdd
+  | AnnotAdd
+  | FormSet
+  | PagesLayout
+)[];
 
 export interface EdithSchema {
   export: ExportRequest;
@@ -254,12 +356,114 @@ export interface RedactAdd {
   fill?: Fill1;
 }
 /**
+ * A signature image (drawn, typed or uploaded; always a PNG/JPEG asset).
+ *
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "SignatureAdd".
+ */
+export interface SignatureAdd {
+  id: Id7;
+  pageKey: Pagekey7;
+  type: Type7;
+  rect: Rect;
+  assetId: Assetid1;
+}
+/**
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "StampAdd".
+ */
+export interface StampAdd {
+  id: Id8;
+  pageKey: Pagekey8;
+  type: Type8;
+  rect: Rect;
+  preset?: Preset;
+  custom?: StampCustom | null;
+  color: Color2;
+}
+/**
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "StampCustom".
+ */
+export interface StampCustom {
+  text: Text2;
+  date?: Date;
+  time?: Time;
+}
+/**
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "SymbolAdd".
+ */
+export interface SymbolAdd {
+  id: Id9;
+  pageKey: Pagekey9;
+  type: Type9;
+  kind: Kind3;
+  rect: Rect;
+  color: Color3;
+}
+/**
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "LinkAdd".
+ */
+export interface LinkAdd {
+  id: Id10;
+  pageKey: Pagekey10;
+  type: Type10;
+  rect: Rect;
+  target: Target;
+}
+/**
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "UrlTarget".
+ */
+export interface UrlTarget {
+  url: Url;
+}
+/**
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "PageTarget".
+ */
+export interface PageTarget {
+  pageKey: Pagekey11;
+}
+/**
+ * A native PDF annotation: text markup over `quads` (one rect per line, horizontal text) or a
+ * sticky note whose icon's top-left corner is `point`.
+ *
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "AnnotAdd".
+ */
+export interface AnnotAdd {
+  id: Id11;
+  pageKey: Pagekey12;
+  type: Type11;
+  kind: Kind4;
+  quads?: Quads;
+  point?: Point;
+  color: Color4;
+  content?: Content;
+}
+/**
+ * Value of AcroForm field `fieldName` (every widget of that name): text/combo/list -> the string,
+ * checkbox -> bool, radio -> the on-state name of the chosen button (or "Off").
+ *
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "FormSet".
+ */
+export interface FormSet {
+  id: Id12;
+  type: Type12;
+  fieldName: Fieldname;
+  value: Value;
+}
+/**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "PagesLayout".
  */
 export interface PagesLayout {
-  id: Id7;
-  type: Type7;
+  id: Id13;
+  type: Type13;
   pages: Pages;
 }
 /**
@@ -267,7 +471,7 @@ export interface PagesLayout {
  * via the `definition` "LayoutPage".
  */
 export interface LayoutPage {
-  pageKey: Pagekey7;
+  pageKey: Pagekey13;
   src: Src;
   rotate?: Rotate;
 }
@@ -299,6 +503,6 @@ export interface BlankSize {
  * via the `definition` "RenderPageRequest".
  */
 export interface RenderPageRequest {
-  pageKey: Pagekey8;
+  pageKey: Pagekey14;
   ops: Ops1;
 }

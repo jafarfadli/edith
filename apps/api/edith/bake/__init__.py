@@ -55,7 +55,10 @@ def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
         ctx = replace(ctx, source=pages_src)
 
         keys = {p.pageKey for p in layout.pages}
-        content = [(i, op) for i, op in enumerate(ops) if op.type != "pages.layout"]
+        content = [(i, op) for i, op in enumerate(ops) if op.type not in ("pages.layout", "form.set")]
+        for op in ops:
+            if op.type == "form.set":
+                raise BakeFailed("no handler for form.set", op_id=op.id)  # Task 4 fills forms
         for i, op in content:
             if op.pageKey not in keys:
                 raise InvalidOp(f"unknown pageKey {op.pageKey}", op_index=i)
