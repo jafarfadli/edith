@@ -41,7 +41,9 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
     immediatelyRender: false,
     extensions: [Document, Paragraph, Text, UndoRedo, createRunMark(() => fallback)],
     content: runsToDoc(editing.box.paragraphs) as never,
-    editorProps: { attributes: { "data-testid": "text-editor", spellcheck: "false", style: "outline:none" } },
+    // pre-wrap, not Tiptap's break-spaces: a space at a wrap hangs past the edge, as in the layout
+    // (lines are measured without their trailing spaces), so a line that just fits wraps the same way.
+    editorProps: { attributes: { "data-testid": "text-editor", spellcheck: "false", style: "outline:none;white-space:pre-wrap" } },
     onUpdate: ({ editor }) => {
       const paragraphs = docToRuns(editor.getJSON(), fallback);
       session.paragraphs = paragraphs;
