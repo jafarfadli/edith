@@ -12,3 +12,4 @@ playwright-report/
 .env*.local
 .DS_Store
 apps/web/public/pdf.worker.min.mjs
+.playwright-mcp/

@@ -1,0 +1,16 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: astral-sh/setup-uv@v5
+      - run: npm ci
+      - run: cd apps/api && uv sync && uv run pytest -q
+      - run: npm run check -w packages/ops
+      - run: npm test -w apps/web
+      - run: npx tsc --noEmit -p apps/web
+      - run: npx playwright install --with-deps chromium && npm run e2e -w apps/web
