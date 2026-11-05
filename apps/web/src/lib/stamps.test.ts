@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import presets from "@edith/ops/stamp-presets.json";
 import { metricsFromBuffer, textWidth } from "@/lib/fonts";
-import { borderWidth, STAMP_PRESETS, STAMPS_EN, STAMPS_ID, stampBorder, stampLayout, stampRect, stampTexts } from "@/lib/stamps";
+import { borderWidth, STAMP_PRESETS, STAMPS_EN, STAMPS_ID, stampBorder, stampDate, stampLayout, stampRect, stampTexts, stampTime, STAMP_MARGIN } from "@/lib/stamps";
 
 const bold = metricsFromBuffer(readFileSync(path.resolve(__dirname, "../../../../packages/fonts/files/Arimo-Bold.ttf")));
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
@@ -56,5 +56,28 @@ describe("stamps", () => {
     const [line] = stampLayout(r.w, r.h, ["APPROVED"], bold);
     expect(line.size).toBe(20); // the label is not shrunk
     expect(stampRect({ custom: { text: "OK", date: "05/11/2026" } }, bold, { width: 595, height: 842 }).h).toBe(54);
+  });
+
+  it("formats the date and time lines", () => {
+    const d = new Date(2026, 10, 5, 9, 7);
+    expect([stampDate(d), stampTime(d)]).toEqual(["05/11/2026", "09:07"]);
+  });
+
+  it("clamps a wide stamp to the page width minus margins, with the text shrunk to fit", () => {
+    const page = { width: 200, height: 300 };
+    const kind = { custom: { text: "TANDA TANGAN DI SINI DAN PARAF", date: "05/11/2026", time: "14:30" } };
+    const r = stampRect(kind, bold, page);
+    expect(r.w).toBe(page.width - 2 * STAMP_MARGIN);
+    expect(r.x).toBe(STAMP_MARGIN);
+    expect(r.x + r.w).toBeLessThanOrEqual(page.width);
+    const [label] = stampLayout(r.w, r.h, stampTexts(kind), bold);
+    expect(label.size).toBeLessThan(0.36 * r.h);
+    expect(label.x).toBeGreaterThanOrEqual(0);
+    // a very narrow page still gets a stamp inside it
+    const tiny = stampRect({ preset: "approved" }, bold, { width: 40, height: 100 });
+    expect(tiny.x).toBeGreaterThanOrEqual(0);
+    expect(tiny.x + tiny.w).toBeLessThanOrEqual(40);
+    // a short label on a normal page is untouched
+    expect(stampRect({ preset: "approved" }, bold, { width: 595, height: 842 }).w).toBeLessThan(200);
   });
 });

@@ -59,12 +59,28 @@ export function stampBorder(w: number, h: number): { x: number; y: number; w: nu
   return { x: bw / 2, y: bw / 2, w: iw, h: ih, width: bw, radius: STAMP.radius * Math.min(iw, ih) };
 }
 
-/** Default rect of a new stamp, centred on the page: 40 pt tall (54 with a date/time line), as wide as the label needs. */
+/** Space kept free on each side of a new stamp, so it never runs off a narrow page. */
+export const STAMP_MARGIN = 12;
+
+/** Default rect of a new stamp, centred on the page: 40 pt tall (54 with a date/time line), as wide as the label needs but at most the page width minus margins (stampLayout then shrinks the text). */
 export function stampRect(s: StampKind, m: FontMetrics, page: { width: number; height: number }): Rect {
   const texts = stampTexts(s);
   const h = texts.length === 1 ? 40 : 54;
   const size = (texts.length === 1 ? STAMP.oneLineSize : STAMP.labelSize) * h;
   const pad = 2 * (STAMP.pad * h + borderWidth(200, h));
-  const w = Math.max(60, Math.max(...texts.map((t, i) => textWidth(t, m, i === 0 ? size : STAMP.subSize * h))) + pad + 1);
+  const need = Math.max(60, Math.max(...texts.map((t, i) => textWidth(t, m, i === 0 ? size : STAMP.subSize * h))) + pad + 1);
+  const w = Math.min(need, Math.max(page.width - 2 * STAMP_MARGIN, 24));
   return { x: (page.width - w) / 2, y: (page.height - h) / 2, w, h };
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** Date line of a custom stamp, as drawn: dd/mm/yyyy. */
+export function stampDate(d: Date): string {
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+/** Time line part of a custom stamp, as drawn: HH:MM (24 h). */
+export function stampTime(d: Date): string {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }

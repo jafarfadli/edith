@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { ContentOp } from "@edith/ops";
 import { ApiError, uploadAsset } from "@/lib/api";
 import { newId } from "@/lib/id";
 import { fitImage } from "@/lib/image";
 import { errorMessage, t } from "@/lib/strings";
-import { editorStore, pageGeom, useEditor, type Tool } from "@/store/editor";
+import { editorStore, useEditor, type Tool } from "@/store/editor";
+import { StampPicker } from "./marks/StampPicker";
+import { currentPage, placeObject } from "./placement";
 import { SplitButton } from "./SplitButton";
 import { afterTextCommitted } from "./text/textEdit";
 
@@ -27,21 +29,18 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
   const canUndo = useEditor((s) => s.past.length > 0);
   const canRedo = useEditor((s) => s.future.length > 0);
   const file = useRef<HTMLInputElement>(null);
+  const [stampOpen, setStampOpen] = useState(false);
   const s = editorStore.getState();
   const pick = (x: Tool) => s.setTool(x);
 
   async function addImage(f: File | undefined) {
     const st = editorStore.getState();
-    if (!f || !st.info) return;
-    const entry = st.doc.pages.find((p) => p.pageKey === st.currentPage) ?? st.doc.pages[0];
+    const at = currentPage();
+    if (!f || !st.info || !at) return;
     try {
       const asset = await uploadAsset(st.info.docId, f);
-      const g = pageGeom(entry, st.info);
-      const rect = fitImage(asset.width, asset.height, g.width, g.height);
-      const op = { id: newId(), type: "image.add", pageKey: entry.pageKey, rect, assetId: asset.asset_id } as ContentOp;
-      st.addObject(op);
-      st.setTool("select");
-      st.select(op.id);
+      const rect = fitImage(asset.width, asset.height, at.geom.width, at.geom.height);
+      placeObject({ id: newId(), type: "image.add", pageKey: at.entry.pageKey, rect, assetId: asset.asset_id } as ContentOp);
     } catch (e) {
       onNotice({ kind: "error", text: errorMessage(e instanceof ApiError ? e.code : "generic") });
     } finally {
@@ -66,9 +65,11 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
         { tool: "strike", label: t.annot.strike, icon: "S̶" },
       ]} />
       <ToolButton tool="ink" label={t.editor.draw} icon="✎" active={tool} />
-      <button aria-label={t.editor.image} title={t.editor.image} onClick={() => file.current?.click()} className="flex h-9 items-center gap-1 rounded-md px-2 text-sm hover:bg-bg">
-        <span aria-hidden>🖼</span><span className="hidden lg:inline">{t.editor.image}</span>
-      </button>
+      <SplitButton label={t.editor.image} active={tool} options={[
+        { key: "upload", label: t.annot.uploadImage, icon: "🖼", run: () => file.current?.click() },
+        { key: "stamp", label: t.annot.stamp, icon: "🏷", run: () => setStampOpen(true) },
+      ]} />
+      {stampOpen && <StampPicker onClose={() => setStampOpen(false)} />}
       <input ref={file} type="file" accept="image/png,image/jpeg" hidden data-testid="image-input" onChange={(e) => addImage(e.target.files?.[0])} />
       <SplitButton label={t.editor.shape} active={tool} onPick={pick} options={[
         { tool: "rect", label: t.editor.rect, icon: "□" },

@@ -85,7 +85,7 @@ export const t = {
     pageN: (n: number) => `Halaman ${n}`, save: "Simpan link", cancel: "Batal", invalidUrl: "Masukkan alamat web yang valid",
   },
   stamp: {
-    title: "Pilih stamp", presets: "Standar", custom: "Kustom", text: "Teks stamp", date: "Tanggal", time: "Jam", add: "Tambahkan stamp",
+    title: "Pilih stamp", presets: "Standar", langLabel: "Bahasa stamp", langId: "Indonesia", langEn: "English", custom: "Kustom", text: "Teks stamp", date: "Tanggal", time: "Jam", add: "Tambahkan stamp",
   },
   signature: {
     title: "Tanda tangan", draw: "Gambar", type: "Ketik", upload: "Unggah", clear: "Bersihkan", name: "Nama Anda",

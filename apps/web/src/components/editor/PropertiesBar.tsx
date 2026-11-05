@@ -8,6 +8,7 @@ import { t } from "@/lib/strings";
 import { useChars } from "@/store/chars";
 import { editorStore, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
 import type { LinkTarget } from "@/lib/links";
+import { STAMP_COLORS } from "@/lib/stamps";
 import { ColorField } from "./ColorField";
 import { LinkTargetFields } from "./marks/LinkTargetFields";
 import { linkStore } from "./marks/linkStore";
@@ -15,7 +16,7 @@ import { textEditStore } from "./text/textEdit";
 
 export const textPropsSlot: { render?: () => React.ReactNode } = {};
 
-type Kind = "shape" | "line" | "ink" | "redact" | "text" | "markup" | "symbol" | "note" | "link" | null;
+type Kind = "shape" | "line" | "ink" | "redact" | "text" | "markup" | "symbol" | "note" | "link" | "stamp" | null;
 
 function kindOf(op: ContentOp | undefined, tool: string): Kind {
   if (op) {
@@ -27,6 +28,7 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
     if (op.type === "symbol.add") return "symbol";
     if (op.type === "annot.add") return "note";
     if (op.type === "link.add") return "link";
+    if (op.type === "stamp.add") return "stamp";
     return null;
   }
   if (MARKUP_TOOLS.has(tool)) return "markup";
@@ -149,6 +151,14 @@ export function PropertiesBar() {
       {kind === "link" && o && (
         <LinkTargetFields key={o.id} target={o.target as LinkTarget}
           onChange={(target) => { if (target) s.updateObject(o.id, { target } as Partial<ContentOp>, { coalesce: `link:${o.id}` }); }} />
+      )}
+      {kind === "stamp" && o && (
+        <div role="radiogroup" aria-label={t.editor.color} className="flex items-center gap-1">
+          {STAMP_COLORS.map((c) => (
+            <button key={c} role="radio" aria-checked={o.color === c} aria-label={`${t.editor.color} ${c}`} onClick={() => setColor(c)}
+              className={`h-5 w-5 rounded-full ring-1 ring-line ${o.color === c ? "outline outline-2 outline-accent" : ""}`} style={{ background: c }} />
+          ))}
+        </div>
       )}
       {kind === "text" && textPropsSlot.render?.()}
       {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
