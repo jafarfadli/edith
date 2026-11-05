@@ -1,0 +1,13 @@
+{
+  "name": "@edith/ops",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "gen": "json2ts -i schema.json -o src/types.ts --unreachableDefinitions --no-additionalProperties --bannerComment \"/* Generated from apps/api/edith/ops.py — do not edit. Run: npm run gen -w packages/ops */\"",
+    "check": "npm run gen && git diff --exit-code -- src/types.ts && tsc --noEmit -p ."
+  },
+  "devDependencies": { "json-schema-to-typescript": "^15.0.0", "typescript": "^5.6.0" }
+}

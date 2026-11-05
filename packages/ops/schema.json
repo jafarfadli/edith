@@ -1,0 +1,750 @@
+{
+  "$defs": {
+    "BlankSize": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 14400,
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "maximum": 14400,
+          "title": "Height",
+          "type": "number"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "title": "BlankSize",
+      "type": "object"
+    },
+    "BlankSrc": {
+      "additionalProperties": false,
+      "properties": {
+        "blank": {
+          "$ref": "#/$defs/BlankSize"
+        }
+      },
+      "required": [
+        "blank"
+      ],
+      "title": "BlankSrc",
+      "type": "object"
+    },
+    "BundledFont": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "bundled",
+          "default": "bundled",
+          "title": "Kind",
+          "type": "string"
+        },
+        "family": {
+          "title": "Family",
+          "type": "string"
+        },
+        "bold": {
+          "default": false,
+          "title": "Bold",
+          "type": "boolean"
+        },
+        "italic": {
+          "default": false,
+          "title": "Italic",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "family"
+      ],
+      "title": "BundledFont",
+      "type": "object"
+    },
+    "DocSrc": {
+      "additionalProperties": false,
+      "properties": {
+        "doc": {
+          "title": "Doc",
+          "type": "string"
+        },
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "doc",
+        "index"
+      ],
+      "title": "DocSrc",
+      "type": "object"
+    },
+    "ExportRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "ops": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "image.add": "#/$defs/ImageAdd",
+                "ink.add": "#/$defs/InkAdd",
+                "pages.layout": "#/$defs/PagesLayout",
+                "redact.add": "#/$defs/RedactAdd",
+                "shape.add": "#/$defs/ShapeAdd",
+                "text.add": "#/$defs/TextAdd",
+                "whiteout.add": "#/$defs/WhiteoutAdd"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextAdd"
+              },
+              {
+                "$ref": "#/$defs/ImageAdd"
+              },
+              {
+                "$ref": "#/$defs/ShapeAdd"
+              },
+              {
+                "$ref": "#/$defs/InkAdd"
+              },
+              {
+                "$ref": "#/$defs/WhiteoutAdd"
+              },
+              {
+                "$ref": "#/$defs/RedactAdd"
+              },
+              {
+                "$ref": "#/$defs/PagesLayout"
+              }
+            ]
+          },
+          "maxItems": 5000,
+          "title": "Ops",
+          "type": "array"
+        },
+        "flatten_forms": {
+          "default": false,
+          "title": "Flatten Forms",
+          "type": "boolean"
+        },
+        "filename": {
+          "default": "document.pdf",
+          "maxLength": 200,
+          "title": "Filename",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ops"
+      ],
+      "title": "ExportRequest",
+      "type": "object"
+    },
+    "ImageAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "image.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "assetId": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Assetid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "rect",
+        "assetId"
+      ],
+      "title": "ImageAdd",
+      "type": "object"
+    },
+    "InkAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "ink.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "paths": {
+          "items": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Paths",
+          "type": "array"
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 100,
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "paths",
+        "color",
+        "width"
+      ],
+      "title": "InkAdd",
+      "type": "object"
+    },
+    "LayoutLine": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "title": "Baseline",
+          "type": "number"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/Segment"
+          },
+          "title": "Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "baseline",
+        "segments"
+      ],
+      "title": "LayoutLine",
+      "type": "object"
+    },
+    "LayoutPage": {
+      "additionalProperties": false,
+      "properties": {
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "src": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocSrc"
+            },
+            {
+              "$ref": "#/$defs/BlankSrc"
+            }
+          ],
+          "title": "Src"
+        },
+        "rotate": {
+          "default": 0,
+          "enum": [
+            0,
+            90,
+            180,
+            270
+          ],
+          "title": "Rotate",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pageKey",
+        "src"
+      ],
+      "title": "LayoutPage",
+      "type": "object"
+    },
+    "PagesLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "pages.layout",
+          "title": "Type",
+          "type": "string"
+        },
+        "pages": {
+          "items": {
+            "$ref": "#/$defs/LayoutPage"
+          },
+          "minItems": 1,
+          "title": "Pages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "pages"
+      ],
+      "title": "PagesLayout",
+      "type": "object"
+    },
+    "Rect": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "w": {
+          "minimum": 0,
+          "title": "W",
+          "type": "number"
+        },
+        "h": {
+          "minimum": 0,
+          "title": "H",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "Rect",
+      "type": "object"
+    },
+    "RedactAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "redact.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "fill": {
+          "default": "black",
+          "enum": [
+            "black",
+            "white"
+          ],
+          "title": "Fill",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "rect"
+      ],
+      "title": "RedactAdd",
+      "type": "object"
+    },
+    "RenderPageRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "ops": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "image.add": "#/$defs/ImageAdd",
+                "ink.add": "#/$defs/InkAdd",
+                "pages.layout": "#/$defs/PagesLayout",
+                "redact.add": "#/$defs/RedactAdd",
+                "shape.add": "#/$defs/ShapeAdd",
+                "text.add": "#/$defs/TextAdd",
+                "whiteout.add": "#/$defs/WhiteoutAdd"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextAdd"
+              },
+              {
+                "$ref": "#/$defs/ImageAdd"
+              },
+              {
+                "$ref": "#/$defs/ShapeAdd"
+              },
+              {
+                "$ref": "#/$defs/InkAdd"
+              },
+              {
+                "$ref": "#/$defs/WhiteoutAdd"
+              },
+              {
+                "$ref": "#/$defs/RedactAdd"
+              },
+              {
+                "$ref": "#/$defs/PagesLayout"
+              }
+            ]
+          },
+          "maxItems": 5000,
+          "title": "Ops",
+          "type": "array"
+        }
+      },
+      "required": [
+        "pageKey",
+        "ops"
+      ],
+      "title": "RenderPageRequest",
+      "type": "object"
+    },
+    "Run": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "font": {
+          "$ref": "#/$defs/BundledFont"
+        },
+        "size": {
+          "exclusiveMinimum": 0,
+          "maximum": 500,
+          "title": "Size",
+          "type": "number"
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "font",
+        "size",
+        "color"
+      ],
+      "title": "Run",
+      "type": "object"
+    },
+    "Segment": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "runIndex": {
+          "minimum": 0,
+          "title": "Runindex",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "text",
+        "runIndex"
+      ],
+      "title": "Segment",
+      "type": "object"
+    },
+    "ShapeAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "shape.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "rect",
+            "ellipse",
+            "line",
+            "arrow"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "rect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "points": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Points"
+        },
+        "stroke": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Stroke",
+          "type": "string"
+        },
+        "fill": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9a-fA-F]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fill"
+        },
+        "width": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "kind",
+        "stroke",
+        "width"
+      ],
+      "title": "ShapeAdd",
+      "type": "object"
+    },
+    "TextAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "text.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "box": {
+          "$ref": "#/$defs/TextBox"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "box"
+      ],
+      "title": "TextAdd",
+      "type": "object"
+    },
+    "TextBox": {
+      "additionalProperties": false,
+      "properties": {
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "align": {
+          "default": "left",
+          "enum": [
+            "left",
+            "center",
+            "right",
+            "justify"
+          ],
+          "title": "Align",
+          "type": "string"
+        },
+        "lineHeight": {
+          "exclusiveMinimum": 0,
+          "title": "Lineheight",
+          "type": "number"
+        },
+        "paragraphs": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/Run"
+            },
+            "type": "array"
+          },
+          "title": "Paragraphs",
+          "type": "array"
+        },
+        "layout": {
+          "items": {
+            "$ref": "#/$defs/LayoutLine"
+          },
+          "title": "Layout",
+          "type": "array"
+        }
+      },
+      "required": [
+        "rect",
+        "lineHeight",
+        "paragraphs",
+        "layout"
+      ],
+      "title": "TextBox",
+      "type": "object"
+    },
+    "WhiteoutAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "whiteout.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "rect"
+      ],
+      "title": "WhiteoutAdd",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "export": {
+      "$ref": "#/$defs/ExportRequest"
+    },
+    "renderPage": {
+      "$ref": "#/$defs/RenderPageRequest"
+    }
+  },
+  "required": [
+    "export",
+    "renderPage"
+  ],
+  "title": "EdithSchema",
+  "type": "object"
+}
