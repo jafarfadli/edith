@@ -63,10 +63,11 @@ export function PropertiesBar() {
   const focusNote = useStore(linkStore, (st) => st.focusNote);
   // Only a note just created takes focus; selecting an existing note must leave Delete/Backspace to the editor.
   useEffect(() => {
-    if (focusNote && focusNote === selection && noteField.current) {
-      noteField.current.focus();
-      linkStore.getState().setFocusNote(null);
-    }
+    if (!focusNote || focusNote !== selection || !noteField.current) return;
+    // Past the pointerdown that created the note: its mousedown default action would blur the field again.
+    const el = noteField.current;
+    linkStore.getState().setFocusNote(null);
+    requestAnimationFrame(() => setTimeout(() => el.focus(), 0)); // not cancelled: clearing the flag re-runs this effect
   }, [focusNote, selection]);
   const o = op as (ContentOp & Record<string, unknown>) | undefined;
   const s = editorStore.getState();

@@ -5,7 +5,7 @@ export const MAX_URL = 2048;
 const FULL = /^(https?:\/\/|mailto:)\S+$/;
 const FILE_EXT = /\.(pdf|docx?|xlsx?|pptx?|txt|png|jpe?g|gif|zip|csv|html?)$/i; // bare file names are not hosts
 const SCHEME = /^(https?:\/\/|mailto:)/i;
-/** A host with at least one dot and a letters-only TLD of 2+ chars ("file.pdf" still passes: a TLD-ish name; "1.50" does not). */
+/** A host with at least one dot and a letters-only TLD of 2+ chars ("1.50" does not; bare file names are excluded by FILE_EXT). */
 const BARE_HOST = /^[^\s/@:.]+(\.[^\s/@:.]+)*\.[a-z]{2,}(\/\S*)?$/i;
 
 /** A URL the API accepts (http/https/mailto), adding https:// to a bare host like "example.com"; null otherwise. */
