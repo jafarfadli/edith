@@ -17,6 +17,7 @@
     "@edith/ops": "*",
     "fontkit": "^2.0.4",
     "next": "16.4.5",
+    "pdfjs-dist": "^6.5.438",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zustand": "^5.0.16"

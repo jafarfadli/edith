@@ -1,0 +1,28 @@
+"use client";
+
+import { useCallback, useRef } from "react";
+import type { PDFDocumentProxy } from "pdfjs-dist";
+import { editorStore, pageGeom, useEditor } from "@/store/editor";
+import { PageView, type OverlayRender } from "./PageView";
+
+export function PageList({ pdf, overlay }: { pdf: PDFDocumentProxy; overlay?: OverlayRender }) {
+  const pages = useEditor((s) => s.doc.pages);
+  const info = useEditor((s) => s.info)!;
+  const zoom = useEditor((s) => s.zoom);
+  const ratios = useRef(new Map<string, number>());
+
+  const onVisible = useCallback((key: string, ratio: number) => {
+    ratios.current.set(key, ratio);
+    let best: string | null = null, bestRatio = 0;
+    for (const [k, r] of ratios.current) if (r > bestRatio) { best = k; bestRatio = r; }
+    if (best && best !== editorStore.getState().currentPage) editorStore.getState().setCurrentPage(best);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center gap-6 px-6 py-8">
+      {pages.map((entry) => (
+        <PageView key={entry.pageKey} pdf={pdf} entry={entry} geom={pageGeom(entry, info)} scale={zoom} overlay={overlay} onVisible={onVisible} />
+      ))}
+    </div>
+  );
+}
