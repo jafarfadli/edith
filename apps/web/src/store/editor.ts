@@ -52,6 +52,21 @@ function sizeOf(entry: PageEntry | undefined, info: DocInfo | null) {
   return { width: g.width, height: g.height };
 }
 
+/** Fields of `s` that must change so selection/currentPage stay valid for `doc`. */
+function reconcile(doc: EditorDoc, s: { selection: string | null; currentPage: string | null }) {
+  const keys = new Set(doc.pages.map((p) => p.pageKey));
+  const out: { selection?: null; currentPage?: string | null } = {};
+  if (s.selection !== null) {
+    const op = doc.objects[s.selection];
+    if (!op || !keys.has(op.pageKey)) out.selection = null;
+  }
+  if (s.currentPage === null || !keys.has(s.currentPage)) {
+    const first = doc.pages[0]?.pageKey ?? null;
+    if (first !== s.currentPage) out.currentPage = first;
+  }
+  return out;
+}
+
 export function createEditorStore(): StoreApi<EditorState> {
   return createStore<EditorState>()((set, get) => {
     const commit = (fn: (d: EditorDoc) => EditorDoc) => {
@@ -70,18 +85,23 @@ export function createEditorStore(): StoreApi<EditorState> {
       init(info, restored) {
         const pages: PageEntry[] = info.pages.map((p) => ({ pageKey: `o${p.index}`, src: { doc: info.docId, index: p.index }, rotate: 0 }));
         const doc = restored ?? { pages, objects: {}, order: [] };
-        set({ info, doc, past: [], future: [], selection: null, currentPage: doc.pages[0]?.pageKey ?? null });
+        set({ info, doc, past: [], future: [], selection: null, currentPage: null });
+        set(reconcile(doc, get()));
       },
 
       addObject(op) {
-        commit((d) => ({ ...d, objects: { ...d.objects, [op.id]: op }, order: [...d.order, op.id] }));
+        commit((d) => ({
+          ...d,
+          objects: { ...d.objects, [op.id]: op },
+          order: d.order.includes(op.id) ? d.order : [...d.order, op.id],
+        }));
       },
 
       updateObject(id, patch) {
         commit((d) => {
           const cur = d.objects[id];
           if (!cur) return d;
-          return { ...d, objects: { ...d.objects, [id]: { ...cur, ...patch } as ContentOp } };
+          return { ...d, objects: { ...d.objects, [id]: { ...cur, ...patch, id: cur.id, type: cur.type } as ContentOp } };
         });
       },
 
@@ -101,6 +121,7 @@ export function createEditorStore(): StoreApi<EditorState> {
 
       deletePage(key) {
         commit((d) => (d.pages.length <= 1 ? d : { ...d, pages: d.pages.filter((p) => p.pageKey !== key) }));
+        set(reconcile(get().doc, get()));
       },
 
       insertBlankAfter(key) {
@@ -119,10 +140,12 @@ export function createEditorStore(): StoreApi<EditorState> {
       movePage(key, toIndex) {
         commit((d) => {
           const from = d.pages.findIndex((p) => p.pageKey === key);
-          if (from < 0 || from === toIndex) return d;
+          if (from < 0) return d;
+          const to = Math.max(0, Math.min(toIndex, d.pages.length - 1));
+          if (to === from) return d;
           const pages = [...d.pages];
           const [entry] = pages.splice(from, 1);
-          pages.splice(Math.max(0, Math.min(toIndex, pages.length)), 0, entry);
+          pages.splice(to, 0, entry);
           return { ...d, pages };
         });
       },
@@ -130,13 +153,17 @@ export function createEditorStore(): StoreApi<EditorState> {
       undo() {
         const { past, doc, future } = get();
         if (!past.length) return;
-        set({ doc: past[past.length - 1], past: past.slice(0, -1), future: [doc, ...future] });
+        const prev = past[past.length - 1];
+        set({ doc: prev, past: past.slice(0, -1), future: [doc, ...future] });
+        set(reconcile(prev, get()));
       },
 
       redo() {
         const { past, doc, future } = get();
         if (!future.length) return;
-        set({ doc: future[0], future: future.slice(1), past: [...past, doc].slice(-HISTORY_LIMIT) });
+        const next = future[0];
+        set({ doc: next, future: future.slice(1), past: [...past, doc].slice(-HISTORY_LIMIT) });
+        set(reconcile(next, get()));
       },
 
       select: (id) => set({ selection: id }),

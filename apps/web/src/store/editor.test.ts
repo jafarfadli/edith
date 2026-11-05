@@ -89,4 +89,54 @@ describe("editor store", () => {
     expect(other.getState().doc.order).toEqual(["a"]);
     expect(other.getState().past).toEqual([]);
   });
+
+  it("undo clears selection of a vanished object", () => {
+    s().addObject(white("a"));
+    s().select("a");
+    s().undo();
+    expect(s().selection).toBeNull();
+  });
+
+  it("undo moves currentPage off a vanished page", () => {
+    const k = s().insertBlankAfter("o0");
+    s().setCurrentPage(k);
+    s().undo();
+    expect(s().doc.pages.map((p) => p.pageKey)).toContain(s().currentPage);
+    expect(s().currentPage).toBe("o0");
+  });
+
+  it("deletePage reconciles selection and currentPage", () => {
+    s().addObject(white("a", "o1"));
+    s().select("a");
+    s().setCurrentPage("o1");
+    s().deletePage("o1");
+    expect(s().selection).toBeNull();
+    expect(s().currentPage).toBe("o0");
+  });
+
+  it("addObject with an existing id replaces in place", () => {
+    s().addObject(white("a"));
+    s().addObject(white("b"));
+    s().addObject({ ...white("a"), rect: { x: 9, y: 9, w: 1, h: 1 } } as ContentOp);
+    expect(s().doc.order).toEqual(["a", "b"]);
+    expect((s().doc.objects.a as { rect: { x: number } }).rect.x).toBe(9);
+    expect(s().past.length).toBe(3);
+  });
+
+  it("updateObject cannot change id or type", () => {
+    s().addObject(white("a"));
+    s().updateObject("a", { id: "z", type: "redact.add" } as unknown as Partial<ContentOp>);
+    expect(s().doc.objects.z).toBeUndefined();
+    expect(s().doc.objects.a.id).toBe("a");
+    expect(s().doc.objects.a.type).toBe("whiteout.add");
+  });
+
+  it("movePage clamps the index and no-ops without history", () => {
+    s().movePage("o0", 99);
+    expect(s().doc.pages.map((p) => p.pageKey)).toEqual(["o1", "o2", "o0"]);
+    const n = s().past.length;
+    s().movePage("o0", 99);
+    s().movePage("o1", -5);
+    expect(s().past.length).toBe(n);
+  });
 });

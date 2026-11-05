@@ -24,4 +24,11 @@ describe("draft", () => {
     expect(() => saveDraft("h", { pages: [], objects: {}, order: [] })).not.toThrow();
     expect(loadDraft("h")).toBeNull();
   });
+
+  it("rejects malformed stored drafts", () => {
+    for (const raw of ["123", "{}", "null", "[]", '{"pages":null,"order":[],"objects":{}}', '{"pages":[],"order":[],"objects":[]}', '{"pages":[],"order":{},"objects":{}}', "not json"]) {
+      localStorage.setItem("edith:draft:h", raw);
+      expect(loadDraft("h")).toBeNull();
+    }
+  });
 });
