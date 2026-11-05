@@ -69,3 +69,47 @@ def rename_font(data: bytes, old: str, new: str) -> bytes:
         if doc.xref_get_key(xref, "BaseFont")[1] == f"/{old}":
             doc.xref_set_key(xref, "BaseFont", f"/{new}")
     return doc.tobytes()
+
+
+LOREM = ("Edith menyunting paragraf asli dengan rapi. Teks mengalir ulang di dalam kotak selebar tetap, "
+         "dan gaya bisa diatur per kata tanpa merusak baris lain di halaman yang sama.")
+
+
+def make_paragraphs_pdf() -> bytes:
+    """Paragraph layouts for extraction tests (all standard-14 fonts):
+    A left 3 lines (Helvetica 12/14.4) · B justified (Times 11) · C1/C2 split by a first-line indent ·
+    D heading 18 pt + body 12 pt · E centered · F rotated 90°."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    for i, text in enumerate(["Paragraf A baris satu yang cukup panjang", "baris dua lanjutan paragraf A", "baris tiga akhir A."]):
+        page.insert_text((72, 100 + i * 14.4), text, fontname="helv", fontsize=12)
+    page.insert_textbox(pymupdf.Rect(72, 180, 372, 260), LOREM, fontname="tiro", fontsize=11,
+                        align=pymupdf.TEXT_ALIGN_JUSTIFY)
+    c = [(72, "Paragraf C1 baris pertama yang panjang sekali"), (72, "akhir C1."),
+         (90, "Paragraf C2 dimulai dengan indentasi baris"), (72, "pertama lalu berlanjut.")]
+    for i, (x, text) in enumerate(c):
+        page.insert_text((x, 320 + i * 14.4), text, fontname="helv", fontsize=12)
+    page.insert_text((72, 420), "Judul Besar", fontname="hebo", fontsize=18)
+    page.insert_text((72, 440), "Isi di bawah judul.", fontname="helv", fontsize=12)
+    for i, text in enumerate(["Baris tengah pertama yang lebar", "lebih pendek", "tengah"]):
+        w = pymupdf.get_text_length(text, fontname="helv", fontsize=12)
+        page.insert_text((297.5 - w / 2, 500 + i * 14.4), text, fontname="helv", fontsize=12)
+    page.insert_text((500, 700), "Teks diputar", fontname="helv", fontsize=12, rotate=90)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+def make_edit_pdf() -> bytes:
+    """Two Helvetica 12 pt paragraphs at a tight 12 pt leading (glyph boxes of neighbouring lines
+    overlap), split by a first-line indent, over a red vertical line and a blue image:
+    g0 = "Paragraf yang diedit baris satu" / "baris dua.", g1 = the two lines below it."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    lines = [(72, "Paragraf yang diedit baris satu"), (72, "baris dua."),
+             (90, "Paragraf tetangga tetap utuh di sini"), (72, "sampai akhir.")]
+    for i, (x, text) in enumerate(lines):
+        page.insert_text((x, 100 + 12 * i), text, fontname="helv", fontsize=12)
+    page.draw_line((80, 85), (80, 150), color=(1, 0, 0), width=1)
+    pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 4, 4), False)
+    pix.set_rect(pix.irect, (0, 0, 255))
+    page.insert_image(pymupdf.Rect(300, 90, 340, 115), pixmap=pix)
+    return doc.tobytes(garbage=3, deflate=True)
