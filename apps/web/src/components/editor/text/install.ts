@@ -3,14 +3,13 @@
 import { createElement } from "react";
 import type { TextAdd } from "@edith/ops";
 import { fontStore } from "@/lib/fonts";
-import { newId } from "@/lib/id";
-import { newBox, relayout } from "@/lib/textbox";
+import { relayout } from "@/lib/textbox";
 import { editorStore } from "@/store/editor";
 import { overlayHooks } from "../PageOverlay";
 import { textPropsSlot } from "../PropertiesBar";
 import { TextNode } from "./TextNode";
 import { TextProps } from "./TextProps";
-import { fontsReady, textEditStore } from "./textEdit";
+import { fontsReady, startTextAt, textEditStore } from "./textEdit";
 
 let installed = false;
 
@@ -18,12 +17,7 @@ export function installTextTool(): void {
   if (installed) return;
   installed = true;
 
-  overlayHooks.onTextPointerDown = (pageKey, at) => {
-    if (textEditStore.getState().editing) return; // the blur of the current editor commits first
-    const st = editorStore.getState().style;
-    const box = newBox(at, { family: st.fontFamily, bold: st.bold, italic: st.italic, size: st.fontSize, color: st.color, align: st.align });
-    textEditStore.getState().start({ id: newId(), pageKey, box, isNew: true });
-  };
+  overlayHooks.onTextPointerDown = startTextAt;
 
   overlayHooks.onDoubleClick = (op) => {
     if (op.type !== "text.add") return;

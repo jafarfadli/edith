@@ -6,6 +6,7 @@ import { compact } from "@/lib/compact";
 import { downloadBlob } from "@/lib/download";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
+import { whenTextCommitted } from "./text/textEdit";
 
 export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; text: string }) => void }) {
   const info = useEditor((s) => s.info);
@@ -14,10 +15,13 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
   const fileName = name ?? info?.fileName ?? "document.pdf";
 
   async function download() {
-    const s = editorStore.getState();
-    if (!s.info) return;
+    if (!editorStore.getState().info) return;
     setBusy(true);
+    let s = editorStore.getState();
     try {
+      await whenTextCommitted(); // a text box whose fonts were still loading must be in the document first
+      s = editorStore.getState();
+      if (!s.info) return;
       const blob = await exportPdf(s.info.docId, { ops: compact(s.doc), flatten_forms: false, filename: fileName });
       downloadBlob(blob, fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`);
     } catch (e) {

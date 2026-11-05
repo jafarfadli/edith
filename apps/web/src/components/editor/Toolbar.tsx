@@ -8,6 +8,7 @@ import { fitImage } from "@/lib/image";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore, pageGeom, useEditor, type Tool } from "@/store/editor";
 import { SplitButton } from "./SplitButton";
+import { afterTextCommitted } from "./text/textEdit";
 
 type NoticeFn = (n: { kind: "error" | "info"; text: string }) => void;
 
@@ -50,8 +51,8 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-line bg-surface px-3" role="toolbar" aria-label={t.editor.tools}>
-      <button aria-label={t.editor.undo} title={t.editor.undo} disabled={!canUndo} onClick={() => s.undo()} className="h-9 rounded-md px-2 hover:bg-bg disabled:opacity-40">↶</button>
-      <button aria-label={t.editor.redo} title={t.editor.redo} disabled={!canRedo} onClick={() => s.redo()} className="h-9 rounded-md px-2 hover:bg-bg disabled:opacity-40">↷</button>
+      <button aria-label={t.editor.undo} title={t.editor.undo} disabled={!canUndo} onClick={() => afterTextCommitted(() => editorStore.getState().undo())} className="h-9 rounded-md px-2 hover:bg-bg disabled:opacity-40">↶</button>
+      <button aria-label={t.editor.redo} title={t.editor.redo} disabled={!canRedo} onClick={() => afterTextCommitted(() => editorStore.getState().redo())} className="h-9 rounded-md px-2 hover:bg-bg disabled:opacity-40">↷</button>
       <span className="mx-2 h-6 w-px bg-line" />
       <ToolButton tool="select" label={t.editor.select} icon="↖" active={tool} />
       <ToolButton tool="text" label={t.editor.text} icon="T" active={tool} />
