@@ -42,8 +42,13 @@ def _fill(doc: pymupdf.Document, forms: list, flatten: bool) -> None:
         fill_forms(doc, forms)
     except FieldValueError as exc:
         raise BakeFailed(str(exc), op_id=exc.op_id) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise BakeFailed(f"cannot fill the form: {exc}") from exc
     if flatten:
-        doc.bake(annots=False, widgets=True)  # widgets become page content; other annotations stay
+        try:
+            doc.bake(annots=False, widgets=True)  # widgets become page content; other annotations stay
+        except Exception as exc:  # noqa: BLE001
+            raise BakeFailed(f"cannot flatten the form: {exc}") from exc
 
 
 def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False) -> pymupdf.Document:

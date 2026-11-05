@@ -1,7 +1,7 @@
 import pymupdf
 import pytest
 
-from tests.pdfs import make_form_pdf, make_pdf
+from tests.pdfs import make_cyclic_form_pdf, make_form_pdf, make_merged_form_pdf, make_pdf
 from tests.test_documents import upload
 
 
@@ -119,3 +119,40 @@ def test_wrong_value_kind_is_bake_failed(client, doc_id):
     r = client.post(f"/documents/{doc_id}/export", json={"ops": [form_set("bad", "setuju", "ya")]})
     assert r.status_code == 500
     assert r.json()["error"]["code"] == "bake_failed" and r.json()["error"]["op_id"] == "bad"
+
+
+def _fields_array(doc: pymupdf.Document) -> list[int]:
+    acro = int(doc.xref_get_key(doc.pdf_catalog(), "AcroForm")[1].split()[0])
+    refs = doc.xref_get_key(acro, "Fields")[1].strip("[]").split()
+    return [int(refs[i]) for i in range(0, len(refs), 3)]
+
+
+def test_duplicated_merged_widget_becomes_one_field(client):
+    doc_id = upload(client, make_merged_form_pdf()).json()["doc_id"]
+    out = export(client, doc_id, [layout(doc_id, 0, 0), form_set("a", "nama", "Dua")])
+    assert out.is_form_pdf and values(out) == {"nama": ["Dua", "Dua"]}
+    fields = _fields_array(out)
+    assert len(fields) == 1
+    assert out.xref_get_key(fields[0], "T")[1] == "nama" and out.xref_get_key(fields[0], "FT")[1] == "/Tx"
+    for page in out:
+        for w in page.widgets():
+            assert out.xref_get_key(w.xref, "Parent")[1] == f"{fields[0]} 0 R"
+            assert out.xref_get_key(w.xref, "T")[0] == "null"
+            assert out.xref_get_key(w.xref, "P")[1] == f"{page.xref} 0 R"
+
+
+def test_malformed_widget_does_not_break_structure_or_export(client):
+    r = upload(client, make_cyclic_form_pdf())
+    assert r.status_code == 201
+    doc_id = r.json()["doc_id"]
+    assert client.get(f"/documents/{doc_id}/structure").status_code == 200
+    assert client.post(f"/documents/{doc_id}/export", json={"ops": []}).status_code == 200
+
+
+def test_acroform_defaults_survive_export(client):
+    doc_id = upload(client, make_merged_form_pdf()).json()["doc_id"]
+    out = export(client, doc_id, [])
+    acro = int(out.xref_get_key(out.pdf_catalog(), "AcroForm")[1].split()[0])
+    assert out.xref_get_key(acro, "NeedAppearances")[1] == "true"
+    assert out.xref_get_key(acro, "DA")[0] == "string"
+    assert out.xref_get_key(acro, "DR")[0] in ("dict", "xref")

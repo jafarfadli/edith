@@ -165,3 +165,36 @@ def make_form_pdf() -> bytes:
     page2 = doc.new_page(width=595, height=842)
     _widget(page2, pymupdf.PDF_WIDGET_TYPE_TEXT, "hal2", (72, 72, 272, 92), field_value="")
     return doc.tobytes(garbage=3, deflate=True)
+
+
+def make_merged_form_pdf() -> bytes:
+    """One page, one text widget whose field and widget dictionaries are merged (/T on the widget, no
+    /Parent), an AcroForm with /DR, /DA and /NeedAppearances."""
+    doc = pymupdf.open()
+    doc.new_page(width=595, height=842)
+    page_xref = doc.page_xref(0)
+    font = doc.get_new_xref()
+    doc.update_object(font, "<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>")
+    widget = doc.get_new_xref()
+    doc.update_object(widget, f"<</Type/Annot/Subtype/Widget/FT/Tx/T(nama)/V()/Rect[72 700 272 720]/P {page_xref} 0 R"
+                              "/DA(/Helv 11 Tf 0 g)/F 4>>")
+    doc.xref_set_key(page_xref, "Annots", f"[{widget} 0 R]")
+    acro = doc.get_new_xref()
+    doc.update_object(acro, f"<</Fields[{widget} 0 R]/NeedAppearances true/DA(/Helv 0 Tf 0 g)/DR<</Font<</Helv {font} 0 R>>>>>>")
+    doc.xref_set_key(doc.pdf_catalog(), "AcroForm", f"{acro} 0 R")
+    return doc.tobytes()
+
+
+def make_cyclic_form_pdf() -> bytes:
+    """A widget whose /Parent chain loops (MuPDF raises on it)."""
+    doc = pymupdf.open()
+    doc.new_page()
+    page_xref = doc.page_xref(0)
+    a, b = doc.get_new_xref(), doc.get_new_xref()
+    doc.update_object(b, f"<</FT/Tx/T(b)/Parent {a} 0 R/Kids[{a} 0 R]>>")
+    doc.update_object(a, f"<</Type/Annot/Subtype/Widget/FT/Tx/T(a)/Parent {b} 0 R/Rect[72 72 200 90]/P {page_xref} 0 R>>")
+    doc.xref_set_key(page_xref, "Annots", f"[{a} 0 R]")
+    acro = doc.get_new_xref()
+    doc.update_object(acro, f"<</Fields[{b} 0 R]>>")
+    doc.xref_set_key(doc.pdf_catalog(), "AcroForm", f"{acro} 0 R")
+    return doc.tobytes()

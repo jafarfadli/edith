@@ -1,5 +1,7 @@
 """AcroForm fields: what the editor shows (structure), filling them (form.set) and keeping the form
 intact through the page rebuild of the bake."""
+import logging
+
 import pymupdf
 
 from edith.ops import FormSet
@@ -10,6 +12,7 @@ FIELD_TYPES = {
     pymupdf.PDF_WIDGET_TYPE_LISTBOX: "list", pymupdf.PDF_WIDGET_TYPE_BUTTON: "button",
     pymupdf.PDF_WIDGET_TYPE_SIGNATURE: "signature",
 }
+log = logging.getLogger(__name__)
 READ_ONLY = 1  # PDF field flag bit 1
 
 
@@ -32,30 +35,63 @@ def _value(w: pymupdf.Widget) -> str:
     return "" if v is None else str(v)
 
 
+def _safe_widgets(page: pymupdf.Page):
+    """Widgets of a page, skipping any that MuPDF cannot read (e.g. a /Parent cycle)."""
+    try:
+        it = page.widgets()
+        while True:
+            try:
+                w = next(it)
+            except StopIteration:
+                return
+            except Exception as exc:  # noqa: BLE001
+                log.warning("skipping unreadable widget on page %s: %s", page.number, exc)
+                return
+            yield w
+    except Exception as exc:  # noqa: BLE001
+        log.warning("skipping unreadable widgets on page %s: %s", page.number, exc)
+
+
+def _field_entry(w: pymupdf.Widget, page_number: int) -> dict | None:
+    kind = FIELD_TYPES.get(w.field_type)
+    if kind is None:
+        return None
+    r = w.rect
+    return {
+        "name": w.field_name, "type": kind, "value": _value(w),
+        "onState": w.on_state() if kind in ("checkbox", "radio") else None,
+        "options": list(w.choice_values or []) if kind in ("combo", "list") else None,
+        "page": page_number,
+        "rect": {"x": _num(r.x0), "y": _num(r.y0), "w": _num(r.width), "h": _num(r.height)},
+        "readOnly": bool(w.field_flags & READ_ONLY),
+        "multiline": kind == "text" and bool(w.field_flags & pymupdf.PDF_TX_FIELD_IS_MULTILINE),
+        "fontSize": _num(w.text_fontsize or 0),  # 0 = auto
+    }
+
+
 def page_fields(page: pymupdf.Page) -> list[dict]:
     """One entry per widget, in unrotated-CropBox points. Radio buttons of one group share `name`;
-    each has its own `onState` (the group's value when it is the chosen one)."""
+    each has its own `onState` (the group's value when it is the chosen one). Malformed widgets are skipped."""
     out = []
-    for w in page.widgets():
-        kind = FIELD_TYPES.get(w.field_type)
-        if kind is None:
+    for w in _safe_widgets(page):
+        try:
+            entry = _field_entry(w, page.number)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("skipping malformed widget on page %s: %s", page.number, exc)
             continue
-        r = w.rect
-        out.append({
-            "name": w.field_name, "type": kind, "value": _value(w),
-            "onState": w.on_state() if kind in ("checkbox", "radio") else None,
-            "options": list(w.choice_values or []) if kind in ("combo", "list") else None,
-            "page": page.number,
-            "rect": {"x": _num(r.x0), "y": _num(r.y0), "w": _num(r.width), "h": _num(r.height)},
-            "readOnly": bool(w.field_flags & READ_ONLY),
-            "multiline": kind == "text" and bool(w.field_flags & pymupdf.PDF_TX_FIELD_IS_MULTILINE),
-            "fontSize": _num(w.text_fontsize or 0),  # 0 = auto
-        })
+        if entry is not None:
+            out.append(entry)
     return out
 
 
 def extract_fields(doc: pymupdf.Document) -> list[dict]:
-    return [f for page in doc for f in page_fields(page)]
+    out = []
+    for page in doc:
+        try:
+            out.extend(page_fields(page))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("skipping form fields of page %s: %s", page.number, exc)
+    return out
 
 
 def fill_forms(doc: pymupdf.Document, ops: list[FormSet]) -> None:
@@ -65,7 +101,7 @@ def fill_forms(doc: pymupdf.Document, ops: list[FormSet]) -> None:
     if not wanted:
         return
     for page in doc:
-        widgets = [w for w in page.widgets() if w.field_name in wanted]
+        widgets = [w for w in _safe_widgets(page) if w.field_name in wanted]
         # Radio buttons: switch the others off first, then the chosen one on.
         widgets.sort(key=lambda w: w.field_type == pymupdf.PDF_WIDGET_TYPE_RADIOBUTTON
                      and w.on_state() == wanted[w.field_name].value)
@@ -89,9 +125,11 @@ def fill_forms(doc: pymupdf.Document, ops: list[FormSet]) -> None:
             w.update()
 
 
-def _adopt(doc: pymupdf.Document, xref: int) -> None:
+def _adopt(doc: pymupdf.Document, xref: int, page_xref: int) -> None:
     """Lists widget `xref` in its parent's /Kids: Document.fullcopy_page() copies a page's widgets with
-    their /Parent, but the parent does not know the copy (and PyMuPDF refuses to update it)."""
+    their /Parent, but the parent does not know the copy (and PyMuPDF refuses to update it). Every widget's
+    /P is pointed at the page it is on."""
+    doc.xref_set_key(xref, "P", f"{page_xref} 0 R")
     kind, value = doc.xref_get_key(xref, "Parent")
     if kind != "xref":
         return
@@ -104,16 +142,68 @@ def _adopt(doc: pymupdf.Document, xref: int) -> None:
 
 
 def _root_field(doc: pymupdf.Document, xref: int) -> int:
-    while True:
+    for _ in range(64):  # a /Parent cycle must not hang or recurse
         kind, value = doc.xref_get_key(xref, "Parent")
         if kind != "xref":
             return xref
         xref = int(value.split()[0])
+    raise ValueError("field /Parent chain too deep (cycle?)")
+
+
+# Field-level keys: they belong on the parent when several widgets share one field.
+FIELD_KEYS = ("T", "TU", "TM", "FT", "Ff", "V", "DV", "Opt", "DA", "Q", "MaxLen", "I", "TI", "RV", "DS")
+
+
+def _merge_same_name(doc: pymupdf.Document, roots: list[int]) -> list[int]:
+    """Merged field/widget dictionaries (/T on the widget, no /Parent) that a duplicated page left with the
+    same name become one parent field whose /Kids are the widgets."""
+    groups: dict[str, list[int]] = {}
+    for x in roots:
+        kind, name = doc.xref_get_key(x, "T")
+        kind_sub, sub = doc.xref_get_key(x, "Subtype")
+        if kind == "string" and sub == "/Widget":
+            groups.setdefault(name, []).append(x)
+    merged = {}
+    for name, xs in groups.items():
+        if len(xs) < 2:
+            continue
+        parent = doc.get_new_xref()
+        doc.update_object(parent, "<<>>")
+        for key in FIELD_KEYS:
+            kind, value = doc.xref_get_key(xs[0], key)
+            if kind != "null":
+                doc.xref_set_key(parent, key, pymupdf.get_pdf_str(value) if kind == "string" else value)
+        for x in xs:
+            for key in FIELD_KEYS:
+                doc.xref_set_key(x, key, "null")
+            doc.xref_set_key(x, "Parent", f"{parent} 0 R")
+        doc.xref_set_key(parent, "Kids", "[" + " ".join(f"{x} 0 R" for x in xs) + "]")
+        merged[xs[0]] = parent
+        merged.update({x: None for x in xs[1:]})
+    return [merged.get(x, x) for x in roots if merged.get(x, x) is not None]
+
+
+def _break_parent_cycles(doc: pymupdf.Document) -> None:
+    """MuPDF's page rebuild fails on a /Parent cycle: cut the loop at the widget (it becomes standalone)."""
+    for page in doc:
+        for xref, *_ in page.annot_xrefs():
+            seen, x = {xref}, xref
+            while True:
+                kind, value = doc.xref_get_key(x, "Parent")
+                if kind != "xref":
+                    break
+                x = int(value.split()[0])
+                if x in seen:
+                    log.warning("cutting a /Parent cycle at widget %s", xref)
+                    doc.xref_set_key(xref, "Parent", "null")
+                    break
+                seen.add(x)
 
 
 def detach_acroform(doc: pymupdf.Document) -> int | None:
     """The xref of the document's AcroForm dictionary (made indirect when inline), before
     Document.select() — which drops /AcroForm from the catalog (PyMuPDF 2.1)."""
+    _break_parent_cycles(doc)
     kind, value = doc.xref_get_key(doc.pdf_catalog(), "AcroForm")
     if kind == "xref":
         return int(value.split()[0])
@@ -125,15 +215,24 @@ def detach_acroform(doc: pymupdf.Document) -> int | None:
 
 
 def reattach_acroform(doc: pymupdf.Document, xref: int | None) -> None:
-    """Puts the AcroForm back with /Fields = the root fields of the widgets still on the pages."""
+    """Puts the AcroForm back with /Fields = the root fields of the widgets still on the pages. Widgets
+    that cannot be traced to a root are skipped; a form that cannot be rebuilt at all is dropped."""
     if xref is None:
         return
-    roots: list[int] = []
-    for page in doc:
-        for w in page.widgets():
-            _adopt(doc, w.xref)
-            root = _root_field(doc, w.xref)
-            if root not in roots:
-                roots.append(root)
-    doc.xref_set_key(xref, "Fields", "[" + " ".join(f"{r} 0 R" for r in roots) + "]")
-    doc.xref_set_key(doc.pdf_catalog(), "AcroForm", f"{xref} 0 R")
+    try:
+        roots: list[int] = []
+        for page in doc:
+            for w in _safe_widgets(page):
+                try:
+                    _adopt(doc, w.xref, page.xref)
+                    root = _root_field(doc, w.xref)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("skipping malformed widget on page %s: %s", page.number, exc)
+                    continue
+                if root not in roots:
+                    roots.append(root)
+        roots = _merge_same_name(doc, roots)
+        doc.xref_set_key(xref, "Fields", "[" + " ".join(f"{r} 0 R" for r in roots) + "]")
+        doc.xref_set_key(doc.pdf_catalog(), "AcroForm", f"{xref} 0 R")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("dropping the AcroForm, it could not be rebuilt: %s", exc)
