@@ -16,4 +16,5 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 50 * 1024 * 1024
     max_pages: int = 500
     max_asset_bytes: int = 10 * 1024 * 1024
+    max_asset_pixels: int = 50_000_000
     cors_origins: list[str] = ["http://localhost:3000"]
