@@ -97,7 +97,15 @@ export function docToRuns(doc: RichNode, fallback: RunAttrs): Run[][] {
       const mark = n.marks?.find((m) => m.type === "run");
       if (mark?.attrs) {
         const a = mark.attrs as Partial<RunAttrs>;
-        last = { ...fallback, ...a, font: a.font ?? last.font }; // a mark parsed from foreign HTML has no font
+        // a mark parsed from foreign HTML may lack fields or carry nulls: those inherit the previous style
+        last = {
+          font: a.font ?? last.font,
+          size: a.size ?? last.size,
+          color: a.color ?? last.color,
+          bgColor: "bgColor" in a ? a.bgColor ?? null : last.bgColor,
+          underline: "underline" in a ? a.underline ?? false : last.underline,
+          strike: "strike" in a ? a.strike ?? false : last.strike,
+        };
       }
       return runOf(n.text!, last);
     });

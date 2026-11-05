@@ -34,6 +34,12 @@ describe("rich text model", () => {
     expect(docToRuns(json, attrsOf(r("")))[0][0]).toEqual(r("x", { size: 20 }));
   });
 
+  it("ignores null mark attrs and inherits the previous or fallback style", () => {
+    const mark = { type: "run", attrs: { font: null, size: null, color: null, bgColor: null, underline: true } };
+    const json = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "x", marks: [mark] }] }] };
+    expect(docToRuns(json, attrsOf(r("", { size: 14, color: "#ff0000" })))[0][0]).toEqual(r("x", { size: 14, color: "#ff0000", underline: true }));
+  });
+
   it("leaves default decoration fields out", () => {
     expect(runOf("x", attrsOf(r("")))).toEqual(r("x"));
   });
