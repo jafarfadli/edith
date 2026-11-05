@@ -1,86 +1,114 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
+import { EditorContent, useEditor } from "@tiptap/react";
+import Document from "@tiptap/extension-document";
+import Paragraph from "@tiptap/extension-paragraph";
+import Text from "@tiptap/extension-text";
+import { UndoRedo } from "@tiptap/extensions";
+import type { Editor } from "@tiptap/core";
 import { toScreen, type PageGeom } from "@/lib/coords";
 import { cssFamily, fontStore } from "@/lib/fonts";
-import { boxFonts, plainText } from "@/lib/textbox";
-import { commitEditing, textEditStore, type Editing } from "./textEdit";
+import { attrsOf, docToRuns, runsToDoc, type RunAttrs } from "@/lib/richtext";
+import { boxFonts } from "@/lib/textbox";
+import { createRunMark } from "./runMark";
+import { boxLineHeight, commitOpenSession, session, textEditStore, type Editing } from "./textEdit";
 
 export function TextEditor({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const editing = useStore(textEditStore, (s) => s.editing);
   if (!editing || editing.pageKey !== pageKey) return null;
-  // Keyed by the edit session: a new session mounts a fresh textarea with that box's text.
-  return <EditorArea key={editing.id} editing={editing} geom={geom} scale={scale} />;
+  // Keyed by the session: a new session mounts a fresh editor with that box's runs.
+  return <RichArea key={editing.id} editing={editing} geom={geom} scale={scale} />;
 }
 
-function EditorArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; scale: number }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState(() => plainText(editing.box));
-  const textRef = useRef(text);
+/** Tells the properties bar the style at the selection. */
+function publish(editor: Editor, fallback: RunAttrs) {
+  const a = editor.getAttributes("run") as Partial<RunAttrs>;
+  textEditStore.getState().setCurrent(a.font ? { ...fallback, ...a } as RunAttrs : fallback);
+}
+
+function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; scale: number }) {
+  const wrap = useRef<HTMLDivElement>(null);
+  const box = useStore(textEditStore, (s) => s.editing?.box ?? editing.box);
+  // Style of text that has none yet (an empty box, pasted text); fixed for the session.
+  const [fallback] = useState(() => attrsOf(editing.box.paragraphs[0][0]));
   const editingId = editing.id;
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [Document, Paragraph, Text, UndoRedo, createRunMark(() => fallback)],
+    content: runsToDoc(editing.box.paragraphs) as never,
+    editorProps: { attributes: { "data-testid": "text-editor", spellcheck: "false", style: "outline:none" } },
+    onUpdate: ({ editor }) => {
+      const paragraphs = docToRuns(editor.getJSON(), fallback);
+      session.paragraphs = paragraphs;
+      // A text box's line spacing follows its largest size while typing/styling (as the commit does).
+      const cur = textEditStore.getState().editing;
+      if (cur?.kind === "text.add" && cur.id === editingId) {
+        const lineHeight = boxLineHeight(paragraphs);
+        if (lineHeight !== cur.box.lineHeight) textEditStore.getState().update({ ...cur.box, lineHeight });
+      }
+    },
+    // Every transaction: selection moves, and style changes (also stored marks of an empty selection).
+    onTransaction: ({ editor }) => publish(editor, fallback),
+  });
+
+  // useEditor may create the editor more than once (React StrictMode): track the live instance.
+  useEffect(() => {
+    if (!editor) return;
+    session.editor = editor;
+    editor.commands.focus("end");
+    if (editor.isEmpty) editor.commands.updateRuns(() => fallback); // typed text gets the box style
+    publish(editor, fallback);
+    return () => { if (session.editor === editor) session.editor = null; };
+  }, [editor, fallback]);
 
   useEffect(() => {
     boxFonts(editing.box).forEach((f) => { fontStore.load(f).catch(() => {}); });
-    const timer = setTimeout(() => {
-      const el = ref.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    }, 0);
-    const el = ref.current;
+    // A press outside the editor and the properties bar ends the session (before the press acts).
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (t && (wrap.current?.contains(t) || t.closest("[data-text-props]"))) return;
+      void commitOpenSession();
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    const el = wrap.current;
     return () => {
-      clearTimeout(timer);
+      document.removeEventListener("pointerdown", onDown, true);
       // Unmounted while still editing (page scrolled out of range, page deleted): commit, don't lose the text.
       // Checked after a tick so StrictMode's dev-only effect replay (node stays mounted) doesn't commit.
       setTimeout(() => {
         if (el?.isConnected) return;
-        if (textEditStore.getState().editing?.id === editingId) void commitEditing(textRef.current);
+        if (textEditStore.getState().editing?.id === editingId) void commitOpenSession();
       }, 0);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingId]);
 
-  // Grow with the content (wrapped lines included).
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  });
-
-  const { box } = editing;
-  const run = box.paragraphs[0][0];
   const [left, top] = toScreen([box.rect.x, box.rect.y], geom, scale);
-
   return (
-    <textarea
-      ref={ref}
-      data-testid="text-editor"
-      value={text}
-      rows={1}
-      onChange={(e) => { setText(e.target.value); textRef.current = e.target.value; }}
-      onBlur={(e) => {
-        if (document.activeElement === e.currentTarget) return; // window lost focus; keep editing
-        void commitEditing(textRef.current);
-      }}
+    <div
+      ref={wrap}
       onKeyDown={(e) => {
-        if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) { e.preventDefault(); ref.current?.blur(); }
+        if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) { e.preventDefault(); void commitOpenSession(); }
         e.stopPropagation();
       }}
       onPointerDown={(e) => e.stopPropagation()}
-      spellCheck={false}
       style={{
         position: "absolute", left, top, zIndex: 10,
-        width: box.rect.w * scale,
-        minHeight: box.lineHeight * scale,
+        // +1 pt: the browser measures unquantized advances, slightly wider than the layout's.
+        width: (box.rect.w + 1) * scale, minHeight: box.lineHeight * scale,
         transform: `rotate(${geom.rotation}deg)`, transformOrigin: "top left",
-        fontFamily: `"${cssFamily(run.font)}"`, fontSize: run.size * scale,
-        lineHeight: `${box.lineHeight * scale}px`, color: run.color, textAlign: box.align ?? "left",
+        ["--edith-scale" as string]: scale,
+        fontFamily: `"${cssFamily(fallback.font)}"`, fontSize: fallback.size * scale, color: fallback.color,
+        lineHeight: `${box.lineHeight * scale}px`, textAlign: box.align ?? "left",
         fontKerning: "none", fontVariantLigatures: "none", letterSpacing: 0,
-        padding: 0, margin: 0, border: 0, outline: "1px dashed #0f766e", background: "rgba(255,255,255,0.85)",
-        resize: "none", overflow: "hidden", whiteSpace: "pre-wrap", overflowWrap: "break-word", boxSizing: "content-box",
+        whiteSpace: "pre-wrap", overflowWrap: "break-word",
+        outline: "1px dashed #0f766e", background: editing.kind === "text.edit" ? "#ffffff" : "rgba(255,255,255,0.85)",
       }}
-    />
+    >
+      <EditorContent editor={editor} />
+    </div>
   );
 }

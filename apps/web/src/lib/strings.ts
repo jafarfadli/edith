@@ -62,6 +62,16 @@ export const t = {
     black: "Hitam",
     white: "Putih",
   },
+  text: {
+    underline: "Garis bawah",
+    strike: "Coret",
+    background: "Latar",
+    noBackground: "Tanpa latar",
+    alignJustify: "Rata kiri-kanan",
+    originalFont: (name: string) => `${name} (asli)`,
+    revert: "Kembalikan teks asli",
+    scanned: "Halaman ini berupa gambar; OCR belum tersedia",
+  },
   errors: {
     generic: "Terjadi kesalahan. Coba lagi.",
     pdf_corrupt: "File ini bukan PDF yang valid atau rusak.",

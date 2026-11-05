@@ -2,7 +2,7 @@
 
 import type { ContentOp } from "@edith/ops";
 import { useStore } from "zustand";
-import { inkWidth } from "@/lib/objects";
+import { inkWidth, isTextOp } from "@/lib/objects";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor, type ToolStyle } from "@/store/editor";
 import { ColorField } from "./ColorField";
@@ -17,7 +17,7 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
     if (op.type === "shape.add") return (op as { kind: string }).kind === "line" || (op as { kind: string }).kind === "arrow" ? "line" : "shape";
     if (op.type === "ink.add") return "ink";
     if (op.type === "redact.add") return "redact";
-    if (op.type === "text.add") return "text";
+    if (isTextOp(op)) return "text";
     return null;
   }
   if (tool === "rect" || tool === "ellipse") return "shape";
@@ -94,8 +94,9 @@ export function PropertiesBar() {
       {kind === "text" && textPropsSlot.render?.()}
       <div className="flex-1" />
       {selection && (
-        <button onClick={() => s.deleteObject(selection)} aria-label={t.editor.delete} className="rounded-md px-2 py-1 text-danger hover:bg-danger/10">
-          🗑 {t.editor.delete}
+        // Deleting a text.edit op brings the original paragraph back.
+        <button onClick={() => s.deleteObject(selection)} aria-label={op?.type === "text.edit" ? t.text.revert : t.editor.delete} className="rounded-md px-2 py-1 text-danger hover:bg-danger/10">
+          🗑 {op?.type === "text.edit" ? t.text.revert : t.editor.delete}
         </button>
       )}
     </div>

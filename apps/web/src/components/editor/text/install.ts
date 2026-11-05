@@ -1,8 +1,8 @@
 "use client";
 
 import { createElement } from "react";
-import type { TextAdd } from "@edith/ops";
 import { fontStore } from "@/lib/fonts";
+import { isTextOp } from "@/lib/objects";
 import { relayout } from "@/lib/textbox";
 import { editorStore } from "@/store/editor";
 import { overlayHooks } from "../PageOverlay";
@@ -20,9 +20,11 @@ export function installTextTool(): void {
   overlayHooks.onTextPointerDown = startTextAt;
 
   overlayHooks.onDoubleClick = (op) => {
-    if (op.type !== "text.add") return;
-    editorStore.getState().select(null); // hide the transformer while the HTML editor is on top
-    textEditStore.getState().start({ id: op.id, pageKey: op.pageKey, box: (op as TextAdd).box, isNew: false });
+    if (!isTextOp(op)) return;
+    editorStore.getState().select(null); // hide the transformer while the rich editor is on top
+    textEditStore.getState().start(op.type === "text.edit"
+      ? { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.edit", paragraphId: op.paragraphId }
+      : { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.add" });
   };
 
   overlayHooks.renderText = (op) =>

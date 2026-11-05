@@ -1,31 +1,71 @@
 "use client";
 
 import { createStore } from "zustand/vanilla";
-import type { TextAdd, TextBox } from "@edith/ops";
+import type { Editor } from "@tiptap/core";
+import type { ContentOp, Run, TextBox } from "@edith/ops";
 import { fontStore } from "@/lib/fonts";
-import { boxFonts, newBox, relayout, withText } from "@/lib/textbox";
 import { newId } from "@/lib/id";
+import { prepareRuns, resolveRunFonts } from "@/lib/paragraphs";
+import { attrsOf, type RunAttrs } from "@/lib/richtext";
+import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
+import { boxFonts, newBox, relayout } from "@/lib/textbox";
 import { editorStore } from "@/store/editor";
+import { textStore } from "@/store/text";
 
 type Pt = [number, number];
 
-export interface Editing { id: string; pageKey: string; box: TextBox; isNew: boolean }
+/** An open rich-text session: a text box being added/edited, or an original paragraph being rewritten. */
+export interface Editing {
+  id: string; pageKey: string; box: TextBox; isNew: boolean;
+  kind: "text.add" | "text.edit";
+  paragraphId?: string;
+  /** Paragraphs the session started with (a new text.edit that ends unchanged adds nothing). */
+  initial?: Run[][];
+}
 
-interface TextEditState { editing: Editing | null; start(e: Editing): void; update(box: TextBox): void; finish(): void }
+interface TextEditState {
+  editing: Editing | null;
+  /** Style at the rich editor's selection, for the properties bar. */
+  current: RunAttrs | null;
+  /** Selected original paragraph (select tool; not an op yet — Task 13). */
+  paragraph: { pageKey: string; id: string } | null;
+  start(e: Editing): void;
+  update(box: TextBox): void;
+  finish(): void;
+  setCurrent(a: RunAttrs | null): void;
+  selectParagraph(p: { pageKey: string; id: string } | null): void;
+}
+
+/** The live rich editor of the open session (a mutable Tiptap object, so not in the store) and its
+ *  content as runs, kept current on every change (still readable after the editor unmounted). */
+export const session: { editor: Editor | null; paragraphs: Run[][] | null } = { editor: null, paragraphs: null };
 
 export const textEditStore = createStore<TextEditState>()((set, get) => ({
-  editing: null,
-  start: (editing) => set({ editing }),
+  editing: null, current: null, paragraph: null,
+  start: (editing) => {
+    session.paragraphs = editing.box.paragraphs;
+    set({ editing, current: attrsOf(editing.box.paragraphs[0][0]), paragraph: null });
+  },
   update: (box) => { const e = get().editing; if (e) set({ editing: { ...e, box } }); },
-  finish: () => set({ editing: null }),
+  finish: () => set({ editing: null, current: null }),
+  setCurrent: (current) => set({ current }),
+  selectParagraph: (paragraph) => set({ paragraph }),
 }));
 
-/** True when every font of `box` is already loaded (metrics available synchronously). */
+/** True when every font of `box` is loaded (metrics available synchronously). */
 export function fontsReady(box: TextBox): boolean {
   return boxFonts(box).every((f) => fontStore.peek(f) !== null);
 }
 
-/** The commit that is waiting for its fonts (the text box is not in the document yet). */
+/** Line height of a text box (`text.add`): 1.2 × its largest run size (runs with text; all runs when empty). */
+export function boxLineHeight(paragraphs: Run[][]): number {
+  const all = paragraphs.flat();
+  const withText = all.filter((r) => r.text);
+  const size = Math.max(...(withText.length ? withText : all).map((r) => r.size));
+  return Math.round(size * 1.2 * 100) / 100;
+}
+
+/** The commit that is waiting for its fonts (the text is not in the document yet). */
 let pendingCommit: Promise<void> | null = null;
 
 /** Resolves once no text commit is in flight; immediately when none is. */
@@ -39,53 +79,74 @@ export function afterTextCommitted(action: () => void): void {
   else action();
 }
 
-/** Start a new text box at `at`; ignored while an editor is open or a commit is still landing. */
+/** Start a new text box at `at` (text tool); ignored while a session is open or a commit is landing. */
 export function startTextAt(pageKey: string, at: Pt): void {
-  if (textEditStore.getState().editing || pendingCommit) return;
-  const st = editorStore.getState().style;
-  const box = newBox(at, { family: st.fontFamily, bold: st.bold, italic: st.italic, size: st.fontSize, color: st.color, align: st.align });
-  textEditStore.getState().start({ id: newId(), pageKey, box, isNew: true });
+  const st = editorStore.getState();
+  if (textEditStore.getState().editing || pendingCommit || st.tool !== "text") return;
+  const s = st.style;
+  const box = newBox(at, { family: s.fontFamily, bold: s.bold, italic: s.italic, size: s.fontSize, color: s.color, align: s.align });
+  textEditStore.getState().start({ id: newId(), pageKey, box, isNew: true, kind: "text.add" });
 }
 
-export function commitEditing(text: string): Promise<void> {
+/** Commits the open session with the rich editor's current content. */
+export function commitOpenSession(): Promise<void> {
+  const e = textEditStore.getState().editing;
+  if (!e) return Promise.resolve();
+  return commitEditing(session.paragraphs ?? e.box.paragraphs);
+}
+
+export function commitEditing(paragraphs: Run[][]): Promise<void> {
   const e = textEditStore.getState().editing;
   if (!e) return Promise.resolve();
   textEditStore.getState().finish();
   const s = editorStore.getState();
-  if (!text.trim()) {
+  const blank = paragraphs.every((p) => !runsText(p).trim());
+  if (blank && e.kind === "text.add") {
     if (!e.isNew) s.deleteObject(e.id);
     return Promise.resolve();
   }
-  const withNewText = withText(e.box, text);
-  if (fontsReady(withNewText)) {
-    land(e, withNewText);
+  const normalized = paragraphs.map(normalizeRuns);
+  // A text box's line spacing follows its sizes; an original paragraph keeps its own.
+  const draft: TextBox = { ...e.box, paragraphs: normalized, ...(e.kind === "text.add" ? { lineHeight: boxLineHeight(normalized) } : {}) };
+  if (e.isNew && e.initial && paragraphsEqual(draft.paragraphs, e.initial)) return Promise.resolve(); // opened, not changed
+  const fonts = textStore.getState().fonts;
+  // Fast path: every font (after fallback) already loaded → land synchronously.
+  let ready: TextBox | null = draft;
+  for (let step = 0; step < 2 && ready; step++) {
+    ready = fontsReady(ready) ? { ...ready, paragraphs: ready.paragraphs.map((p) => resolveRunFonts(p, fonts, (f) => fontStore.peek(f))) } : null;
+  }
+  if (ready && fontsReady(ready)) {
+    land(e, relayout(ready, (f) => fontStore.get(f)));
     return Promise.resolve();
   }
   const p: Promise<void> = (async () => {
+    let runs: Run[][];
     try {
-      await Promise.all(boxFonts(withNewText).map((f) => fontStore.load(f)));
+      runs = await prepareRuns(draft.paragraphs, fonts);
     } catch (err) {
       console.warn("text commit: font load failed", err);
-      textEditStore.getState().start({ ...e, box: withNewText }); // keep the text editable instead of losing it
+      textEditStore.getState().start({ ...e, box: draft }); // keep the text editable instead of losing it
       return;
     }
-    land(e, withNewText);
+    land(e, relayout({ ...draft, paragraphs: runs }, (f) => fontStore.get(f)));
   })().finally(() => { if (pendingCommit === p) pendingCommit = null; });
   pendingCommit = p;
   return p;
 }
 
-function land(e: Editing, withNewText: TextBox): void {
-  const box = relayout(withNewText, (f) => fontStore.get(f));
+function land(e: Editing, box: TextBox): void {
   const st = editorStore.getState();
+  const op = (e.kind === "text.edit"
+    ? { id: e.id, type: "text.edit", pageKey: e.pageKey, paragraphId: e.paragraphId!, box }
+    : { id: e.id, type: "text.add", pageKey: e.pageKey, box }) as ContentOp;
   if (e.isNew) {
-    st.addObject({ id: e.id, type: "text.add", pageKey: e.pageKey, box } as TextAdd);
+    st.addObject(op);
   } else {
-    const cur = st.doc.objects[e.id] as TextAdd | undefined;
+    const cur = st.doc.objects[e.id] as { box: TextBox } | undefined;
     if (!cur) return; // deleted meanwhile (e.g. undo)
-    if (JSON.stringify(cur.box) !== JSON.stringify(box)) st.updateObject(e.id, { box } as Partial<TextAdd>);
+    if (JSON.stringify(cur.box) !== JSON.stringify(box)) st.updateObject(e.id, { box } as Partial<ContentOp>);
   }
-  // Another editing session started while the fonts loaded: leave tool/selection to it.
+  // Another session started while the fonts loaded: leave tool/selection to it.
   if (textEditStore.getState().editing) return;
   // Selection is null while editing; if the click that ended editing selected another object, keep that one.
   const clickedOther = st.selection !== null && st.selection !== e.id;
