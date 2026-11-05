@@ -13,3 +13,4 @@ playwright-report/
 .DS_Store
 apps/web/public/pdf.worker.min.mjs
 .playwright-mcp/
+apps/web/AGENTS.md

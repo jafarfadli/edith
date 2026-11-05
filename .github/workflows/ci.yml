@@ -13,4 +13,5 @@ jobs:
       - run: npm run check -w packages/ops
       - run: npm test -w apps/web
       - run: npx tsc --noEmit -p apps/web
+      - run: npm run lint -w apps/web
       - run: npx playwright install --with-deps chromium && npm run e2e -w apps/web

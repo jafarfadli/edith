@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated / copied at build time (pdf.js worker, synced fonts) and Playwright output:
+    "public/**",
+    "test-results/**",
+    "playwright-report/**",
   ]),
 ]);
 
