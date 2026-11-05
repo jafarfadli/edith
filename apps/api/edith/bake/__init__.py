@@ -8,8 +8,8 @@ from edith.bake.registry import HANDLERS, PHASE
 from edith.errors import BakeFailed, EdithError, InvalidOp
 from edith.ops import DocSrc, LayoutPage, PagesLayout
 
-# Handler modules register themselves on import (added by later tasks):
-# from edith.bake import draw, text  # noqa: F401
+# Handler modules register themselves on import (later tasks add more, e.g. text):
+from edith.bake import draw  # noqa: F401,E402  (registers handlers)
 
 
 def _default_layout(page_count: int, doc_id: str) -> PagesLayout:
