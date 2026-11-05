@@ -215,3 +215,5 @@ git commit -m "test(e2e): edit an original paragraph, find and replace, verify t
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+**Added by controller (Task 6 review):** in the E2E, also assert via pdf.js `getTextContent` that a space in text baked with Tinos reads back as U+0020 (not U+00A0) in the downloaded PDF.
