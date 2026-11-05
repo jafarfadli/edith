@@ -6,7 +6,7 @@ import pymupdf
 from edith.bake.registry import register
 from edith.bake.tounicode import fix_to_unicode
 from edith.bake.util import rgb
-from edith.ops import Run, TextAdd, TextBox
+from edith.ops import Run, TextAdd, TextBox, TextEdit
 
 # Decoration geometry, in multiples of the run's font size relative to the baseline (y grows down).
 # Shared contract with apps/web/src/lib/textDecor.ts — change both together.
@@ -14,6 +14,9 @@ BG_ASCENT, BG_DESCENT = 0.9, 0.25      # background: baseline − 0.9·size … 
 UNDERLINE_TOP = 0.075                  # underline: baseline + 0.075·size, thickness 0.06·size
 STRIKE_TOP = -0.3                      # strike: baseline − 0.3·size, thickness 0.06·size
 DECOR_THICKNESS = 0.06
+# text.edit redaction: a 1 pt band this far above each original baseline (× size) hits every glyph
+# of the line but not the lines above/below (MuPDF removes glyphs whose box touches the redaction).
+REDACT_BAND = 0.3
 
 
 def writer_origin(page: pymupdf.Page, point: tuple[float, float]) -> pymupdf.Point:
@@ -89,4 +92,27 @@ def draw_text_box(page: pymupdf.Page, box: TextBox, ctx) -> None:
 
 @register("text.add")
 def text_add(page: pymupdf.Page, op: TextAdd, ctx) -> None:
+    draw_text_box(page, op.box, ctx)
+
+
+def redaction_rects(paragraph: dict) -> list[pymupdf.Rect]:
+    """One thin band per original line of `paragraph` (see REDACT_BAND)."""
+    out = []
+    for line in paragraph["lines"]:
+        r = line["rect"]
+        y = line["baseline"] - REDACT_BAND * line["size"]
+        inset = 0.5 if r["w"] > 2 else 0
+        out.append(pymupdf.Rect(r["x"] + inset, y - 0.5, r["x"] + r["w"] - inset, y + 0.5))
+    return out
+
+
+@register("text.edit", phase="redact_text")
+def text_edit_redact(page: pymupdf.Page, op: TextEdit, ctx) -> None:
+    paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
+    for rect in redaction_rects(paragraph):
+        page.add_redact_annot(rect, fill=False)  # fill=False: paint nothing over what stays
+
+
+@register("text.edit")
+def text_edit(page: pymupdf.Page, op: TextEdit, ctx) -> None:
     draw_text_box(page, op.box, ctx)

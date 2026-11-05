@@ -5,13 +5,20 @@ import pymupdf
 
 from edith.bake.context import BakeContext
 from edith.bake.pages import build_pages
-from edith.bake.registry import HANDLERS, PHASE
+from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
 from edith.bake.source import SourcePages
 from edith.errors import BakeFailed, EdithError, InvalidOp
 from edith.ops import DocSrc, LayoutPage, PagesLayout
 
 # Handler modules register themselves on import (later tasks add more, e.g. text):
 from edith.bake import draw, text  # noqa: F401,E402  (registers handlers)
+
+# text.edit removes only the glyphs of the edited lines; images and vector art stay.
+TEXT_ONLY = dict(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
+                 text=pymupdf.PDF_REDACT_TEXT_REMOVE)
+# redact.add removes everything under the box.
+EVERYTHING = dict(images=pymupdf.PDF_REDACT_IMAGE_PIXELS, graphics=pymupdf.PDF_REDACT_LINE_ART_REMOVE_IF_TOUCHED,
+                  text=pymupdf.PDF_REDACT_TEXT_REMOVE)
 
 
 def _default_layout(page_count: int, doc_id: str) -> PagesLayout:
@@ -54,6 +61,8 @@ def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
                 raise InvalidOp(f"unknown pageKey {op.pageKey}", op_index=i)
             if op.type not in HANDLERS:
                 raise BakeFailed(f"no handler for {op.type}", op_id=op.id)
+            if op.type == "text.edit" and pages_src.paragraph(op.pageKey, op.paragraphId) is None:
+                raise InvalidOp(f"no paragraph {op.paragraphId} on {op.pageKey}", op_index=i)
 
         key_to_index, base_rotation = build_pages(doc, layout, layout_index, ctx)
 
@@ -63,15 +72,14 @@ def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
 
         for page_index, page_ops in by_page.items():
             page = doc[page_index]
-            redactions = [op for op in page_ops if PHASE[op.type] == "redact"]
-            for op in redactions:
-                _run(HANDLERS[op.type], page, op, ctx)
-            if redactions:
-                page.apply_redactions(
-                    images=pymupdf.PDF_REDACT_IMAGE_PIXELS,
-                    graphics=pymupdf.PDF_REDACT_LINE_ART_REMOVE_IF_TOUCHED,
-                    text=pymupdf.PDF_REDACT_TEXT_REMOVE,
-                )
+            # Two passes: one apply_redactions() call has a single images/graphics mode.
+            redact_handlers = {t: HANDLERS[t] for t, phase in PHASE.items() if phase == "redact"}
+            for handlers, mode in ((TEXT_REDACTIONS, TEXT_ONLY), (redact_handlers, EVERYTHING)):
+                marked = [op for op in page_ops if op.type in handlers]
+                for op in marked:
+                    _run(handlers[op.type], page, op, ctx)
+                if marked:
+                    page.apply_redactions(**mode)
             for op in page_ops:
                 if PHASE[op.type] == "draw":
                     _run(HANDLERS[op.type], page, op, ctx)

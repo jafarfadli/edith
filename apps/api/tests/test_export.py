@@ -117,3 +117,18 @@ def test_render_page_respects_pixel_cap(client, monkeypatch):
     pix = pymupdf.Pixmap(r.content)
     assert pix.width * pix.height <= 100_000
     assert pix.width / pix.height == pytest.approx(595 / 842, rel=0.01)
+
+
+def test_export_text_edit(client):
+    from tests.pdfs import make_edit_pdf
+    doc_id = client.post("/documents", files={"file": ("e.pdf", make_edit_pdf(), "application/pdf")}).json()["doc_id"]
+    run = {"text": "Diganti", "font": {"kind": "bundled", "family": "Arimo"}, "size": 12, "color": "#000000"}
+    edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
+        "rect": R(72, 88, 300, 16), "lineHeight": 12, "paragraphs": [[run]],
+        "layout": [{"baseline": 12, "segments": [{"x": 0, "text": "Diganti", "runIndex": 0}]}]}}
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit]})
+    assert r.status_code == 200, r.text
+    text = pymupdf.open(stream=r.content, filetype="pdf")[0].get_text()
+    assert "Diganti" in text and "diedit" not in text and "tetangga" in text
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}]})
+    assert r.status_code == 422 and r.json()["error"] == {"code": "invalid_op", "message": "no paragraph g9 on o0", "op_index": 0}
