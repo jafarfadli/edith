@@ -75,12 +75,14 @@ test("edit an original paragraph, find & replace, download", async ({ page }) =>
   expect(text).toContain("baru");
   expect(text).toContain("penting");
 
+  // Raw PyMuPDF text: a bad ToUnicode would show here as U+00A0 (pdf.js hides it).
+  expect(pdfSpans(file, true)[0].map((s) => s.text).join("")).not.toContain("\u00a0");
   const spans = pdfSpans(file)[0];
   const bold = spans.find((s) => s.text.includes("penting"))!;
   expect(bold.font).toMatch(/Arimo.*Bold/);
   expect(bold.text.trim()).toBe("penting");
   expect(spans.find((s) => s.text.includes("Paragraf pertama"))!.font).toMatch(/Arimo/);
-  expect(spans.find((s) => s.text.includes("Paragraf kedua"))!.font).toMatch(/Tinos/);
+  expect(spans.find((s) => s.text.includes("Paragraf kedua"))!.font).toBe("EdithDoc-Regular");
 
   // Unchanged text keeps its lines: every original line still starts at the same place with the same word.
   for (const s of pdfSpans(TEXT_PDF)[0]) {
