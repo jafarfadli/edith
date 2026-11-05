@@ -1,18 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import type { LinkAdd } from "@edith/ops";
 import { toScreen, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
 import type { LinkTarget } from "@/lib/links";
 import { t } from "@/lib/strings";
-import { editorStore } from "@/store/editor";
+import { editorStore, useEditor } from "@/store/editor";
 import { LinkTargetFields } from "./LinkTargetFields";
 import { linkStore } from "./linkStore";
 
 /** Asks for the target of the link area just drawn on this page; saving adds the link.add op. */
 export function LinkPopover({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
+  const pending = useStore(linkStore, (s) => s.pending);
+  const tool = useEditor((s) => s.tool);
+  // Choosing another tool abandons the area (it opens with Pilih active).
+  useEffect(() => { if (pending && tool !== "select") linkStore.getState().close(); }, [pending, tool]);
+  if (!pending || pending.pageKey !== pageKey) return null;
+  return <PopoverBody key={`${pending.rect.x},${pending.rect.y},${pending.rect.w},${pending.rect.h}`} pageKey={pageKey} geom={geom} scale={scale} />;
+}
+
+function PopoverBody({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const pending = useStore(linkStore, (s) => s.pending);
   const [target, setTarget] = useState<LinkTarget | null>(null);
   if (!pending || pending.pageKey !== pageKey) return null;
@@ -37,7 +46,9 @@ export function LinkPopover({ pageKey, geom, scale }: { pageKey: string; geom: P
       onKeyDown={(e) => {
         e.stopPropagation(); // typing here is not an editor shortcut
         if (e.key === "Escape") close();
-        if (e.key === "Enter") { e.preventDefault(); save(); }
+        // Enter saves from the URL field / page select only: on a button or radio it keeps its own meaning.
+        const el = e.target as HTMLElement;
+        if (e.key === "Enter" && (el.tagName === "INPUT" || el.tagName === "SELECT")) { e.preventDefault(); save(); }
       }}
       className="absolute z-20 flex flex-col gap-2 rounded-lg bg-surface p-3 shadow-lg ring-1 ring-line" style={{ left, top }}>
       <span className="text-sm font-medium">{t.link.title}</span>

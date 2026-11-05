@@ -1,6 +1,7 @@
 "use client";
 
 import type { ContentOp } from "@edith/ops";
+import { useEffect, useRef } from "react";
 import { useStore } from "zustand";
 import { inkWidth, isMarkup, isTextOp, MARKUP_TOOLS } from "@/lib/objects";
 import { t } from "@/lib/strings";
@@ -9,6 +10,7 @@ import { editorStore, useEditor, type MarkupTool, type ToolStyle } from "@/store
 import type { LinkTarget } from "@/lib/links";
 import { ColorField } from "./ColorField";
 import { LinkTargetFields } from "./marks/LinkTargetFields";
+import { linkStore } from "./marks/linkStore";
 import { textEditStore } from "./text/textEdit";
 
 export const textPropsSlot: { render?: () => React.ReactNode } = {};
@@ -57,6 +59,15 @@ export function PropertiesBar() {
   });
   const currentLines = useChars((cs) => cs.pages[currentSrc]);
   const noText = MARKUP_TOOLS.has(tool) && Array.isArray(currentLines) && currentLines.length === 0;
+  const noteField = useRef<HTMLTextAreaElement>(null);
+  const focusNote = useStore(linkStore, (st) => st.focusNote);
+  // Only a note just created takes focus; selecting an existing note must leave Delete/Backspace to the editor.
+  useEffect(() => {
+    if (focusNote && focusNote === selection && noteField.current) {
+      noteField.current.focus();
+      linkStore.getState().setFocusNote(null);
+    }
+  }, [focusNote, selection]);
   const o = op as (ContentOp & Record<string, unknown>) | undefined;
   const s = editorStore.getState();
 
@@ -129,7 +140,7 @@ export function PropertiesBar() {
       {kind === "symbol" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.symbolColor} onChange={setColor} />}
       {kind === "note" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.noteColor} onChange={setColor} />}
       {kind === "note" && o && (
-        <textarea key={o.id} aria-label={t.annot.noteContent} placeholder={t.annot.noteContent} autoFocus rows={1}
+        <textarea key={o.id} aria-label={t.annot.noteContent} placeholder={t.annot.noteContent} ref={noteField} rows={1}
           value={(o.content as string | null | undefined) ?? ""}
           onChange={(e) => s.updateObject(o.id, { content: e.target.value } as Partial<ContentOp>, { coalesce: `note:${o.id}` })}
           className="h-8 w-80 resize-none rounded border border-line px-1.5 py-1 text-ink" />

@@ -167,7 +167,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       const note = noteAt(at, s.style, pageKey, newId(), geom);
       s.addObject(note);
       s.setTool("select");
-      s.select(note.id); // the properties bar shows its text field
+      s.select(note.id);
+      linkStore.getState().setFocusNote(note.id); // the properties bar shows its text field
     } else if (tool === "link" || DRAG_TOOLS.has(tool)) {
       beginDraw(at, null);
     } else if (tool === "ink") {

@@ -28,7 +28,7 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       const k = e.key.toLowerCase();
       if (mod && k === "z" && !e.shiftKey) { e.preventDefault(); afterTextCommitted(() => editorStore.getState().undo()); }
       else if ((mod && k === "z" && e.shiftKey) || (e.ctrlKey && k === "y")) { e.preventDefault(); afterTextCommitted(() => editorStore.getState().redo()); }
-      else if (mod && k === "k") { e.preventDefault(); s.setTool("link"); }
+      else if (mod && k === "k" && !e.shiftKey && !e.altKey) { e.preventDefault(); s.setTool("link"); }
       else if ((e.key === "Delete" || e.key === "Backspace") && s.selection) { e.preventDefault(); s.deleteObject(s.selection); }
       else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); linkStore.getState().close(); }
     }
