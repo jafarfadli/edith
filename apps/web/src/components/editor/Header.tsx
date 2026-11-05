@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import type { Op } from "@edith/ops";
 import { ApiError, exportPdf } from "@/lib/api";
-import { compact } from "@/lib/compact";
+import { compact, failedOpId } from "@/lib/compact";
 import { downloadBlob } from "@/lib/download";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
@@ -18,17 +19,21 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
     if (!editorStore.getState().info) return;
     setBusy(true);
     let s = editorStore.getState();
+    let sent: Op[] = [];
     try {
       await whenTextCommitted(); // a text box whose fonts were still loading must be in the document first
       s = editorStore.getState();
       if (!s.info) return;
-      const blob = await exportPdf(s.info.docId, { ops: compact(s.doc), flatten_forms: false, filename: fileName });
+      sent = compact(s.doc);
+      const blob = await exportPdf(s.info.docId, { ops: sent, flatten_forms: false, filename: fileName });
       downloadBlob(blob, fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`);
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError("generic", 0);
-      if (err.code === "bake_failed" && typeof err.extra.op_id === "string") {
+      if (err.code === "bake_failed" || err.code === "invalid_op") console.warn(`export ${err.code}:`, err.extra.message);
+      const failed = failedOpId(err.code, err.extra, sent);
+      if (failed && s.doc.objects[failed]) {
         s.setTool("select");
-        s.select(err.extra.op_id);
+        s.select(failed);
       }
       onNotice({ kind: "error", text: errorMessage(err.code) });
     } finally {

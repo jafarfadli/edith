@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
-import { compact } from "@/lib/compact";
+import { compact, failedOpId } from "@/lib/compact";
 import type { EditorDoc } from "@/store/editor";
 
 const op = (id: string, pageKey: string): ContentOp =>
@@ -19,5 +19,18 @@ describe("compact", () => {
     const ops = compact(doc);
     expect(ops[0]).toEqual({ id: "layout", type: "pages.layout", pages: doc.pages });
     expect(ops.slice(1).map((o) => o.id)).toEqual(["c", "a"]);
+  });
+});
+
+describe("failedOpId", () => {
+  const sent = [{ id: "layout" }, { id: "a" }, { id: "b" }] as never[];
+  it("maps bake_failed op_id and invalid_op op_index to the op", () => {
+    expect(failedOpId("bake_failed", { op_id: "b" }, sent)).toBe("b");
+    expect(failedOpId("invalid_op", { op_index: 1 }, sent)).toBe("a");
+  });
+  it("ignores missing or out-of-range details", () => {
+    expect(failedOpId("invalid_op", { op_index: 9 }, sent)).toBeUndefined();
+    expect(failedOpId("invalid_op", {}, sent)).toBeUndefined();
+    expect(failedOpId("network", { op_index: 1 }, sent)).toBeUndefined();
   });
 });
