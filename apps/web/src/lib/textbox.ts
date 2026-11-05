@@ -1,7 +1,8 @@
 import type { FontRef, Run, TextBox } from "@edith/ops";
 import type { FontMetrics } from "@/lib/fonts";
-import { fontKey, isOriginal } from "@/lib/fonts";
+import { fontKey } from "@/lib/fonts";
 import { layoutText } from "@/lib/layout";
+import { applyPatch, attrsOf, runOf, type FontTable, type StylePatch } from "@/lib/richtext";
 
 export const DEFAULT_BOX_WIDTH = 200;
 export interface TextStyle { family: string; bold: boolean; italic: boolean; size: number; color: string; align: "left" | "center" | "right" | "justify" }
@@ -30,20 +31,11 @@ export function withText(box: TextBox, text: string): TextBox {
   return { ...box, paragraphs };
 }
 
-/** `font` with the family/bold/italic of `patch` applied; an original font becomes a bundled one only when the patch touches those. */
-function restyle(font: FontRef, patch: Partial<TextStyle>): FontRef {
-  if (patch.family === undefined && patch.bold === undefined && patch.italic === undefined) return font;
-  const base = isOriginal(font) ? { family: patch.family ?? "Arimo", bold: false, italic: false } : font;
-  return { kind: "bundled", family: patch.family ?? base.family, bold: patch.bold ?? base.bold ?? false, italic: patch.italic ?? base.italic ?? false };
-}
+export type BoxPatch = StylePatch & { align?: TextBox["align"] };
 
-export function withStyle(box: TextBox, patch: Partial<TextStyle>): TextBox {
-  const paragraphs = box.paragraphs.map((p) => p.map((r) => ({
-    ...r,
-    size: patch.size ?? r.size,
-    color: patch.color ?? r.color,
-    font: restyle(r.font, patch),
-  })));
+/** `patch` applied to every run (and the box alignment); a size change resets the line height to 1.2 × size. */
+export function withStyle(box: TextBox, patch: BoxPatch, fonts: FontTable = {}): TextBox {
+  const paragraphs = box.paragraphs.map((p) => p.map((r) => runOf(r.text, applyPatch(attrsOf(r), patch, fonts))));
   return {
     ...box,
     paragraphs,
