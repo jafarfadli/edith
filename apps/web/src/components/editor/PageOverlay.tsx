@@ -21,6 +21,8 @@ export const overlayHooks: {
   onDoubleClick?: (op: ContentOp) => void;
   /** Konva nodes drawn under the page's objects (original paragraphs). */
   renderUnder?: (pageKey: string) => React.ReactNode;
+  /** Konva nodes drawn over the page's objects (search highlights). */
+  renderOver?: (pageKey: string) => React.ReactNode;
 } = {};
 
 export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
@@ -183,6 +185,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
               </Group>
             ))}
             {draft && <ObjectShape op={draft} docId={docId} />}
+            {overlayHooks.renderOver?.(pageKey)}
           </Group>
           <Transformer
             ref={trRef}

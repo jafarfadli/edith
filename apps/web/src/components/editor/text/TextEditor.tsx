@@ -12,6 +12,7 @@ import { toScreen, type PageGeom } from "@/lib/coords";
 import { cssFamily, fontKey, fontStore } from "@/lib/fonts";
 import { attrsOf, docToRuns, runsToDoc, type RunAttrs } from "@/lib/richtext";
 import { boxFonts, boxLineHeight } from "@/lib/textbox";
+import { isFindKey } from "../useShortcuts";
 import { createRunMark } from "./runMark";
 import { commitOpenSession, session, textEditStore, type Editing } from "./textEdit";
 
@@ -103,6 +104,7 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
       ref={wrap}
       onKeyDown={(e) => {
         if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) { e.preventDefault(); void commitOpenSession(); }
+        if (isFindKey(e)) return; // Ctrl/Cmd+F reaches the window shortcut (opens Find)
         e.stopPropagation();
       }}
       onPointerDown={(e) => e.stopPropagation()}

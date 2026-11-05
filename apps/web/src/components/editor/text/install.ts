@@ -5,6 +5,7 @@ import { fontStore } from "@/lib/fonts";
 import { isTextOp } from "@/lib/objects";
 import { relayout } from "@/lib/textbox";
 import { editorStore } from "@/store/editor";
+import { MatchHighlights } from "../find/MatchHighlights";
 import { overlayHooks } from "../PageOverlay";
 import { textPropsSlot } from "../PropertiesBar";
 import { ParagraphLayer } from "./ParagraphLayer";
@@ -38,6 +39,7 @@ export function installTextTool(): void {
   };
 
   overlayHooks.renderUnder = (pageKey) => createElement(ParagraphLayer, { pageKey });
+  overlayHooks.renderOver = (pageKey) => createElement(MatchHighlights, { pageKey });
 
   textPropsSlot.render = () => createElement(TextProps);
 }

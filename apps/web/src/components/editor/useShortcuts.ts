@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { editorStore } from "@/store/editor";
+import { openFind } from "./find/findStore";
 import { afterTextCommitted, textEditStore } from "./text/textEdit";
 
 export function isTyping(target: EventTarget | null): boolean {
@@ -10,9 +11,15 @@ export function isTyping(target: EventTarget | null): boolean {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable;
 }
 
+/** Ctrl/Cmd+F: opens Find, also from text fields and the rich editor. */
+export function isFindKey(e: { metaKey: boolean; ctrlKey: boolean; key: string }): boolean {
+  return (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f";
+}
+
 export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (isFindKey(e)) { e.preventDefault(); openFind(); return; } // before the typing check
       if (isTyping(e.target)) return;
       if (extra?.(e)) return;
       const s = editorStore.getState();

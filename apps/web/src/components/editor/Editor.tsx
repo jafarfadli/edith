@@ -31,6 +31,7 @@ const PageOverlay = dynamic(async () => {
   return import("./PageOverlay");
 }, { ssr: false });
 const TextEditor = dynamic(() => import("./text/TextEditor").then((m) => m.TextEditor), { ssr: false });
+const FindBar = dynamic(() => import("./find/FindBar").then((m) => m.FindBar), { ssr: false });
 
 const INFO_NOTICE_MS = 5000;
 
@@ -157,6 +158,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
           {info && pdf ? <PageList pdf={pdf} overlay={(a) => <><PageOverlay {...a} /><TextEditor {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
         </main>
       </div>
+      <FindBar />
       <ZoomPill />
       {notice && <Notice kind={notice.kind} onClose={() => setNotice(null)}>{notice.text}</Notice>}
     </div>
