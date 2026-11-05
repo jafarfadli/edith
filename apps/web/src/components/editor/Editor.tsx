@@ -32,6 +32,8 @@ const PageOverlay = dynamic(async () => {
 }, { ssr: false });
 const TextEditor = dynamic(() => import("./text/TextEditor").then((m) => m.TextEditor), { ssr: false });
 
+const INFO_NOTICE_MS = 5000;
+
 export function Editor({ docId, initialName }: { docId: string; initialName: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
@@ -92,6 +94,13 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     window.addEventListener("pagehide", onHide);
     return () => { window.removeEventListener("pagehide", onHide); unsub(); saver.flush(); };
   }, []);
+
+  // Info notices go away by themselves; errors stay until closed.
+  useEffect(() => {
+    if (notice?.kind !== "info") return;
+    const timer = setTimeout(() => setNotice((n) => (n === notice ? null : n)), INFO_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const nudge = useCallback((e: KeyboardEvent) => {
     const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
