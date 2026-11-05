@@ -1,7 +1,8 @@
 import pymupdf
 import pytest
 
-from tests.pdfs import make_cyclic_form_pdf, make_form_pdf, make_merged_form_pdf, make_pdf
+from tests.pdfs import (make_cyclic_first_form_pdf, make_cyclic_form_pdf, make_form_pdf, make_merged_form_pdf, make_pdf,
+                        make_same_name_form_pdf)
 from tests.test_documents import upload
 
 
@@ -156,3 +157,21 @@ def test_acroform_defaults_survive_export(client):
     assert out.xref_get_key(acro, "NeedAppearances")[1] == "true"
     assert out.xref_get_key(acro, "DA")[0] == "string"
     assert out.xref_get_key(acro, "DR")[0] in ("dict", "xref")
+
+
+def test_same_name_source_fields_are_left_alone(client):
+    doc_id = upload(client, make_same_name_form_pdf()).json()["doc_id"]
+    src = pymupdf.open(stream=make_same_name_form_pdf(), filetype="pdf")
+    out = export(client, doc_id, [])
+    shape = lambda d: [(w.field_name, w.field_type, w.field_value, w.field_flags) for p in d for w in p.widgets()]  # noqa: E731
+    assert shape(out) == shape(src)
+    assert [w.field_type for w in out[0].widgets()][:2] == [pymupdf.PDF_WIDGET_TYPE_TEXT, pymupdf.PDF_WIDGET_TYPE_CHECKBOX]
+    assert len(_fields_array(out)) == 4
+
+
+def test_healthy_widget_after_a_cyclic_one_is_listed(client):
+    doc_id = upload(client, make_cyclic_first_form_pdf()).json()["doc_id"]
+    fields = client.get(f"/documents/{doc_id}/structure").json()["fields"]
+    assert "ok" in [f["name"] for f in fields]
+    out = export(client, doc_id, [form_set("a", "ok", "baru")])
+    assert values(out)["ok"] == ["baru"]

@@ -36,20 +36,20 @@ def _value(w: pymupdf.Widget) -> str:
 
 
 def _safe_widgets(page: pymupdf.Page):
-    """Widgets of a page, skipping any that MuPDF cannot read (e.g. a /Parent cycle)."""
+    """Widgets of a page, each loaded on its own: one MuPDF cannot read (e.g. a /Parent cycle) is skipped."""
     try:
-        it = page.widgets()
-        while True:
-            try:
-                w = next(it)
-            except StopIteration:
-                return
-            except Exception as exc:  # noqa: BLE001
-                log.warning("skipping unreadable widget on page %s: %s", page.number, exc)
-                return
-            yield w
+        xrefs = [x for x, kind, *_ in page.annot_xrefs() if kind == pymupdf.PDF_ANNOT_WIDGET]
     except Exception as exc:  # noqa: BLE001
         log.warning("skipping unreadable widgets on page %s: %s", page.number, exc)
+        return
+    for xref in xrefs:
+        try:
+            w = page.load_widget(xref)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("skipping unreadable widget %s on page %s: %s", xref, page.number, exc)
+            continue
+        if w is not None:
+            yield w
 
 
 def _field_entry(w: pymupdf.Widget, page_number: int) -> dict | None:
@@ -85,6 +85,7 @@ def page_fields(page: pymupdf.Page) -> list[dict]:
 
 
 def extract_fields(doc: pymupdf.Document) -> list[dict]:
+    break_parent_cycles(doc)  # same view as the export (works on the caller's in-memory copy)
     out = []
     for page in doc:
         try:
@@ -154,36 +155,39 @@ def _root_field(doc: pymupdf.Document, xref: int) -> int:
 FIELD_KEYS = ("T", "TU", "TM", "FT", "Ff", "V", "DV", "Opt", "DA", "Q", "MaxLen", "I", "TI", "RV", "DS")
 
 
-def _merge_same_name(doc: pymupdf.Document, roots: list[int]) -> list[int]:
-    """Merged field/widget dictionaries (/T on the widget, no /Parent) that a duplicated page left with the
-    same name become one parent field whose /Kids are the widgets."""
-    groups: dict[str, list[int]] = {}
-    for x in roots:
-        kind, name = doc.xref_get_key(x, "T")
-        kind_sub, sub = doc.xref_get_key(x, "Subtype")
-        if kind == "string" and sub == "/Widget":
-            groups.setdefault(name, []).append(x)
-    merged = {}
-    for name, xs in groups.items():
-        if len(xs) < 2:
+def widget_xrefs(page: pymupdf.Page) -> list[int]:
+    return [x for x, kind, *_ in page.annot_xrefs() if kind == pymupdf.PDF_ANNOT_WIDGET]
+
+
+def _merge_copies(doc: pymupdf.Document, roots: list[int], copies: dict[int, int]) -> list[int]:
+    """`copies` maps a widget made by fullcopy_page in this bake to the widget it was copied from. When that
+    original is a merged field/widget dictionary (no /Parent), original and copies become the /Kids of one
+    new parent field that takes the field-level keys. Fields that merely share a name are left alone."""
+    by_orig: dict[int, list[int]] = {}
+    for copy, orig in copies.items():
+        by_orig.setdefault(orig, []).append(copy)
+    replaced: dict[int, int | None] = {}
+    for orig, dups in by_orig.items():
+        if doc.xref_get_key(orig, "Parent")[0] == "xref" or doc.xref_get_key(orig, "T")[0] != "string":
             continue
+        group = [orig, *dups]
         parent = doc.get_new_xref()
         doc.update_object(parent, "<<>>")
         for key in FIELD_KEYS:
-            kind, value = doc.xref_get_key(xs[0], key)
+            kind, value = doc.xref_get_key(orig, key)
             if kind != "null":
                 doc.xref_set_key(parent, key, pymupdf.get_pdf_str(value) if kind == "string" else value)
-        for x in xs:
+        for x in group:
             for key in FIELD_KEYS:
                 doc.xref_set_key(x, key, "null")
             doc.xref_set_key(x, "Parent", f"{parent} 0 R")
-        doc.xref_set_key(parent, "Kids", "[" + " ".join(f"{x} 0 R" for x in xs) + "]")
-        merged[xs[0]] = parent
-        merged.update({x: None for x in xs[1:]})
-    return [merged.get(x, x) for x in roots if merged.get(x, x) is not None]
+        doc.xref_set_key(parent, "Kids", "[" + " ".join(f"{x} 0 R" for x in group) + "]")
+        replaced[orig] = parent
+        replaced.update({x: None for x in dups})
+    return [replaced.get(x, x) for x in roots if replaced.get(x, x) is not None]
 
 
-def _break_parent_cycles(doc: pymupdf.Document) -> None:
+def break_parent_cycles(doc: pymupdf.Document) -> None:
     """MuPDF's page rebuild fails on a /Parent cycle: cut the loop at the widget (it becomes standalone)."""
     for page in doc:
         for xref, *_ in page.annot_xrefs():
@@ -203,7 +207,7 @@ def _break_parent_cycles(doc: pymupdf.Document) -> None:
 def detach_acroform(doc: pymupdf.Document) -> int | None:
     """The xref of the document's AcroForm dictionary (made indirect when inline), before
     Document.select() — which drops /AcroForm from the catalog (PyMuPDF 2.1)."""
-    _break_parent_cycles(doc)
+    break_parent_cycles(doc)
     kind, value = doc.xref_get_key(doc.pdf_catalog(), "AcroForm")
     if kind == "xref":
         return int(value.split()[0])
@@ -214,7 +218,7 @@ def detach_acroform(doc: pymupdf.Document) -> int | None:
     return None
 
 
-def reattach_acroform(doc: pymupdf.Document, xref: int | None) -> None:
+def reattach_acroform(doc: pymupdf.Document, xref: int | None, copies: dict[int, int] | None = None) -> None:
     """Puts the AcroForm back with /Fields = the root fields of the widgets still on the pages. Widgets
     that cannot be traced to a root are skipped; a form that cannot be rebuilt at all is dropped."""
     if xref is None:
@@ -231,7 +235,7 @@ def reattach_acroform(doc: pymupdf.Document, xref: int | None) -> None:
                     continue
                 if root not in roots:
                     roots.append(root)
-        roots = _merge_same_name(doc, roots)
+        roots = _merge_copies(doc, roots, copies or {})
         doc.xref_set_key(xref, "Fields", "[" + " ".join(f"{r} 0 R" for r in roots) + "]")
         doc.xref_set_key(doc.pdf_catalog(), "AcroForm", f"{xref} 0 R")
     except Exception as exc:  # noqa: BLE001

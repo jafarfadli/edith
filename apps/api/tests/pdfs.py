@@ -198,3 +198,41 @@ def make_cyclic_form_pdf() -> bytes:
     doc.update_object(acro, f"<</Fields[{b} 0 R]>>")
     doc.xref_set_key(doc.pdf_catalog(), "AcroForm", f"{acro} 0 R")
     return doc.tobytes()
+
+
+def make_same_name_form_pdf() -> bytes:
+    """Distinct merged source fields sharing a name: text `x` + checkbox `x`, and two text fields `y`
+    ("alpha", and "beta" multiline)."""
+    doc = pymupdf.open()
+    doc.new_page(width=595, height=842)
+    px = doc.page_xref(0)
+    specs = [
+        "/FT/Tx/T(x)/V(t)/Rect[72 700 272 720]",
+        "/FT/Btn/T(x)/V/Off/AS/Off/Rect[72 650 86 664]",
+        "/FT/Tx/T(y)/V(alpha)/Rect[72 600 272 620]",
+        "/FT/Tx/Ff 4096/T(y)/V(beta)/Rect[72 540 272 580]",
+    ]
+    xrefs = []
+    for spec in specs:
+        x = doc.get_new_xref()
+        doc.update_object(x, f"<</Type/Annot/Subtype/Widget/P {px} 0 R/F 4/DA(/Helv 11 Tf 0 g){spec}>>")
+        xrefs.append(x)
+    doc.xref_set_key(px, "Annots", "[" + " ".join(f"{x} 0 R" for x in xrefs) + "]")
+    acro = doc.get_new_xref()
+    doc.update_object(acro, "<</Fields[" + " ".join(f"{x} 0 R" for x in xrefs) + "]/DA(/Helv 0 Tf 0 g)>>")
+    doc.xref_set_key(doc.pdf_catalog(), "AcroForm", f"{acro} 0 R")
+    return doc.tobytes()
+
+
+def make_cyclic_first_form_pdf() -> bytes:
+    """Page with a cyclic-parent widget first and a healthy text widget `ok` second."""
+    doc = pymupdf.open()
+    page = doc.new_page()
+    _widget(page, pymupdf.PDF_WIDGET_TYPE_TEXT, "ok", (72, 120, 200, 140), field_value="v")
+    ok = list(page.widgets())[0].xref
+    page_xref = doc.page_xref(0)
+    a, b = doc.get_new_xref(), doc.get_new_xref()
+    doc.update_object(b, f"<</FT/Tx/T(b)/Parent {a} 0 R/Kids[{a} 0 R]>>")
+    doc.update_object(a, f"<</Type/Annot/Subtype/Widget/FT/Tx/T(a)/Parent {b} 0 R/Rect[72 72 200 90]/P {page_xref} 0 R>>")
+    doc.xref_set_key(page_xref, "Annots", f"[{a} 0 R {ok} 0 R]")
+    return doc.tobytes()
