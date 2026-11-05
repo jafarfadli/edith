@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
@@ -16,6 +17,8 @@ import { PageList } from "./PageList";
 import { Sidebar } from "./Sidebar";
 import { ZoomPill } from "./ZoomPill";
 import { useShortcuts } from "./useShortcuts";
+
+const PageOverlay = dynamic(() => import("./PageOverlay"), { ssr: false });
 
 export function Editor({ docId, initialName }: { docId: string; initialName: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
@@ -109,7 +112,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
           }}
           onPointerUp={() => { drag.current = null; }}
         >
-          {info && pdf ? <PageList pdf={pdf} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
+          {info && pdf ? <PageList pdf={pdf} overlay={(a) => <PageOverlay {...a} />} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
         </main>
       </div>
       <ZoomPill />
