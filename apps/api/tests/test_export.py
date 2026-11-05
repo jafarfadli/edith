@@ -1,4 +1,5 @@
 import pymupdf
+import pytest
 
 from tests.pdfs import make_pdf
 
@@ -92,3 +93,27 @@ def test_safe_filename():
     assert safe_filename("") == "document.pdf"
     assert safe_filename("Résumé") == "Résumé.pdf"
     assert safe_filename('x"y.PDF') == "xy.PDF"
+
+
+def test_render_scale_caps_pixels():
+    import math
+
+    import pymupdf as m
+
+    from edith.routes.export import MAX_RENDER_PIXELS, render_scale
+    assert render_scale(m.Rect(0, 0, 595, 842)) == 2
+    s = render_scale(m.Rect(0, 0, 14400, 14400))
+    assert s < 2
+    assert math.ceil(14400 * s) ** 2 <= MAX_RENDER_PIXELS
+    assert (14400 * s) ** 2 == pytest.approx(MAX_RENDER_PIXELS, rel=0.01)
+
+
+def test_render_page_respects_pixel_cap(client, monkeypatch):
+    import edith.routes.export as export
+    monkeypatch.setattr(export, "MAX_RENDER_PIXELS", 100_000)
+    doc_id = new_doc(client, pages=1)
+    r = client.post(f"/documents/{doc_id}/render-page", json={"pageKey": "o0", "ops": []})
+    assert r.status_code == 200
+    pix = pymupdf.Pixmap(r.content)
+    assert pix.width * pix.height <= 100_000
+    assert pix.width / pix.height == pytest.approx(595 / 842, rel=0.01)

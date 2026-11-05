@@ -3,6 +3,7 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MAX_OPS = 5000
+MAX_LAYOUT_PAGES = 2 * 500  # twice Settings.max_pages: room for duplicates and blanks
 
 HexColor = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 PageKey = Annotated[str, Field(pattern=r"^(o\d+|u[0-9A-Za-z-]+)$")]
@@ -138,7 +139,7 @@ class LayoutPage(Model):
 class PagesLayout(Model):
     id: OpId
     type: Literal["pages.layout"]
-    pages: list[LayoutPage] = Field(min_length=1)
+    pages: list[LayoutPage] = Field(min_length=1, max_length=MAX_LAYOUT_PAGES)
 
     @model_validator(mode="after")
     def _unique_keys(self):

@@ -55,6 +55,7 @@ export type Id6 = string;
 export type Type6 = "pages.layout";
 /**
  * @minItems 1
+ * @maxItems 1000
  */
 export type Pages = [LayoutPage, ...LayoutPage[]];
 export type Pagekey6 = string;

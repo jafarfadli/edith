@@ -1,6 +1,8 @@
+import math
 import re
 from urllib.parse import quote
 
+import pymupdf
 from fastapi import APIRouter, Request, Response
 
 from edith.bake import bake
@@ -9,6 +11,20 @@ from edith.errors import DocExpired, InvalidOp
 from edith.ops import ExportRequest, RenderPageRequest
 
 router = APIRouter()
+
+MAX_RENDER_PIXELS = 20_000_000
+RENDER_SCALE = 2  # 144 dpi
+
+
+def render_scale(rect: pymupdf.Rect) -> float:
+    """Zoom relative to 72 dpi: 144 dpi, reduced so the bitmap stays within MAX_RENDER_PIXELS."""
+    area = rect.width * rect.height
+    if area <= 0:
+        return RENDER_SCALE
+    scale = min(RENDER_SCALE, math.sqrt(MAX_RENDER_PIXELS / area))
+    while math.ceil(rect.width * scale) * math.ceil(rect.height * scale) > MAX_RENDER_PIXELS:
+        scale *= 0.999  # the bitmap rounds outward to whole pixels
+    return scale
 
 
 def safe_filename(name: str) -> str:
@@ -72,7 +88,9 @@ def render_page(request: Request, doc_id: str, body: RenderPageRequest) -> Respo
     index = _page_index(body.ops, body.pageKey, storage.meta(doc_id).page_count)
     doc = bake(source, body.ops, _ctx(request, doc_id))
     try:
-        png = doc[index].get_pixmap(dpi=144).tobytes("png")
+        page = doc[index]
+        scale = render_scale(page.rect)
+        png = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale)).tobytes("png")
     finally:
         doc.close()
     return Response(png, media_type="image/png")

@@ -65,3 +65,11 @@ def test_too_many_ops():
     w = {"type": "whiteout.add", "pageKey": "o0", "rect": {"x": 0, "y": 0, "w": 1, "h": 1}}
     with pytest.raises(ValidationError):
         ExportRequest.model_validate({"ops": [{**w, "id": str(i)} for i in range(5001)]})
+
+
+def test_layout_pages_are_bounded():
+    page = {"pageKey": "u0", "src": {"blank": {"width": 10, "height": 10}}}
+    pages = [dict(page, pageKey=f"u{i}") for i in range(1001)]
+    with pytest.raises(ValidationError):
+        PagesLayout.model_validate({"id": "L", "type": "pages.layout", "pages": pages})
+    PagesLayout.model_validate({"id": "L", "type": "pages.layout", "pages": pages[:1000]})
