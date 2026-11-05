@@ -14,6 +14,8 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
   const info = useEditor((s) => s.info);
   const [name, setName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [flatten, setFlatten] = useState(false);
+  const hasForm = useEditor((s) => (s.info?.fields?.length ?? 0) > 0);
   const fileName = name ?? info?.fileName ?? "document.pdf";
 
   async function download() {
@@ -26,7 +28,7 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
       s = editorStore.getState();
       if (!s.info) return;
       sent = compact(s.doc);
-      const blob = await exportPdf(s.info.docId, { ops: sent, flatten_forms: false, filename: fileName });
+      const blob = await exportPdf(s.info.docId, { ops: sent, flatten_forms: hasForm && flatten, filename: fileName });
       downloadBlob(blob, fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`);
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError("generic", 0);
@@ -55,6 +57,12 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
       <button onClick={openFind} disabled={!info} className="rounded-lg px-3 py-2 text-sm hover:bg-bg disabled:opacity-60">
         🔍 {t.find.open}
       </button>
+      {hasForm && (
+        <label className="flex items-center gap-1.5 text-sm" title={t.form.flattenHint}>
+          <input type="checkbox" checked={flatten} onChange={(e) => setFlatten(e.target.checked)} />
+          {t.form.flatten}
+        </label>
+      )}
       <button
         onClick={download}
         disabled={busy || !info}
