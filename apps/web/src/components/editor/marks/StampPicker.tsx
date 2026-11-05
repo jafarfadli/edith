@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { StampAdd } from "@edith/ops";
 import { fontStore } from "@/lib/fonts";
 import { newId } from "@/lib/id";
@@ -19,6 +19,8 @@ export async function placeStamp(kind: StampKind, color: string): Promise<void> 
 
 /** Stamp chooser: the presets (Indonesian or English), or a custom text with optional date/time in one of 5 colors. */
 export function StampPicker({ onClose }: { onClose: () => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => { box.current?.focus(); }, []);
   const [tab, setTab] = useState<"presets" | "custom">("presets");
   const [lang, setLang] = useState<"id" | "en">("id");
   const [text, setText] = useState("");
@@ -39,9 +41,9 @@ export function StampPicker({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/20 pt-24" onPointerDown={onClose}>
-      <div role="dialog" aria-label={t.stamp.title} data-testid="stamp-picker" onPointerDown={(e) => e.stopPropagation()}
+      <div ref={box} tabIndex={-1} role="dialog" aria-label={t.stamp.title} data-testid="stamp-picker" onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") onClose(); }}
-        className="w-[34rem] rounded-xl bg-surface p-4 shadow-xl ring-1 ring-line">
+        className="w-[34rem] rounded-xl outline-none bg-surface p-4 shadow-xl ring-1 ring-line">
         <div className="mb-3 flex items-center gap-2">
           <span className="font-medium">{t.stamp.title}</span>
           <div className="flex-1" />
@@ -64,7 +66,7 @@ export function StampPicker({ onClose }: { onClose: () => void }) {
             <div className="grid grid-cols-3 gap-2">
               {(lang === "id" ? STAMPS_ID : STAMPS_EN).map((p) => (
                 <button key={p.id} aria-label={p.label} onClick={() => pick({ preset: p.id as StampAdd["preset"] }, p.color)}
-                  className="truncate rounded-md border-2 px-2 py-1.5 text-xs font-bold hover:bg-bg" style={{ borderColor: p.color, color: p.color }}>
+                  className="rounded-md border-2 px-2 py-1.5 text-xs font-bold hover:bg-bg" style={{ borderColor: p.color, color: p.color }}>
                   {p.label}
                 </button>
               ))}

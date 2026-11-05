@@ -82,6 +82,11 @@ test("place an Indonesian preset stamp and a custom stamp with date", async ({ p
   await page.getByRole("button", { name: "Gambar pilihan" }).click();
   await page.getByRole("menuitem", { name: "Stamp" }).click();
   const dialog = page.getByRole("dialog", { name: "Pilih stamp" });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("button", { name: "Gambar pilihan" }).click();
+  await page.getByRole("menuitem", { name: "Stamp" }).click();
+  await expect(dialog.getByRole("button", { name: "TANDA TANGAN DI SINI", exact: true })).toBeVisible();
   await expect(dialog.getByRole("radio", { name: "Indonesia" })).toHaveAttribute("aria-checked", "true");
   await expect(dialog.getByRole("button", { name: "DISETUJUI", exact: true })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "APPROVED", exact: true })).toHaveCount(0);
