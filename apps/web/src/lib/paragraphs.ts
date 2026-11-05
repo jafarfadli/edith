@@ -110,13 +110,42 @@ export function resolveRunFonts(runs: Run[], fonts: FontTable, peek: (f: FontRef
 
 const fontsOf = (paragraphs: Run[][]) => boxFonts({ paragraphs } as TextBox);
 
+/** Fallback steps of the longest chain: original → substitute → Arimo → Noto Sans. */
+const FALLBACK_STEPS = 3;
+
+/** One fallback step over every paragraph; `null` when no run changed. */
+function fallbackStep(paragraphs: Run[][], fonts: FontTable, peek: (f: FontRef) => FontMetrics | null): Run[][] | null {
+  let changed = false;
+  const next = paragraphs.map((p) => {
+    const q = resolveRunFonts(p, fonts, peek);
+    if (q.some((r, i) => r !== p[i])) changed = true;
+    return q;
+  });
+  return changed ? next : null;
+}
+
+/** The full font fallback using only fonts that are already loaded (same result as `prepareRuns`
+ *  once its fonts are in); `null` when a font it needs is not loaded yet. */
+export function resolveLoadedRuns(paragraphs: Run[][], fonts: FontTable, peek: (f: FontRef) => FontMetrics | null): Run[][] | null {
+  let out = paragraphs;
+  for (let step = 0; step <= FALLBACK_STEPS; step++) {
+    if (fontsOf(out).some((f) => !peek(f))) return null;
+    const next = fallbackStep(out, fonts, peek);
+    if (!next) return out;
+    out = next;
+  }
+  return fontsOf(out).every((f) => peek(f)) ? out : null;
+}
+
 /** Loads every font the paragraphs need and applies font fallback (original → substitute → Arimo → Noto Sans).
  *  Rejects when a bundled font cannot be loaded. */
 export async function prepareRuns(paragraphs: Run[][], fonts: FontTable, store: Loader = fontStore): Promise<Run[][]> {
   let out = paragraphs;
-  for (let step = 0; step < 3; step++) {
+  for (let step = 0; step <= FALLBACK_STEPS; step++) {
     await Promise.allSettled(fontsOf(out).map((f) => store.load(f)));
-    out = out.map((p) => resolveRunFonts(p, fonts, (f) => store.peek(f)));
+    const next = fallbackStep(out, fonts, (f) => store.peek(f));
+    if (!next) break;
+    out = next;
   }
   await Promise.all(fontsOf(out).map((f) => store.load(f)));
   return out;

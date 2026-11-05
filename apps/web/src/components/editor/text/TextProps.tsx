@@ -32,6 +32,7 @@ async function applyToSelected(patch: BoxPatch) {
       editorStore.getState().updateObject(id, { box } as Partial<TextAdd>, { coalesce: `text-style:${id}` });
       return;
     }
+    console.warn("text style: the text changed while its fonts loaded; style not applied", patch);
   } catch (err) {
     console.warn("text style: font load failed", err);
   }
@@ -50,9 +51,13 @@ function applyToSession(patch: BoxPatch) {
   // Typing in the size field or using the color picker keeps its focus; buttons never took it from the editor.
   const tag = document.activeElement?.tagName;
   const chain = tag === "INPUT" || tag === "SELECT" ? editor.chain() : editor.chain().focus();
+  const fallback = attrsOf(e.box.paragraphs[0][0]);
+  // The style at the caret before the change: with an empty selection the new font only lives in a
+  // stored mark (no run uses it yet), so load it now — text typed next shows in it right away.
+  const caret = applyPatch(textEditStore.getState().current ?? fallback, runPatch, fonts);
   chain.updateRuns((a) => applyPatch(a, runPatch, fonts)).run();
-  const runs = docToRuns(editor.getJSON(), attrsOf(e.box.paragraphs[0][0]));
-  boxFonts({ ...e.box, paragraphs: runs }).forEach((f) => { fontStore.load(f).catch(() => {}); });
+  const runs = docToRuns(editor.getJSON(), fallback);
+  [caret.font, ...boxFonts({ ...e.box, paragraphs: runs })].forEach((f) => { fontStore.load(f).catch(() => {}); });
 }
 
 const ALIGNS = ["left", "center", "right", "justify"] as const;

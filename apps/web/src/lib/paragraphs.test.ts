@@ -5,7 +5,7 @@ import type { FontRef, Run } from "@edith/ops";
 import type { DocFont, Paragraph, TextData } from "@/lib/api";
 import { fontKey, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
 import { runsText } from "@/lib/runs";
-import { hardBreaks, maskRects, paragraphBox, paragraphRuns, prepareRuns, rawToBox, resolveRunFonts } from "@/lib/paragraphs";
+import { hardBreaks, maskRects, paragraphBox, paragraphRuns, prepareRuns, rawToBox, resolveLoadedRuns, resolveRunFonts } from "@/lib/paragraphs";
 
 const FONTS = path.resolve(__dirname, "../../../../packages/fonts/files");
 const metrics = new Map<string, FontMetrics>();
@@ -119,6 +119,26 @@ describe("original fonts", () => {
     const store = { load: async () => onlyAbc, peek: (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? onlyAbcz : onlyAbc) };
     const out = await prepareRuns([[run("abz")]], fonts, store);
     expect(out[0][0].font).toEqual({ kind: "bundled", family: "Noto Sans", bold: false, italic: false });
+  });
+});
+
+describe("resolveLoadedRuns", () => {
+  const onlyAbcz: FontMetrics = { ...onlyAbc, hasGlyph: (cp) => "abcz ".includes(String.fromCodePoint(cp)) };
+  const peekAll = (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? onlyAbcz : onlyAbc);
+
+  it("runs the whole chain with loaded fonts, like prepareRuns", async () => {
+    const sync = resolveLoadedRuns([[run("abz")]], fonts, peekAll);
+    expect(sync?.[0][0].font).toEqual({ kind: "bundled", family: "Noto Sans", bold: false, italic: false });
+    expect(sync).toEqual(await prepareRuns([[run("abz")]], fonts, { load: async () => onlyAbc, peek: peekAll }));
+  });
+
+  it("returns null when a font it needs is not loaded", () => {
+    expect(resolveLoadedRuns([[run("abz")]], fonts, (f) => (isOriginal(f) ? onlyAbc : null))).toBeNull();
+  });
+
+  it("returns the same runs when nothing needs a fallback", () => {
+    const p = [[run("abc")]];
+    expect(resolveLoadedRuns(p, fonts, () => onlyAbc)?.[0][0]).toBe(p[0][0]);
   });
 });
 

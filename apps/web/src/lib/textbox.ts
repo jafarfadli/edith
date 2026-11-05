@@ -15,6 +15,13 @@ function lineHeightFor(size: number): number {
   return Math.round(size * 1.2 * 100) / 100;
 }
 
+/** Line height of a text box (`text.add`): 1.2 × its largest run size (runs with text; all runs when empty). */
+export function boxLineHeight(paragraphs: Run[][]): number {
+  const all = paragraphs.flat();
+  const withText = all.filter((r) => r.text);
+  return lineHeightFor(Math.max(...(withText.length ? withText : all).map((r) => r.size)));
+}
+
 export function newBox([x, y]: [number, number], style: TextStyle): TextBox {
   const lineHeight = lineHeightFor(style.size);
   return { rect: { x, y, w: DEFAULT_BOX_WIDTH, h: lineHeight }, align: style.align, lineHeight, paragraphs: [[runFrom(style, "")]], layout: [] };

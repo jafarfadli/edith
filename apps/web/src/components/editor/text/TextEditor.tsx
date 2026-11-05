@@ -9,11 +9,11 @@ import Text from "@tiptap/extension-text";
 import { UndoRedo } from "@tiptap/extensions";
 import type { Editor } from "@tiptap/core";
 import { toScreen, type PageGeom } from "@/lib/coords";
-import { cssFamily, fontStore } from "@/lib/fonts";
+import { cssFamily, fontKey, fontStore } from "@/lib/fonts";
 import { attrsOf, docToRuns, runsToDoc, type RunAttrs } from "@/lib/richtext";
-import { boxFonts } from "@/lib/textbox";
+import { boxFonts, boxLineHeight } from "@/lib/textbox";
 import { createRunMark } from "./runMark";
-import { boxLineHeight, commitOpenSession, session, textEditStore, type Editing } from "./textEdit";
+import { commitOpenSession, session, textEditStore, type Editing } from "./textEdit";
 
 export function TextEditor({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const editing = useStore(textEditStore, (s) => s.editing);
@@ -34,6 +34,8 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
   // Style of text that has none yet (an empty box, pasted text); fixed for the session.
   const [fallback] = useState(() => attrsOf(editing.box.paragraphs[0][0]));
   const editingId = editing.id;
+  // Fonts this session asked for (a failing original is not re-fetched on every keystroke).
+  const [requested] = useState(() => new Set<string>());
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -43,6 +45,13 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
     onUpdate: ({ editor }) => {
       const paragraphs = docToRuns(editor.getJSON(), fallback);
       session.paragraphs = paragraphs;
+      // Text typed with a style picked at an empty caret (or pasted) may need a font not loaded yet.
+      for (const f of boxFonts({ ...editing.box, paragraphs })) {
+        const key = fontKey(f);
+        if (requested.has(key) || fontStore.peek(f)) continue;
+        requested.add(key);
+        fontStore.load(f).catch(() => {});
+      }
       // A text box's line spacing follows its largest size while typing/styling (as the commit does).
       const cur = textEditStore.getState().editing;
       if (cur?.kind === "text.add" && cur.id === editingId) {

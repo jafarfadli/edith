@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FontRef, Run, TextEdit } from "@edith/ops";
+import type { FontRef, Run, TextAdd, TextEdit } from "@edith/ops";
 import { fontStore, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
-import { newBox } from "@/lib/textbox";
+import { boxLineHeight, newBox } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
-import { afterTextCommitted, boxLineHeight, commitEditing, startTextAt, textEditStore, whenTextCommitted } from "./textEdit";
+import { afterTextCommitted, commitEditing, startTextAt, textEditStore, whenTextCommitted } from "./textEdit";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
@@ -24,10 +24,15 @@ function deferred() {
 
 let fontsLoaded = false;
 let gate: ReturnType<typeof deferred>;
-const metricsOf = (f: FontRef) => (isOriginal(f) ? original : arimo);
+/** Characters only Noto Sans has (the substitute Carlito and Arimo lack them). */
+let notoOnly = "";
+const limited = (m: FontMetrics): FontMetrics => ({ ...m, hasGlyph: (cp) => !notoOnly.includes(String.fromCodePoint(cp)) && (m.hasGlyph?.(cp) ?? true) });
+const notoSans: FontMetrics = { ...arimo, hasGlyph: () => true };
+const metricsOf = (f: FontRef) => (isOriginal(f) ? original : f.family === "Noto Sans" ? notoSans : limited(arimo));
 
 beforeEach(() => {
   fontsLoaded = false;
+  notoOnly = "";
   gate = deferred();
   editorStore.getState().init(info);
   textEditStore.setState({ editing: null, current: null, paragraph: null });
@@ -160,7 +165,7 @@ describe("rich text boxes", () => {
     openSession();
     const big = { text: "besar", font, size: 30, color: "#111111" };
     await commitEditing([[...runs("Halo ")[0], big]]);
-    const op = editorStore.getState().doc.objects.t1 as TextEdit;
+    const op = editorStore.getState().doc.objects.t1 as TextAdd;
     expect(op.box.lineHeight).toBe(36);
     expect(op.box.paragraphs[0].map((r) => r.size)).toEqual([14, 30]);
   });
@@ -175,5 +180,33 @@ describe("rich text boxes", () => {
   it("boxLineHeight ignores empty runs unless all are empty", () => {
     expect(boxLineHeight([[{ text: "", font, size: 40, color: "#000000" }, { text: "a", font, size: 10, color: "#000000" }]])).toBe(12);
     expect(boxLineHeight([[{ text: "", font, size: 20, color: "#000000" }]])).toBe(24);
+  });
+});
+
+describe("font fallback on commit", () => {
+  const orig = { kind: "original" as const, ref: "f7" };
+  const noto = { kind: "bundled", family: "Noto Sans", bold: false, italic: false };
+
+  it("goes original → substitute → Arimo → Noto Sans when the fonts are loaded (fast path)", async () => {
+    gate.resolve(); fontsLoaded = true; notoOnly = "ꙮ";
+    openParagraph("Halo", orig);
+    await commitEditing(runs("Halo ꙮ", orig));
+    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0][0].font).toEqual(noto);
+  });
+
+  it("does the same while fonts load (slow path)", async () => {
+    notoOnly = "ꙮ";
+    openParagraph("Halo", orig);
+    const commit = commitEditing(runs("Halo ꙮ", orig));
+    gate.resolve();
+    await commit;
+    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0][0].font).toEqual(noto);
+  });
+});
+
+describe("session start", () => {
+  it("rejects a text.edit session without a paragraph id", () => {
+    expect(() => textEditStore.getState().start({ id: "x", pageKey: "o0", box: newBox([0, 0], style), isNew: true, kind: "text.edit" }))
+      .toThrow(/paragraphId/);
   });
 });

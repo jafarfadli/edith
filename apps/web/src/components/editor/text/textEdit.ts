@@ -5,10 +5,10 @@ import type { Editor } from "@tiptap/core";
 import type { ContentOp, Run, TextBox } from "@edith/ops";
 import { fontStore } from "@/lib/fonts";
 import { newId } from "@/lib/id";
-import { prepareRuns, resolveRunFonts } from "@/lib/paragraphs";
+import { prepareRuns, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
-import { boxFonts, newBox, relayout } from "@/lib/textbox";
+import { boxFonts, boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore } from "@/store/editor";
 import { textStore } from "@/store/text";
 
@@ -43,6 +43,7 @@ export const session: { editor: Editor | null; paragraphs: Run[][] | null } = { 
 export const textEditStore = createStore<TextEditState>()((set, get) => ({
   editing: null, current: null, paragraph: null,
   start: (editing) => {
+    if (editing.kind === "text.edit" && !editing.paragraphId) throw new Error(`text.edit session ${editing.id} has no paragraphId`);
     session.paragraphs = editing.box.paragraphs;
     set({ editing, current: attrsOf(editing.box.paragraphs[0][0]), paragraph: null });
   },
@@ -55,14 +56,6 @@ export const textEditStore = createStore<TextEditState>()((set, get) => ({
 /** True when every font of `box` is loaded (metrics available synchronously). */
 export function fontsReady(box: TextBox): boolean {
   return boxFonts(box).every((f) => fontStore.peek(f) !== null);
-}
-
-/** Line height of a text box (`text.add`): 1.2 × its largest run size (runs with text; all runs when empty). */
-export function boxLineHeight(paragraphs: Run[][]): number {
-  const all = paragraphs.flat();
-  const withText = all.filter((r) => r.text);
-  const size = Math.max(...(withText.length ? withText : all).map((r) => r.size));
-  return Math.round(size * 1.2 * 100) / 100;
 }
 
 /** The commit that is waiting for its fonts (the text is not in the document yet). */
@@ -110,13 +103,10 @@ export function commitEditing(paragraphs: Run[][]): Promise<void> {
   const draft: TextBox = { ...e.box, paragraphs: normalized, ...(e.kind === "text.add" ? { lineHeight: boxLineHeight(normalized) } : {}) };
   if (e.isNew && e.initial && paragraphsEqual(draft.paragraphs, e.initial)) return Promise.resolve(); // opened, not changed
   const fonts = textStore.getState().fonts;
-  // Fast path: every font (after fallback) already loaded → land synchronously.
-  let ready: TextBox | null = draft;
-  for (let step = 0; step < 2 && ready; step++) {
-    ready = fontsReady(ready) ? { ...ready, paragraphs: ready.paragraphs.map((p) => resolveRunFonts(p, fonts, (f) => fontStore.peek(f))) } : null;
-  }
-  if (ready && fontsReady(ready)) {
-    land(e, relayout(ready, (f) => fontStore.get(f)));
+  // Fast path: every font (after the whole fallback chain) already loaded → land synchronously.
+  const ready = resolveLoadedRuns(draft.paragraphs, fonts, (f) => fontStore.peek(f));
+  if (ready) {
+    land(e, relayout({ ...draft, paragraphs: ready }, (f) => fontStore.get(f)));
     return Promise.resolve();
   }
   const p: Promise<void> = (async () => {
@@ -137,7 +127,7 @@ export function commitEditing(paragraphs: Run[][]): Promise<void> {
 function land(e: Editing, box: TextBox): void {
   const st = editorStore.getState();
   const op = (e.kind === "text.edit"
-    ? { id: e.id, type: "text.edit", pageKey: e.pageKey, paragraphId: e.paragraphId!, box }
+    ? { id: e.id, type: "text.edit", pageKey: e.pageKey, paragraphId: e.paragraphId as string, box } // checked in start()
     : { id: e.id, type: "text.add", pageKey: e.pageKey, box }) as ContentOp;
   if (e.isNew) {
     st.addObject(op);
