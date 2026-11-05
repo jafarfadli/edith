@@ -60,4 +60,40 @@ describe("layoutText", () => {
     expect(r.lines[1].segments).toEqual([]);
     expect(r.lines[2].baseline).toBe(32);
   });
+
+  it("keeps a word whole across run boundaries when wrapping", () => {
+    const r = layoutText({ width: 55, align: "left", lineHeight: 12, paragraphs: [[run("ab "), run("cd"), run("ef")]] }, metrics);
+    expect(texts(r)).toEqual(["ab", "cd|ef"]);
+    expect(r.lines[1].segments).toEqual([
+      { x: 0, text: "cd", runIndex: 1 },
+      { x: 20, text: "ef", runIndex: 2 },
+    ]);
+  });
+
+  it("splits an over-wide word spanning runs by character", () => {
+    const r = layoutText({ width: 35, align: "left", lineHeight: 12, paragraphs: [[run("abcd"), run("efgh")]] }, metrics);
+    expect(texts(r)).toEqual(["abc", "d|ef", "gh"]);
+    expect(r.lines[1].segments.map((s) => s.runIndex)).toEqual([0, 1]);
+  });
+
+  it("treats a line that fits exactly at a non-integer width as fitting", () => {
+    // 0.1 + 0.2 = 0.30000000000000004 > 0.3 without an epsilon.
+    const tenth: FontMetrics = { unitsPerEm: 1, ascent: 0.8, descent: 0.2, advance: () => 1 };
+    const r = layoutText(
+      { width: 0.3, align: "left", lineHeight: 1, paragraphs: [[{ ...run("a"), size: 0.1 }, { ...run("b"), size: 0.2 }]] },
+      () => tenth,
+    );
+    expect(texts(r)).toEqual(["a|b"]);
+    const r2 = layoutText(
+      { width: 0.3, align: "left", lineHeight: 1, paragraphs: [[{ ...run("a b"), size: 0.1 }, { ...run(" c"), size: 0.1 }]] },
+      () => tenth,
+    );
+    expect(r2.lines.length).toBe(2);
+  });
+
+  it("throws a clear error for a paragraph with no runs", () => {
+    expect(() => layoutText({ width: 100, align: "left", lineHeight: 12, paragraphs: [[run("a")], []] }, metrics)).toThrow(
+      "layoutText: paragraph 1 has no runs",
+    );
+  });
 });

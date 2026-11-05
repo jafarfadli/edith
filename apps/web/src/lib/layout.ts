@@ -18,51 +18,74 @@ export function layoutText(input: LayoutInput, metricsFor: (f: BundledFont) => F
   let contentWidth = 0;
   let runOffset = 0;
 
-  for (const paragraph of input.paragraphs) {
-    const tokens: Token[] = [];
+  const EPS = 1e-6;
+  input.paragraphs.forEach((paragraph, pi) => {
+    if (paragraph.length === 0) throw new Error(`layoutText: paragraph ${pi} has no runs`);
+    // Split runs into word / whitespace pieces (a piece never crosses a run boundary).
+    const pieces: Token[] = [];
     paragraph.forEach((r, k) => {
       const runIndex = runOffset + k;
       for (const m of r.text.matchAll(/\s+|[^\s]+/g)) {
         const text = m[0];
-        const space = /^\s+$/.test(text);
-        const width = measure(text, runIndex);
-        if (!space && width > input.width) {
-          let chunk = "";
-          for (const ch of text) {
-            if (chunk && measure(chunk + ch, runIndex) > input.width) {
-              tokens.push({ text: chunk, runIndex, width: measure(chunk, runIndex), space: false });
-              chunk = "";
-            }
-            chunk += ch;
-          }
-          if (chunk) tokens.push({ text: chunk, runIndex, width: measure(chunk, runIndex), space: false });
-        } else {
-          tokens.push({ text, runIndex, width, space });
-        }
+        pieces.push({ text, runIndex, width: measure(text, runIndex), space: /^\s+$/.test(text) });
       }
     });
     const emptyRunIndex = runOffset;
     runOffset += paragraph.length;
 
-    // Greedy line breaking.
+    // Group consecutive non-space pieces (possibly from different runs) into word units.
+    const units: Token[][] = [];
+    let word: Token[] = [];
+    const flushWord = () => { if (word.length) { units.push(word); word = []; } };
+    for (const t of pieces) {
+      if (t.space) { flushWord(); units.push([t]); } else word.push(t);
+    }
+    flushWord();
+
+    // A single word wider than the box is split by character into chunk units.
+    const fitted: Token[][] = [];
+    for (const unit of units) {
+      const uw = unit.reduce((sum, t) => sum + t.width, 0);
+      if (unit[0].space || uw <= input.width + EPS) { fitted.push(unit); continue; }
+      let chunk: Token[] = [];
+      let chunkWidth = 0;
+      for (const t of unit) {
+        for (const ch of t.text) {
+          const cw = measure(ch, t.runIndex);
+          if (chunk.length && chunkWidth + cw > input.width + EPS) {
+            fitted.push(chunk);
+            chunk = [];
+            chunkWidth = 0;
+          }
+          const last = chunk[chunk.length - 1];
+          if (last && last.runIndex === t.runIndex) { last.text += ch; last.width += cw; }
+          else chunk.push({ text: ch, runIndex: t.runIndex, width: cw, space: false });
+          chunkWidth += cw;
+        }
+      }
+      if (chunk.length) fitted.push(chunk);
+    }
+
+    // Greedy line breaking over units.
     const rawLines: Token[][] = [];
     let current: Token[] = [];
     let currentWidth = 0;
-    for (const t of tokens) {
-      if (t.space) {
+    for (const unit of fitted) {
+      const uw = unit.reduce((sum, t) => sum + t.width, 0);
+      if (unit[0].space) {
         if (current.length === 0) continue; // drop spaces at line start
-        current.push(t);
-        currentWidth += t.width;
+        current.push(...unit);
+        currentWidth += uw;
         continue;
       }
-      // Break when the line already holds a word and this word (plus the spaces before it) overflows.
-      if (current.length > 0 && currentWidth - trailingSpaceWidth(current) > 0 && currentWidth + t.width > input.width) {
+      // Break when the line already holds a word and this whole word (plus the spaces before it) overflows.
+      if (current.length > 0 && currentWidth - trailingSpaceWidth(current) > 0 && currentWidth + uw > input.width + EPS) {
         rawLines.push(trimEnd(current));
         current = [];
         currentWidth = 0;
       }
-      current.push(t);
-      currentWidth += t.width;
+      current.push(...unit);
+      currentWidth += uw;
     }
     rawLines.push(trimEnd(current));
 
@@ -76,7 +99,7 @@ export function layoutText(input: LayoutInput, metricsFor: (f: BundledFont) => F
       contentWidth = Math.max(contentWidth, lineWidth);
       lines.push({ baseline, segments: placeSegments(lineTokens, lineWidth, input, isLast) });
     });
-  }
+  });
 
   return { lines, height: baseline + lastDescent, contentWidth };
 }

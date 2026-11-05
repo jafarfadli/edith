@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { charOffsets, cssFamily, fontKey, metricsFromBuffer, textWidth } from "@/lib/fonts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { FontStore, charOffsets, cssFamily, fontKey, metricsFromBuffer, textWidth } from "@/lib/fonts";
 
 const ttf = (name: string) => readFileSync(path.resolve(__dirname, "../../../../packages/fonts/files", name));
 
@@ -30,5 +30,44 @@ describe("fonts", () => {
     const f = { kind: "bundled" as const, family: "Tinos", bold: true, italic: false };
     expect(fontKey(f)).toBe("Tinos-bold");
     expect(cssFamily({ ...f, bold: false })).toBe("edith-Tinos-regular");
+  });
+});
+
+describe("FontStore", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const manifest = { default: "Arimo", families: { Arimo: { category: "sans", files: { regular: "Arimo-Regular.ttf" } } } };
+  const font = { kind: "bundled" as const, family: "Arimo", bold: false, italic: false };
+  const bytes = () => {
+    const b = ttf("Arimo-Regular.ttf");
+    return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+  };
+  const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+
+  it("rejects a failed manifest fetch with status and retries later", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("", { status: 404 }))
+      .mockResolvedValueOnce(json(manifest))
+      .mockResolvedValueOnce(new Response(bytes(), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const store = new FontStore("/fonts");
+    await expect(store.load(font)).rejects.toThrow("font fetch failed: /fonts/manifest.json (404)");
+    const m = await store.load(font);
+    expect(m.unitsPerEm).toBe(2048);
+    expect(store.get(font)).toBe(m);
+  });
+
+  it("rejects a failed TTF fetch and retries later", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("manifest.json")) return json(manifest);
+      return fetchMock.mock.calls.filter(([u]) => u === url).length === 1
+        ? new Response("", { status: 404 })
+        : new Response(bytes(), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const store = new FontStore("/fonts");
+    await expect(store.load(font)).rejects.toThrow("font fetch failed: /fonts/Arimo-Regular.ttf (404)");
+    expect((await store.load(font)).unitsPerEm).toBe(2048);
   });
 });

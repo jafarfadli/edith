@@ -69,7 +69,15 @@ export class FontStore {
   constructor(private baseUrl = "/fonts") {}
 
   private getManifest(): Promise<Manifest> {
-    this.manifest ??= fetch(`${this.baseUrl}/manifest.json`).then((r) => r.json());
+    if (!this.manifest) {
+      const url = `${this.baseUrl}/manifest.json`;
+      const p = fetch(url).then((r) => {
+        if (!r.ok) throw new Error(`font fetch failed: ${url} (${r.status})`);
+        return r.json() as Promise<Manifest>;
+      });
+      this.manifest = p;
+      p.catch(() => { if (this.manifest === p) this.manifest = undefined; });
+    }
     return this.manifest;
   }
 
@@ -88,7 +96,9 @@ export class FontStore {
         const fam = manifest.families[f.family];
         if (!fam) throw new Error(`unknown font family ${f.family}`);
         const url = `${this.baseUrl}/${fam.files[style(f)]}`;
-        const buf = await (await fetch(url)).arrayBuffer();
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`font fetch failed: ${url} (${res.status})`);
+        const buf = await res.arrayBuffer();
         const metrics = metricsFromBuffer(buf);
         if (typeof document !== "undefined") {
           const face = new FontFace(cssFamily(f), buf);
@@ -99,6 +109,7 @@ export class FontStore {
         return metrics;
       })();
       this.pending.set(key, p);
+      p.catch(() => { if (this.pending.get(key) === p) this.pending.delete(key); });
     }
     return p;
   }
