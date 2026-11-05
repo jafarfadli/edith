@@ -7,7 +7,7 @@ import { useStore } from "zustand";
 import type { ContentOp, TextAdd } from "@edith/ops";
 import { groupTransform, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
-import { createFromDrag, DRAG_TOOLS, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
+import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
 import { editorStore, useEditor } from "@/store/editor";
 import { ObjectShape } from "./ObjectShape";
 import { textEditStore } from "./text/textEdit";
@@ -32,8 +32,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   const pageRef = useRef<Konva.Group>(null);
   const trRef = useRef<Konva.Transformer>(null);
   const nodes = useRef(new Map<string, Konva.Group>());
-  const start = useRef<Pt | null>(null);
   const [draft, setDraft] = useState<ContentOp | null>(null);
+  // The draw in progress. Move/up are tracked on window so a drag released outside the stage still commits.
+  const drawing = useRef<{ start: Pt; draft: ContentOp | null; stop: () => void } | null>(null);
 
   const mine = order.map((id) => objects[id]).filter((op): op is ContentOp => !!op && op.pageKey === pageKey);
 
@@ -43,10 +44,72 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     trRef.current?.getLayer()?.batchDraw();
   }, [selection, mine]);
 
-  const pos = (): Pt => {
-    const p = pageRef.current!.getRelativePointerPosition()!;
-    return [p.x, p.y];
+  useEffect(() => () => drawing.current?.stop(), []);
+
+  /** Page-relative pointer position (clamped to the page); `evt` updates it from an event outside Konva. */
+  const pos = (evt?: PointerEvent): Pt => {
+    const page = pageRef.current!;
+    if (evt) page.getStage()?.setPointersPositions(evt);
+    const p = page.getRelativePointerPosition()!;
+    return clampToPage([p.x, p.y], geom.width, geom.height);
   };
+
+  function setDrawDraft(d: ContentOp | null) {
+    if (drawing.current) drawing.current.draft = d;
+    setDraft(d);
+  }
+
+  function extendInk(d: ContentOp, at: Pt): ContentOp {
+    const path = (d as { paths: number[][][] }).paths[0];
+    const last = path[path.length - 1];
+    if (last && last[0] === at[0] && last[1] === at[1]) return d;
+    return { ...d, paths: [[...path, at]] } as unknown as ContentOp;
+  }
+
+  function onMove(at: Pt) {
+    const cur = drawing.current;
+    if (!cur) return;
+    if (tool === "ink") {
+      if (cur.draft) setDrawDraft(extendInk(cur.draft, at));
+    } else if (DRAG_TOOLS.has(tool)) {
+      setDrawDraft(createFromDrag(tool as DragTool, cur.start, at, editorStore.getState().style, pageKey, "draft"));
+    }
+  }
+
+  function onUp(at: Pt) {
+    const cur = drawing.current;
+    if (!cur) return;
+    cur.stop();
+    const s = editorStore.getState();
+    if (tool === "ink" && cur.draft) {
+      s.addObject({ ...extendInk(cur.draft, at), id: newId() } as ContentOp);
+    } else if (DRAG_TOOLS.has(tool)) {
+      const op = createFromDrag(tool as DragTool, cur.start, at, s.style, pageKey, newId());
+      if (op) { s.addObject(op); s.setTool("select"); s.select(op.id); }
+    }
+    setDraft(null);
+  }
+
+  function beginDraw(at: Pt, first: ContentOp | null) {
+    drawing.current?.stop();
+    const move = (evt: PointerEvent) => {
+      if (evt.buttons === 0) onUp(pos(evt)); // the release was missed (e.g. outside the window)
+      else onMove(pos(evt));
+    };
+    const up = (evt: PointerEvent) => onUp(pos(evt));
+    const cancel = () => { drawing.current?.stop(); setDraft(null); };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      drawing.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
+    drawing.current = { start: at, draft: first, stop };
+    setDraft(first);
+  }
 
   function onDown(e: Konva.KonvaEventObject<PointerEvent>) {
     const s = editorStore.getState();
@@ -57,38 +120,10 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     const at = pos();
     if (tool === "text") { overlayHooks.onTextPointerDown?.(pageKey, at); return; }
     if (DRAG_TOOLS.has(tool)) {
-      start.current = at;
-      setDraft(null);
+      beginDraw(at, null);
     } else if (tool === "ink") {
-      start.current = at;
-      setDraft({ id: "draft", type: "ink.add", pageKey, paths: [[at]], color: s.style.stroke, width: s.style.width } as ContentOp);
+      beginDraw(at, { id: "draft", type: "ink.add", pageKey, paths: [[at]], color: s.style.stroke, width: inkWidth(s.style.width) } as ContentOp);
     }
-  }
-
-  function onMove(e: Konva.KonvaEventObject<PointerEvent>) {
-    if (!start.current) return;
-    if (e.evt.buttons === 0) { start.current = null; setDraft(null); return; } // released outside the stage
-    const s = editorStore.getState();
-    const at = pos();
-    if (tool === "ink") {
-      setDraft((d) => d && ({ ...d, paths: [[...((d as { paths: number[][][] }).paths[0]), at]] } as unknown as ContentOp));
-    } else if (DRAG_TOOLS.has(tool)) {
-      setDraft(createFromDrag(tool as DragTool, start.current, at, s.style, pageKey, "draft"));
-    }
-  }
-
-  function onUp() {
-    if (!start.current) return;
-    const s = editorStore.getState();
-    const at = pos();
-    if (tool === "ink" && draft) {
-      s.addObject({ ...draft, id: newId() } as ContentOp);
-    } else if (DRAG_TOOLS.has(tool)) {
-      const op = createFromDrag(tool as DragTool, start.current, at, s.style, pageKey, newId());
-      if (op) { s.addObject(op); s.setTool("select"); s.select(op.id); }
-    }
-    start.current = null;
-    setDraft(null);
   }
 
   return (
@@ -101,8 +136,6 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
         width={size.width}
         height={size.height}
         onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
       >
         <Layer>
           <Group ref={pageRef} x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale}>

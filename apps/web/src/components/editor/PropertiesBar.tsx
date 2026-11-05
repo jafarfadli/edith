@@ -2,6 +2,7 @@
 
 import type { ContentOp } from "@edith/ops";
 import { useStore } from "zustand";
+import { inkWidth } from "@/lib/objects";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor, type ToolStyle } from "@/store/editor";
 import { ColorField } from "./ColorField";
@@ -38,14 +39,15 @@ export function PropertiesBar() {
   const s = editorStore.getState();
 
   const stroke = (o?.type === "ink.add" ? (o.color as string) : (o?.stroke as string | undefined)) ?? style.stroke;
-  const width = (o?.width as number | undefined) ?? style.width;
+  const rawWidth = (o?.width as number | undefined) ?? style.width;
+  const width = kind === "ink" ? inkWidth(rawWidth) : rawWidth;
   const fill = o ? ((o.fill as string | null | undefined) ?? null) : style.fill;
 
   function set(patch: { stroke?: string; width?: number; fill?: string | null; redactFill?: "black" | "white" }) {
     if (o) {
       const p: Record<string, unknown> = {};
       if (patch.stroke !== undefined) p[o.type === "ink.add" ? "color" : "stroke"] = patch.stroke;
-      if (patch.width !== undefined) p.width = patch.width;
+      if (patch.width !== undefined) p.width = o.type === "ink.add" ? inkWidth(patch.width) : patch.width;
       if (patch.fill !== undefined) p.fill = patch.fill;
       if (patch.redactFill !== undefined) p.fill = patch.redactFill;
       s.updateObject(o.id, p as Partial<ContentOp>);

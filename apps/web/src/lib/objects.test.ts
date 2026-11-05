@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
-import { arrowHead, createFromDrag, moveOp, normalizeRect, opBounds, resizeOp } from "@/lib/objects";
+import { arrowHead, clampToPage, createFromDrag, inkWidth, MIN_INK_WIDTH, moveOp, normalizeRect, opBounds, resizeOp } from "@/lib/objects";
 import type { ToolStyle } from "@/store/editor";
 
 const style: ToolStyle = { stroke: "#ff0000", fill: "#00ff00", width: 3, color: "#111111", fontFamily: "Arimo", fontSize: 14, bold: false, italic: false, align: "left" };
@@ -49,5 +49,18 @@ describe("objects", () => {
     expect(arrowHead(1).length).toBe(6);
     expect(arrowHead(3).length).toBe(12);
     expect(arrowHead(3).width).toBeCloseTo(2 * 12 * Math.tan((25 * Math.PI) / 180));
+  });
+
+  it("clamps a pointer position to the page bounds", () => {
+    expect(clampToPage([50, 60], 595, 842)).toEqual([50, 60]);
+    expect(clampToPage([-20, 900], 595, 842)).toEqual([0, 842]);
+    expect(clampToPage([700, -1], 595, 842)).toEqual([595, 0]);
+  });
+
+  it("keeps ink strokes visible", () => {
+    expect(MIN_INK_WIDTH).toBe(0.5);
+    expect(inkWidth(0)).toBe(0.5);
+    expect(inkWidth(0.2)).toBe(0.5);
+    expect(inkWidth(4)).toBe(4);
   });
 });

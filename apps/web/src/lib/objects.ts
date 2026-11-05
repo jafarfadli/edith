@@ -6,6 +6,15 @@ export const MIN_DRAG = 3;
 export type DragTool = "rect" | "ellipse" | "line" | "arrow" | "whiteout" | "redact";
 export const DRAG_TOOLS: ReadonlySet<string> = new Set(["rect", "ellipse", "line", "arrow", "whiteout", "redact"]);
 
+/** Ink needs a positive width (the API rejects 0); the shared stroke slider allows 0 for shapes. */
+export const MIN_INK_WIDTH = 0.5;
+export const inkWidth = (w: number) => Math.max(MIN_INK_WIDTH, w);
+
+/** A page-relative pointer position kept inside the page (drags may end outside it). */
+export function clampToPage([x, y]: Pt, width: number, height: number): Pt {
+  return [Math.min(Math.max(x, 0), width), Math.min(Math.max(y, 0), height)];
+}
+
 type Any = ContentOp & Record<string, unknown>;
 
 export function normalizeRect([ax, ay]: Pt, [bx, by]: Pt): Rect {
