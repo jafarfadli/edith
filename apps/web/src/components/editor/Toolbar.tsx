@@ -60,6 +60,11 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
         { tool: "whiteout", label: t.editor.whiteout, icon: "▭" },
         { tool: "redact", label: t.editor.redact, icon: "▮" },
       ]} />
+      <SplitButton label={t.annot.markup} active={tool} onPick={pick} options={[
+        { tool: "highlight", label: t.annot.highlight, icon: "🖍" },
+        { tool: "underline", label: t.annot.underline, icon: "U̲" },
+        { tool: "strike", label: t.annot.strike, icon: "S̶" },
+      ]} />
       <ToolButton tool="ink" label={t.editor.draw} icon="✎" active={tool} />
       <button aria-label={t.editor.image} title={t.editor.image} onClick={() => file.current?.click()} className="flex h-9 items-center gap-1 rounded-md px-2 text-sm hover:bg-bg">
         <span aria-hidden>🖼</span><span className="hidden lg:inline">{t.editor.image}</span>

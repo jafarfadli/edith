@@ -1,4 +1,5 @@
 import type { BundledFont, ExportRequest, Rect, RenderPageRequest, Run } from "@edith/ops";
+import type { CharLine } from "@/lib/markup";
 import type { StructurePage } from "@/store/editor";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
@@ -33,8 +34,7 @@ export interface FormField {
   /** 0 = auto. */
   fontSize: number;
 }
-/** One horizontal line of original text: `boxes[i]` = `[x0, x1]` of the i-th code point of `text`. */
-export interface CharLine { text: string; boxes: [number, number][]; baseline: number; size: number }
+export type { CharLine } from "@/lib/markup";
 
 export interface UploadResult { doc_id: string; sha256: string; page_count: number }
 export interface Structure { doc_id: string; sha256: string; page_count: number; pages: StructurePage[]; fields: FormField[] }

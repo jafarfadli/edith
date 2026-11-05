@@ -5,6 +5,8 @@ export type Pt = [number, number];
 export const MIN_DRAG = 3;
 export type DragTool = "rect" | "ellipse" | "line" | "arrow" | "whiteout" | "redact";
 export const DRAG_TOOLS: ReadonlySet<string> = new Set(["rect", "ellipse", "line", "arrow", "whiteout", "redact"]);
+/** Tools that select original text and add a text-markup annotation (they stay active). */
+export const MARKUP_TOOLS: ReadonlySet<string> = new Set(["highlight", "underline", "strike"]);
 
 /** Ink needs a positive width (the API rejects 0); the shared stroke slider allows 0 for shapes. */
 export const MIN_INK_WIDTH = 0.5;

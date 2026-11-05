@@ -7,9 +7,11 @@ import { useStore } from "zustand";
 import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
 import { groupTransform, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
-import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, isMarkup, isResizable, isTextOp, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
-import { editorStore, useEditor } from "@/store/editor";
+import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, isMarkup, isResizable, isTextOp, MARKUP_TOOLS, moveOp, resizeOp, type DragTool, type Pt } from "@/lib/objects";
+import { charsStore } from "@/store/chars";
+import { editorStore, useEditor, type MarkupTool } from "@/store/editor";
 import { MarkupShape } from "./marks/MarkupShape";
+import { markupFromDrag, onMarkableText } from "./marks/markupTool";
 import { ObjectShape } from "./ObjectShape";
 import { textEditStore } from "./text/textEdit";
 
@@ -26,6 +28,8 @@ export const overlayHooks: {
   renderText?: (op: TextOp, selected: boolean) => React.ReactNode;
   resizeText?: (op: TextOp, to: { x: number; y: number; w: number; h: number }) => TextOp;
   onDoubleClick?: (op: ContentOp) => void;
+  /** A double-click on a text markup (select tool): edit the text under it at `at`. */
+  onMarkupDoubleClick?: (pageKey: string, at: Pt) => void;
   /** Konva nodes drawn under the page's objects (original paragraphs). */
   renderUnder?: (pageKey: string) => React.ReactNode;
   /** Konva nodes drawn over the page's objects (search highlights). */
@@ -40,6 +44,10 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   const selection = useEditor((s) => s.selection);
   const tool = useEditor((s) => s.tool);
   const docId = useEditor((s) => s.info?.docId ?? "");
+  const srcIndex = useEditor((s) => {
+    const entry = s.doc.pages.find((p) => p.pageKey === pageKey);
+    return entry && "doc" in entry.src ? entry.src.index : null;
+  });
   // renderText reads the editing id at render time (the edited op is hidden), so re-render when it changes.
   useStore(textEditStore, (s) => s.editing?.id);
   const pageRef = useRef<Konva.Group>(null);
@@ -61,6 +69,11 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   }, [selection, mine]);
 
   useEffect(() => () => drawing.current?.stop(), []);
+
+  // Text markup needs the page's character boxes.
+  useEffect(() => {
+    if (MARKUP_TOOLS.has(tool) && docId && srcIndex !== null) void charsStore.getState().load(docId, srcIndex);
+  }, [tool, docId, srcIndex]);
 
   /** Page-relative pointer position (clamped to the page); `evt` updates it from an event outside Konva. */
   const pos = (evt?: PointerEvent): Pt => {
@@ -87,6 +100,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     if (!cur) return;
     if (tool === "ink") {
       if (cur.draft) setDrawDraft(extendInk(cur.draft, at));
+    } else if (MARKUP_TOOLS.has(tool)) {
+      setDrawDraft(markupFromDrag(tool as MarkupTool, pageKey, cur.start, at, "draft"));
     } else if (DRAG_TOOLS.has(tool)) {
       setDrawDraft(createFromDrag(tool as DragTool, cur.start, at, editorStore.getState().style, pageKey, "draft"));
     }
@@ -99,6 +114,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     const s = editorStore.getState();
     if (tool === "ink" && cur.draft) {
       s.addObject({ ...extendInk(cur.draft, at), id: newId() } as ContentOp);
+    } else if (MARKUP_TOOLS.has(tool)) {
+      const op = markupFromDrag(tool as MarkupTool, pageKey, cur.start, at, newId());
+      if (op) s.addObject(op); // the markup tools stay active
     } else if (DRAG_TOOLS.has(tool)) {
       const op = createFromDrag(tool as DragTool, cur.start, at, s.style, pageKey, newId());
       if (op) { s.addObject(op); s.setTool("select"); s.select(op.id); }
@@ -135,7 +153,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     }
     const at = pos();
     if (tool === "text") { overlayHooks.onTextPointerDown?.(pageKey, at); return; }
-    if (DRAG_TOOLS.has(tool)) {
+    if (MARKUP_TOOLS.has(tool)) {
+      if (onMarkableText(pageKey, at)) beginDraw(at, null);
+    } else if (DRAG_TOOLS.has(tool)) {
       beginDraw(at, null);
     } else if (tool === "ink") {
       beginDraw(at, { id: "draft", type: "ink.add", pageKey, paths: [[at]], color: s.style.stroke, width: inkWidth(s.style.width) } as ContentOp);
@@ -146,7 +166,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     <div
       data-testid="overlay"
       className="absolute inset-0"
-      style={{ pointerEvents: tool === "pan" ? "none" : "auto", cursor: tool === "select" ? "default" : "crosshair" }}
+      style={{ pointerEvents: tool === "pan" ? "none" : "auto", cursor: tool === "select" ? "default" : MARKUP_TOOLS.has(tool) ? "text" : "crosshair" }}
     >
       <Stage
         width={size.width}
@@ -220,7 +240,10 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
                 e.cancelBubble = true;
                 textEditStore.getState().selectParagraph(null);
                 editorStore.getState().select(op.id);
-              }}>
+              }}
+              // The markup layer is above the text: a double-click edits the text under the markup.
+              onDblClick={() => overlayHooks.onMarkupDoubleClick?.(pageKey, pos())}
+              onDblTap={() => overlayHooks.onMarkupDoubleClick?.(pageKey, pos())}>
                 <MarkupShape op={op} selected={selection === op.id} />
               </Group>
             ))}

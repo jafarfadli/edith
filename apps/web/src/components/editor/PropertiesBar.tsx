@@ -2,15 +2,16 @@
 
 import type { ContentOp } from "@edith/ops";
 import { useStore } from "zustand";
-import { inkWidth, isTextOp } from "@/lib/objects";
+import { inkWidth, isMarkup, isTextOp, MARKUP_TOOLS } from "@/lib/objects";
 import { t } from "@/lib/strings";
-import { editorStore, useEditor, type ToolStyle } from "@/store/editor";
+import { useChars } from "@/store/chars";
+import { editorStore, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
 import { ColorField } from "./ColorField";
 import { textEditStore } from "./text/textEdit";
 
 export const textPropsSlot: { render?: () => React.ReactNode } = {};
 
-type Kind = "shape" | "line" | "ink" | "redact" | "text" | null;
+type Kind = "shape" | "line" | "ink" | "redact" | "text" | "markup" | null;
 
 function kindOf(op: ContentOp | undefined, tool: string): Kind {
   if (op) {
@@ -18,8 +19,10 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
     if (op.type === "ink.add") return "ink";
     if (op.type === "redact.add") return "redact";
     if (isTextOp(op)) return "text";
+    if (isMarkup(op)) return "markup";
     return null;
   }
+  if (MARKUP_TOOLS.has(tool)) return "markup";
   if (tool === "rect" || tool === "ellipse") return "shape";
   if (tool === "line" || tool === "arrow") return "line";
   if (tool === "ink") return "ink";
@@ -40,8 +43,21 @@ export function PropertiesBar() {
     const entry = st.doc.pages.find((p) => p.pageKey === st.currentPage);
     return tool === "text" && !!entry && "doc" in entry.src && st.info?.pages[entry.src.index]?.hasText === false;
   });
+  // The markup tools on a page without original text (or only rotated text): nothing to mark.
+  const currentSrc = useEditor((st) => {
+    const entry = st.doc.pages.find((p) => p.pageKey === st.currentPage);
+    return entry && "doc" in entry.src ? entry.src.index : -1;
+  });
+  const currentLines = useChars((cs) => cs.pages[currentSrc]);
+  const noText = MARKUP_TOOLS.has(tool) && Array.isArray(currentLines) && currentLines.length === 0;
   const o = op as (ContentOp & Record<string, unknown>) | undefined;
   const s = editorStore.getState();
+
+  /** Color of the selected object (its `color` field), or of what the tool makes next. */
+  function setColor(v: string) {
+    if (o) s.updateObject(o.id, { color: v } as Partial<ContentOp>, { coalesce: `props:${o.id}` });
+    else if (MARKUP_TOOLS.has(tool)) s.setStyle({ markup: { ...style.markup, [tool]: v } });
+  }
 
   const stroke = (o?.type === "ink.add" ? (o.color as string) : (o?.stroke as string | undefined)) ?? style.stroke;
   const rawWidth = (o?.width as number | undefined) ?? style.width;
@@ -96,6 +112,11 @@ export function PropertiesBar() {
           </select>
         </label>
       )}
+      {kind === "markup" && (
+        <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.markup[tool as MarkupTool] ?? style.markup.highlight}
+          onChange={(v) => setColor(v)} />
+      )}
+      {kind === "markup" && noText && <span className="text-xs text-muted">{t.annot.noText}</span>}
       {kind === "text" && textPropsSlot.render?.()}
       {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
       <div className="flex-1" />
