@@ -35,6 +35,11 @@ export function PropertiesBar() {
   const style = useEditor((s) => s.style);
   const editingText = useStore(textEditStore, (st) => !!st.editing);
   const kind = editingText ? "text" : kindOf(op, tool);
+  // The text tool on a page without text (a scan): say why there is nothing to edit.
+  const scanned = useEditor((st) => {
+    const entry = st.doc.pages.find((p) => p.pageKey === st.currentPage);
+    return tool === "text" && !!entry && "doc" in entry.src && st.info?.pages[entry.src.index]?.hasText === false;
+  });
   const o = op as (ContentOp & Record<string, unknown>) | undefined;
   const s = editorStore.getState();
 
@@ -92,6 +97,7 @@ export function PropertiesBar() {
         </label>
       )}
       {kind === "text" && textPropsSlot.render?.()}
+      {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
       <div className="flex-1" />
       {selection && (
         // Deleting a text.edit op brings the original paragraph back.

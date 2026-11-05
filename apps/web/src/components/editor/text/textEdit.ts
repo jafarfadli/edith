@@ -3,13 +3,14 @@
 import { createStore } from "zustand/vanilla";
 import type { Editor } from "@tiptap/core";
 import type { ContentOp, Run, TextBox } from "@edith/ops";
+import type { Paragraph } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
 import { newId } from "@/lib/id";
-import { prepareRuns, resolveLoadedRuns } from "@/lib/paragraphs";
+import { paragraphBox, prepareRuns, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
 import { boxFonts, boxLineHeight, newBox, relayout } from "@/lib/textbox";
-import { editorStore } from "@/store/editor";
+import { editorStore, textEditFor } from "@/store/editor";
 import { textStore } from "@/store/text";
 
 type Pt = [number, number];
@@ -27,7 +28,7 @@ interface TextEditState {
   editing: Editing | null;
   /** Style at the rich editor's selection, for the properties bar. */
   current: RunAttrs | null;
-  /** Selected original paragraph (select tool; not an op yet — Task 13). */
+  /** Selected original paragraph (select tool; not an op yet). */
   paragraph: { pageKey: string; id: string } | null;
   start(e: Editing): void;
   update(box: TextBox): void;
@@ -79,6 +80,51 @@ export function startTextAt(pageKey: string, at: Pt): void {
   const s = st.style;
   const box = newBox(at, { family: s.fontFamily, bold: s.bold, italic: s.italic, size: s.fontSize, color: s.color, align: s.align });
   textEditStore.getState().start({ id: newId(), pageKey, box, isNew: true, kind: "text.add" });
+}
+
+/** The box that redraws original paragraph `p` with fonts that can draw it (loads them). */
+export async function paragraphStartBox(p: Paragraph): Promise<TextBox> {
+  const [runs] = await prepareRuns([p.runs], textStore.getState().fonts);
+  return paragraphBox({ ...p, runs }, (f) => fontStore.get(f));
+}
+
+/** Opens original paragraph `p` for typing (its text.edit op, when it has one). */
+export async function startParagraphEdit(pageKey: string, p: Paragraph): Promise<void> {
+  if (textEditStore.getState().editing || pendingCommit) return;
+  editorStore.getState().select(null);
+  textEditStore.getState().selectParagraph(null);
+  const existing = textEditFor(editorStore.getState().doc, pageKey, p.id);
+  if (existing) {
+    textEditStore.getState().start({ id: existing.id, pageKey, box: existing.box, isNew: false, kind: "text.edit", paragraphId: p.id });
+    return;
+  }
+  let box: TextBox;
+  try {
+    box = await paragraphStartBox(p);
+  } catch (err) {
+    console.warn("paragraph edit: font load failed", err);
+    return;
+  }
+  // Something else started (or landed an op for this paragraph) while the fonts loaded.
+  if (textEditStore.getState().editing || pendingCommit || textEditFor(editorStore.getState().doc, pageKey, p.id)) return;
+  textEditStore.getState().start({ id: newId(), pageKey, box, isNew: true, kind: "text.edit", paragraphId: p.id, initial: box.paragraphs });
+}
+
+/** Turns original paragraph `p` into a text.edit op changed by `change` (moved, resized), selected. */
+export async function materializeParagraph(pageKey: string, p: Paragraph, change: (box: TextBox) => TextBox): Promise<void> {
+  let box: TextBox;
+  try {
+    box = await paragraphStartBox(p);
+  } catch (err) {
+    console.warn("paragraph move: font load failed", err);
+    return;
+  }
+  const st = editorStore.getState();
+  if (textEditFor(st.doc, pageKey, p.id) || !st.doc.pages.some((pg) => pg.pageKey === pageKey)) return;
+  const id = newId();
+  st.addObject({ id, type: "text.edit", pageKey, paragraphId: p.id, box: relayout(change(box), (f) => fontStore.get(f)) } as ContentOp);
+  textEditStore.getState().selectParagraph(null);
+  if (!textEditStore.getState().editing) st.select(id);
 }
 
 /** Commits the open session with the rich editor's current content. */

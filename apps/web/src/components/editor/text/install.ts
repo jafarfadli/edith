@@ -7,6 +7,7 @@ import { relayout } from "@/lib/textbox";
 import { editorStore } from "@/store/editor";
 import { overlayHooks } from "../PageOverlay";
 import { textPropsSlot } from "../PropertiesBar";
+import { ParagraphLayer } from "./ParagraphLayer";
 import { TextNode } from "./TextNode";
 import { TextProps } from "./TextProps";
 import { fontsReady, startTextAt, textEditStore } from "./textEdit";
@@ -35,6 +36,8 @@ export function installTextTool(): void {
     const box = { ...op.box, rect: { ...op.box.rect, x: to.x, w: Math.max(to.w, 10) } };
     return { ...op, box: fontsReady(box) ? relayout(box, (f) => fontStore.get(f)) : box };
   };
+
+  overlayHooks.renderUnder = (pageKey) => createElement(ParagraphLayer, { pageKey });
 
   textPropsSlot.render = () => createElement(TextProps);
 }

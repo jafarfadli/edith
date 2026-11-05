@@ -2,11 +2,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FontRef, Run, TextAdd, TextEdit } from "@edith/ops";
+import type { Paragraph } from "@/lib/api";
 import { fontStore, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
 import { boxLineHeight, newBox } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
-import { afterTextCommitted, commitEditing, startTextAt, textEditStore, whenTextCommitted } from "./textEdit";
+import { afterTextCommitted, commitEditing, materializeParagraph, startParagraphEdit, startTextAt, textEditStore, whenTextCommitted } from "./textEdit";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
@@ -208,5 +209,39 @@ describe("session start", () => {
   it("rejects a text.edit session without a paragraph id", () => {
     expect(() => textEditStore.getState().start({ id: "x", pageKey: "o0", box: newBox([0, 0], style), isNew: true, kind: "text.edit" }))
       .toThrow(/paragraphId/);
+  });
+});
+
+describe("original paragraphs", () => {
+  beforeEach(() => { gate.resolve(); fontsLoaded = true; });
+  const para: Paragraph = {
+    id: "g2", rect: { x: 72, y: 88, w: 120, h: 16 }, align: "left", lineHeight: 14, editable: true,
+    runs: [{ text: "Halo dunia", font, size: 14, color: "#111111" }],
+    lines: [{ rect: { x: 72, y: 88, w: 120, h: 16 }, baseline: 100, size: 14, start: 0, end: 10 }],
+  };
+
+  it("startParagraphEdit opens a session on the paragraph's own lines", async () => {
+    await startParagraphEdit("o0", para);
+    const e = textEditStore.getState().editing!;
+    expect(e).toMatchObject({ kind: "text.edit", paragraphId: "g2", pageKey: "o0", isNew: true });
+    expect(e.box.rect.y + e.box.layout[0].baseline).toBeCloseTo(100);
+    expect(e.initial).toEqual(e.box.paragraphs);
+  });
+
+  it("startParagraphEdit reopens the paragraph's existing op", async () => {
+    await materializeParagraph("o0", para, (b) => b);
+    const id = editorStore.getState().selection!;
+    await startParagraphEdit("o0", para);
+    expect(textEditStore.getState().editing).toMatchObject({ id, isNew: false, kind: "text.edit" });
+  });
+
+  it("materializeParagraph adds a moved text.edit op, selected, in one undo step", async () => {
+    await materializeParagraph("o0", para, (b) => ({ ...b, rect: { ...b.rect, x: b.rect.x + 10 } }));
+    const op = Object.values(editorStore.getState().doc.objects)[0] as TextEdit;
+    expect(op).toMatchObject({ type: "text.edit", paragraphId: "g2" });
+    expect(op.box.rect.x).toBe(82);
+    expect(editorStore.getState().selection).toBe(op.id);
+    editorStore.getState().undo();
+    expect(editorStore.getState().doc.order).toEqual([]);
   });
 });

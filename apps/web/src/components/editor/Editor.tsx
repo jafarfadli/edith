@@ -15,6 +15,7 @@ import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
 import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
+import { textStore } from "@/store/text";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
 import { PageList } from "./PageList";
@@ -59,6 +60,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages }, draft);
       initialDoc.current = editorStore.getState().doc;
       if (draft) setNotice({ kind: "info", text: t.editor.restored });
+      void textStore.getState().load(docId); // original paragraphs + fonts, in the background
       // Preload fonts of restored text boxes (in parallel with the PDF; TextNode also loads on demand).
       const texts = Object.values(editorStore.getState().doc.objects).filter(isTextOp);
       void Promise.all(texts.flatMap((o) => boxFonts(o.box)).map((f) => fontStore.load(f))).catch((e) => console.warn("font preload failed", e));

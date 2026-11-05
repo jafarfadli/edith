@@ -19,6 +19,8 @@ export const overlayHooks: {
   renderText?: (op: TextOp, selected: boolean) => React.ReactNode;
   resizeText?: (op: TextOp, to: { x: number; y: number; w: number; h: number }) => TextOp;
   onDoubleClick?: (op: ContentOp) => void;
+  /** Konva nodes drawn under the page's objects (original paragraphs). */
+  renderUnder?: (pageKey: string) => React.ReactNode;
 } = {};
 
 export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
@@ -116,7 +118,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   function onDown(e: Konva.KonvaEventObject<PointerEvent>) {
     const s = editorStore.getState();
     if (tool === "select") {
-      if (e.target === e.target.getStage()) s.select(null);
+      if (e.target === e.target.getStage()) { s.select(null); textEditStore.getState().selectParagraph(null); }
       return;
     }
     const at = pos();
@@ -141,13 +143,19 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       >
         <Layer>
           <Group ref={pageRef} x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale}>
+            {overlayHooks.renderUnder?.(pageKey)}
             {mine.map((op) => (
               <Group
                 key={op.id}
                 ref={(n) => { if (n) nodes.current.set(op.id, n); else nodes.current.delete(op.id); }}
                 draggable={tool === "select"}
                 listening={tool === "select"}
-                onPointerDown={(e) => { if (tool === "select") { e.cancelBubble = true; editorStore.getState().select(op.id); } }}
+                onPointerDown={(e) => {
+                  if (tool !== "select") return;
+                  e.cancelBubble = true;
+                  textEditStore.getState().selectParagraph(null);
+                  editorStore.getState().select(op.id);
+                }}
                 onDragEnd={(e) => {
                   const g = e.currentTarget as Konva.Group;
                   const dx = g.x(), dy = g.y();
