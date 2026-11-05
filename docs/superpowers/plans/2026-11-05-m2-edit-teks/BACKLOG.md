@@ -31,3 +31,7 @@ From per-task and final whole-branch reviews of M2. Final verdict: ready to merg
 - Task 14: minor (deferred): case folding skips length-changing letters (İ); highlight drift on justified originals; full recompute per doc change; highlights during open session. OWNER DECISION PENDING: longer replacement/edit wraps in original paragraph width → may overlap next paragraph. E2E note: clear localStorage between uploads of same fixture.
 - Task 15: note (final triage): span→font match needs PostScript & full name to normalize to same key, else silent fallback to substitute (real PDFs may hit this).
 - Task 15: minor (deferred): weak unchanged-line checks; baseline check y-only; pdfSpans spawns uv twice.
+
+## Owner decisions (after M2 final review)
+- Overflow of longer edits/replacements past the original paragraph: accepted for M2. M3: show a warning outline when laid-out height exceeds the original paragraph height (no auto-push of following paragraphs).
+- Characters missing from bundled fonts (CJK, emoji, ✓): keep exporting (bake stays permissive); M3: properties bar warns "beberapa karakter tidak didukung font ini" using covers().
