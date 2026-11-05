@@ -1,10 +1,12 @@
 from collections import defaultdict
+from dataclasses import replace
 
 import pymupdf
 
 from edith.bake.context import BakeContext
 from edith.bake.pages import build_pages
 from edith.bake.registry import HANDLERS, PHASE
+from edith.bake.source import SourcePages
 from edith.errors import BakeFailed, EdithError, InvalidOp
 from edith.ops import DocSrc, LayoutPage, PagesLayout
 
@@ -29,14 +31,21 @@ def _run(handler, page, op, ctx) -> None:
 
 def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
     doc = pymupdf.open(stream=source, filetype="pdf")
+    pages_src = None
     try:
-
         layout, layout_index = None, -1
         for i, op in enumerate(ops):
             if op.type == "pages.layout":
                 layout, layout_index = op, i
         if layout is None:
             layout = _default_layout(doc.page_count, ctx.doc_id)
+
+        pages_src = SourcePages(source, {
+            p.pageKey: (p.src.index if isinstance(p.src, DocSrc) and p.src.doc == ctx.doc_id
+                        and p.src.index < doc.page_count else None)
+            for p in layout.pages
+        })
+        ctx = replace(ctx, source=pages_src)
 
         keys = {p.pageKey for p in layout.pages}
         content = [(i, op) for i, op in enumerate(ops) if op.type != "pages.layout"]
@@ -73,3 +82,6 @@ def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
     except BaseException:
         doc.close()
         raise
+    finally:
+        if pages_src is not None:
+            pages_src.close()
