@@ -1,0 +1,62 @@
+import type { ExportRequest, RenderPageRequest } from "@edith/ops";
+import type { StructurePage } from "@/store/editor";
+
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export class ApiError extends Error {
+  constructor(public code: string, public status: number, public extra: Record<string, unknown> = {}) {
+    super(code);
+  }
+}
+
+export interface UploadResult { doc_id: string; sha256: string; page_count: number }
+export interface Structure { doc_id: string; sha256: string; page_count: number; pages: StructurePage[] }
+
+async function request(path: string, init?: RequestInit): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, init);
+  } catch {
+    throw new ApiError("network", 0);
+  }
+  if (!res.ok) {
+    let err: Record<string, unknown> = {};
+    try { err = ((await res.json()) as { error?: Record<string, unknown> }).error ?? {}; } catch { /* not JSON */ }
+    throw new ApiError(String(err.code ?? "generic"), res.status, err);
+  }
+  return res;
+}
+
+const json = (body: unknown): RequestInit => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+export async function uploadDocument(file: File | Blob, name = "document.pdf"): Promise<UploadResult> {
+  const form = new FormData();
+  form.append("file", file, name);
+  return (await request("/documents", { method: "POST", body: form })).json();
+}
+
+export async function getStructure(docId: string): Promise<Structure> {
+  return (await request(`/documents/${docId}/structure`)).json();
+}
+
+export function fileUrl(docId: string): string {
+  return `${API_URL}/documents/${docId}/file`;
+}
+
+export async function uploadAsset(docId: string, file: Blob) {
+  const form = new FormData();
+  form.append("file", file, "asset");
+  return (await request(`/documents/${docId}/assets`, { method: "POST", body: form })).json() as Promise<{ asset_id: string; width: number; height: number }>;
+}
+
+export function assetUrl(docId: string, assetId: string): string {
+  return `${API_URL}/documents/${docId}/assets/${assetId}`;
+}
+
+export async function exportPdf(docId: string, body: ExportRequest): Promise<Blob> {
+  return (await request(`/documents/${docId}/export`, json(body))).blob();
+}
+
+export async function renderPage(docId: string, body: RenderPageRequest): Promise<Blob> {
+  return (await request(`/documents/${docId}/render-page`, json(body))).blob();
+}
