@@ -3,6 +3,7 @@ from collections import defaultdict
 import pymupdf
 
 from edith.bake.registry import register
+from edith.bake.tounicode import fix_to_unicode
 from edith.bake.util import rgb
 from edith.ops import TextAdd, TextBox
 
@@ -35,8 +36,11 @@ def draw_text_box(page: pymupdf.Page, box: TextBox, ctx) -> None:
             font = ctx.fonts.font(r.font.family, r.font.bold, r.font.italic)
             origin = writer_origin(page, (box.rect.x + seg.x, box.rect.y + line.baseline))
             writers[r.color].append(origin, seg.text, font=font, fontsize=r.size)
+    before = {f[0] for f in page.get_fonts(full=True)}
     for color, writer in writers.items():
         writer.write_text(page, color=rgb(color))
+    for xref in {f[0] for f in page.get_fonts(full=True)} - before:
+        fix_to_unicode(page.parent, xref)  # spaces read back as U+0020, not U+00A0
 
 
 @register("text.add")
