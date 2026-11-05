@@ -8,12 +8,16 @@ def open_pdf(data: bytes, max_pages: int) -> pymupdf.Document:
         doc = pymupdf.open(stream=data, filetype="pdf")
     except Exception as exc:  # noqa: BLE001 - any parse failure means corrupt
         raise PdfCorrupt("cannot parse PDF") from exc
-    if doc.needs_pass or doc.is_encrypted:
-        raise PdfEncrypted()
-    if doc.page_count == 0:
-        raise PdfCorrupt("PDF has no pages")
-    if doc.page_count > max_pages:
-        raise TooLarge(f"more than {max_pages} pages", max_pages=max_pages)
+    try:
+        if doc.needs_pass or doc.is_encrypted:
+            raise PdfEncrypted()
+        if doc.page_count == 0:
+            raise PdfCorrupt("PDF has no pages")
+        if doc.page_count > max_pages:
+            raise TooLarge(f"more than {max_pages} pages", max_pages=max_pages)
+    except Exception:
+        doc.close()
+        raise
     return doc
 
 

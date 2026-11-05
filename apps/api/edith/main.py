@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,6 +12,9 @@ from edith.settings import Settings
 from edith.storage import Storage
 
 
+logger = logging.getLogger("edith")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     storage = Storage(settings.data_dir, ttl=settings.ttl_seconds, tombstone_ttl=settings.tombstone_seconds)
@@ -20,7 +24,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async def loop():
             while True:
                 await asyncio.sleep(settings.cleanup_interval_seconds)
-                storage.cleanup()
+                try:
+                    await asyncio.to_thread(storage.cleanup)
+                except Exception:  # noqa: BLE001 - the loop must survive any cleanup failure
+                    logger.exception("storage cleanup failed")
 
         task = asyncio.create_task(loop())
         yield

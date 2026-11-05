@@ -47,3 +47,44 @@ def test_cleanup_removes_expired_and_old_tombstones(storage, clock):
     storage.cleanup()
     with pytest.raises(DocNotFound):          # tombstone purged
         storage.source_path(a.doc_id)
+
+
+def test_cleanup_tolerates_missing_access_file(storage, clock):
+    meta = storage.create(b"x", page_count=1)
+    d = storage.root / "docs" / meta.doc_id
+    (d / ".access").unlink()
+    import os
+    os.utime(d, (clock.t, clock.t))
+    assert storage.cleanup() == 0            # fresh dir mtime: kept, no raise
+    clock.t += 3601
+    assert storage.cleanup() == 1            # expired via dir mtime fallback
+    with pytest.raises(DocExpired):
+        storage.source_path(meta.doc_id)
+
+
+def test_source_removed_after_ttl_check_is_expired(storage):
+    meta = storage.create(b"x", page_count=1)
+    (storage.root / "docs" / meta.doc_id / "source.pdf").unlink()
+    with pytest.raises(DocExpired):
+        storage.source_path(meta.doc_id)
+
+
+def test_dir_removed_between_check_and_use_is_expired(storage, monkeypatch):
+    import shutil
+    meta = storage.create(b"x", page_count=1)
+    d = storage.root / "docs" / meta.doc_id
+    orig = storage._last_access
+
+    def racing(path):
+        value = orig(path)
+        shutil.rmtree(path)
+        return value
+
+    monkeypatch.setattr(storage, "_last_access", racing)
+    with pytest.raises(DocExpired):
+        storage.meta(meta.doc_id)
+
+
+def test_id_with_trailing_newline_rejected(storage):
+    with pytest.raises(DocNotFound):
+        storage.source_path("A" * 22 + "\n")

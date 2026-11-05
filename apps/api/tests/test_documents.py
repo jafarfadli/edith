@@ -66,3 +66,72 @@ def test_unknown_doc(client):
     r = client.get("/documents/AAAAAAAAAAAAAAAAAAAAAA/structure")
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "doc_not_found"
+
+
+def test_source_vanishes_returns_410(client, settings):
+    doc_id = upload(client, make_pdf(pages=1)).json()["doc_id"]
+    (settings.data_dir / "docs" / doc_id / "source.pdf").unlink()
+    for suffix in ("structure", "file"):
+        r = client.get(f"/documents/{doc_id}/{suffix}")
+        assert r.status_code == 410
+        assert r.json()["error"]["code"] == "doc_expired"
+
+
+def test_unknown_route_uses_error_shape(client):
+    r = client.get("/nope")
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "not_found"
+
+
+def test_wrong_method_uses_error_shape(client):
+    r = client.delete("/documents")
+    assert r.status_code == 405
+    assert r.json()["error"]["code"] == "method_not_allowed"
+
+
+def test_missing_file_field_is_invalid_request(client):
+    r = client.post("/documents")
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "invalid_request"
+
+
+def test_unhandled_exception_uses_error_shape(settings):
+    from fastapi.testclient import TestClient
+
+    from edith.main import create_app
+
+    app = create_app(settings)
+
+    @app.get("/boom")
+    def boom():
+        raise RuntimeError("secret detail")
+
+    with TestClient(app, raise_server_exceptions=False) as c:
+        r = c.get("/boom")
+    assert r.status_code == 500
+    assert r.json() == {"error": {"code": "internal", "message": "internal error"}}
+
+
+def test_cleanup_loop_survives_errors(settings, monkeypatch, caplog):
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from edith.main import create_app
+    from edith.storage import Storage
+
+    calls = []
+
+    def flaky(self):
+        calls.append(1)
+        raise OSError("disk gone")
+
+    monkeypatch.setattr(Storage, "cleanup", flaky)
+    settings.cleanup_interval_seconds = 0.01
+    with caplog.at_level("ERROR", logger="edith"):
+        with TestClient(create_app(settings)):
+            deadline = time.time() + 2
+            while len(calls) < 2 and time.time() < deadline:
+                time.sleep(0.01)
+    assert len(calls) >= 2                   # kept looping after the first failure
+    assert any("storage cleanup failed" in r.message for r in caplog.records)
