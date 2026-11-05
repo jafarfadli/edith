@@ -43,11 +43,26 @@ export function charOffsets(text: string, m: FontMetrics, size: number): number[
   return out;
 }
 
-function style(f: BundledFont): "regular" | "bold" | "italic" | "bolditalic" {
+export type Style = "regular" | "bold" | "italic" | "bolditalic";
+
+function style(f: BundledFont): Style {
   if (f.bold && f.italic) return "bolditalic";
   if (f.bold) return "bold";
   if (f.italic) return "italic";
   return "regular";
+}
+
+/** Styles to try when a family lacks the requested one — same order as the API's FontRegistry.path. */
+const STYLE_FALLBACK: Record<Style, Style[]> = {
+  regular: ["regular"],
+  bold: ["bold", "regular"],
+  italic: ["italic", "regular"],
+  bolditalic: ["bolditalic", "bold", "italic", "regular"],
+};
+
+export function pickFile(files: Partial<Record<Style, string>>, wanted: Style): string {
+  for (const s of STYLE_FALLBACK[wanted]) if (files[s]) return files[s]!;
+  throw new Error("font family has no regular style");
 }
 
 export function fontKey(f: BundledFont): string {
@@ -59,7 +74,7 @@ export function cssFamily(f: BundledFont): string {
   return `edith-${fontKey(f)}`;
 }
 
-interface Manifest { default: string; families: Record<string, { category: string; files: Record<string, string> }> }
+interface Manifest { default: string; families: Record<string, { category: string; files: Partial<Record<Style, string>> }> }
 
 export class FontStore {
   private manifest?: Promise<Manifest>;
@@ -95,7 +110,7 @@ export class FontStore {
         const manifest = await this.getManifest();
         const fam = manifest.families[f.family];
         if (!fam) throw new Error(`unknown font family ${f.family}`);
-        const url = `${this.baseUrl}/${fam.files[style(f)]}`;
+        const url = `${this.baseUrl}/${pickFile(fam.files, style(f))}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error(`font fetch failed: ${url} (${res.status})`);
         const buf = await res.arrayBuffer();

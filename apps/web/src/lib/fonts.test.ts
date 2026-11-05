@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FontStore, charOffsets, cssFamily, fontKey, metricsFromBuffer, textWidth } from "@/lib/fonts";
+import { FontStore, charOffsets, cssFamily, fontKey, metricsFromBuffer, pickFile, textWidth } from "@/lib/fonts";
 
 const ttf = (name: string) => readFileSync(path.resolve(__dirname, "../../../../packages/fonts/files", name));
 
@@ -69,5 +69,14 @@ describe("FontStore", () => {
     const store = new FontStore("/fonts");
     await expect(store.load(font)).rejects.toThrow("font fetch failed: /fonts/Arimo-Regular.ttf (404)");
     expect((await store.load(font)).unitsPerEm).toBe(2048);
+  });
+});
+
+describe("pickFile", () => {
+  it("picks the nearest style a family has (same order as the API)", () => {
+    expect(pickFile({ regular: "R.ttf", bold: "B.ttf" }, "bolditalic")).toBe("B.ttf");
+    expect(pickFile({ regular: "R.ttf", bold: "B.ttf" }, "italic")).toBe("R.ttf");
+    expect(pickFile({ regular: "R.ttf" }, "bold")).toBe("R.ttf");
+    expect(() => pickFile({}, "regular")).toThrow("no regular style");
   });
 });
