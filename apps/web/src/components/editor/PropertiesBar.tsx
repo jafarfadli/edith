@@ -50,7 +50,7 @@ export function PropertiesBar() {
       if (patch.width !== undefined) p.width = o.type === "ink.add" ? inkWidth(patch.width) : patch.width;
       if (patch.fill !== undefined) p.fill = patch.fill;
       if (patch.redactFill !== undefined) p.fill = patch.redactFill;
-      s.updateObject(o.id, p as Partial<ContentOp>);
+      s.updateObject(o.id, p as Partial<ContentOp>, { coalesce: `props:${o.id}` }); // a slider drag is one undo step
     } else {
       const next: Partial<ToolStyle> = {};
       if (patch.stroke !== undefined) next.stroke = patch.stroke;
