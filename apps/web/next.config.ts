@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  transpilePackages: ["@edith/ops"],
   /* config options here */
   turbopack: {
     rules: {
