@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sync-fonts": "node scripts/sync-fonts.mjs",
+    "predev": "npm run sync-fonts",
+    "prebuild": "npm run sync-fonts",
+    "pretest": "npm run sync-fonts"
   },
   "dependencies": {
     "next": "16.4.5",
