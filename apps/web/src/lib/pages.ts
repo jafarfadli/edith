@@ -157,3 +157,16 @@ export function insertIndex(doc: EditorDoc, selected: ReadonlySet<string>): numb
   doc.pages.forEach((p, i) => { if (selected.has(p.pageKey)) last = i; });
   return last < 0 ? doc.pages.length : last + 1;
 }
+
+/** Click/keyboard selection in the Manage Pages modal: Shift extends from the anchor through `key`
+ *  (a plain toggle when there is no anchor or it no longer exists), otherwise `key` is toggled. */
+export function toggleSelection(doc: EditorDoc, selected: ReadonlySet<string>, anchor: string | null, key: string, shift: boolean): Set<string> {
+  const next = new Set(selected);
+  const a = anchor === null ? -1 : doc.pages.findIndex((p) => p.pageKey === anchor);
+  const b = doc.pages.findIndex((p) => p.pageKey === key);
+  if (shift && a >= 0 && b >= 0) {
+    for (const p of doc.pages.slice(Math.min(a, b), Math.max(a, b) + 1)) next.add(p.pageKey);
+  } else if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
+}

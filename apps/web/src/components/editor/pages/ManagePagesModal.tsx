@@ -20,6 +20,7 @@ function Tile({ entry, index, checked, onToggle }: { entry: PageEntry; index: nu
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
       {...attributes} {...listeners} data-testid="manage-page" data-page-key={entry.pageKey} aria-pressed={checked}
       onClick={(e) => onToggle(e.shiftKey)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(e.shiftKey); } }}
       className={`relative flex cursor-pointer flex-col items-center gap-1 rounded-lg p-2 ${checked ? "bg-accent/10 ring-2 ring-accent" : "hover:bg-bg"}`}>
       <div className="grid place-items-center" style={{ width: THUMB, height: THUMB * 1.42 }}>
         <Thumbnail entry={entry} geom={pageGeom(entry, info)} width={THUMB} />
@@ -40,6 +41,10 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  const busyRef = useRef(false);
+  useEffect(() => { closeRef.current = onClose; busyRef.current = busy; });
+  const close = () => { if (!busyRef.current) closeRef.current(); };
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const keys = [...selected].filter((k) => draft.pages.some((p) => p.pageKey === k));
   const none = keys.length === 0;
@@ -50,21 +55,20 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
     const onKey = (e: KeyboardEvent) => {
       if (box.current?.contains(e.target as Node)) return; // the dialog's own handler deals with it
       e.stopPropagation();
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !busyRef.current) closeRef.current();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, []);
 
   function toggle(key: string, shift: boolean) {
-    const next = new Set(selected);
-    if (shift && anchor) {
-      const a = draft.pages.findIndex((p) => p.pageKey === anchor), b = draft.pages.findIndex((p) => p.pageKey === key);
-      for (const p of draft.pages.slice(Math.min(a, b), Math.max(a, b) + 1)) next.add(p.pageKey);
-    } else if (next.has(key)) next.delete(key);
-    else next.add(key);
-    setSelected(next);
+    setSelected(P.toggleSelection(draft, selected, anchor, key, shift));
     setAnchor(key);
+  }
+
+  function setSel(next: Set<string>) {
+    setSelected(next);
+    setAnchor(null);
   }
 
   function onDragEnd(e: DragEndEvent) {
@@ -104,17 +108,17 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
 
   const btn = "rounded-md px-2.5 py-1.5 hover:bg-bg disabled:opacity-40";
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30" onPointerDown={onClose}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30" onPointerDown={close}>
       <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t.pages.manage} data-testid="manage-pages"
         onPointerDown={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") onClose(); }}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") close(); }}
         className="flex max-h-[85vh] w-[56rem] max-w-[95vw] flex-col gap-3 rounded-xl bg-surface p-4 text-sm shadow-xl outline-none ring-1 ring-line">
         <div className="flex items-center gap-2">
           <span className="font-medium">{t.pages.manage}</span>
           <span className="text-xs text-muted">{t.pages.selected(keys.length, draft.pages.length)}</span>
           <div className="flex-1" />
-          <button className={btn} onClick={() => setSelected(new Set(draft.pages.map((p) => p.pageKey)))}>{t.pages.selectAll}</button>
-          <button className={btn} disabled={none} onClick={() => setSelected(new Set())}>{t.pages.selectNone}</button>
+          <button className={btn} onClick={() => setSel(new Set(draft.pages.map((p) => p.pageKey)))}>{t.pages.selectAll}</button>
+          <button className={btn} disabled={none} onClick={() => setSel(new Set())}>{t.pages.selectNone}</button>
         </div>
         <div role="toolbar" aria-label={t.pages.actions} className="flex flex-wrap items-center gap-1 border-y border-line py-2">
           <button className={btn} disabled={none} onClick={() => setDraft((d) => P.rotatePages(d, keys, -90))}>⟲ {t.editor.rotateLeft}</button>
@@ -123,7 +127,7 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
           <button className={btn} disabled={none} onClick={() => setDraft((d) => P.shiftPages(d, keys, -1))}>◀ {t.pages.moveLeft}</button>
           <button className={btn} disabled={none} onClick={() => setDraft((d) => P.shiftPages(d, keys, 1))}>{t.pages.moveRight} ▶</button>
           <button className={`${btn} text-danger`} disabled={none || keys.length >= draft.pages.length}
-            onClick={() => { setDraft((d) => P.deletePages(d, keys)); setSelected(new Set()); }}>🗑 {t.editor.delete}</button>
+            onClick={() => { setDraft((d) => P.deletePages(d, keys)); setSel(new Set()); }}>🗑 {t.editor.delete}</button>
           <span className="mx-1 h-5 w-px bg-line" />
           <button className={btn} onClick={insertBlank}>＋ {t.pages.blank}</button>
           <button className={btn} disabled={busy} onClick={() => void importFile()}>⇪ {busy ? t.pages.importing : t.pages.importPdf}</button>
@@ -141,8 +145,8 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
           </DndContext>
         </div>
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg px-4 py-2 hover:bg-bg">{t.pages.cancel}</button>
-          <button onClick={save} className="rounded-lg bg-accent px-4 py-2 text-accent-ink">{t.pages.save}</button>
+          <button disabled={busy} onClick={close} className="rounded-lg px-4 py-2 hover:bg-bg disabled:opacity-40">{t.pages.cancel}</button>
+          <button disabled={busy} onClick={save} className="rounded-lg bg-accent px-4 py-2 text-accent-ink disabled:opacity-40">{t.pages.save}</button>
         </div>
       </div>
     </div>

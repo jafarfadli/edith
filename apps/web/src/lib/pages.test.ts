@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
-import { blankSizeLike, clampCrop, deletePages, duplicatePages, importPages, insertIndex, movePage, rotatePages, setCrop, shiftPages } from "@/lib/pages";
+import { blankSizeLike, clampCrop, deletePages, duplicatePages, importPages, insertIndex, movePage, toggleSelection, rotatePages, setCrop, shiftPages } from "@/lib/pages";
 import type { DocInfo, EditorDoc, PageEntry } from "@/store/editor";
 
 const D = "D".repeat(22), I = "I".repeat(22);
@@ -86,5 +86,14 @@ describe("insertIndex", () => {
   it("is after the last selected page, else the end", () => {
     expect(insertIndex(doc(), new Set(["o0", "o1"]))).toBe(2);
     expect(insertIndex(doc(), new Set())).toBe(3);
+  });
+});
+
+describe("toggleSelection", () => {
+  it("toggles, extends ranges from the anchor, and ignores a missing anchor", () => {
+    expect([...toggleSelection(doc(), new Set(), null, "o1", false)]).toEqual(["o1"]);
+    expect([...toggleSelection(doc(), new Set(["o1"]), null, "o1", false)]).toEqual([]);
+    expect([...toggleSelection(doc(), new Set(["o0"]), "o0", "o2", true)].sort()).toEqual(["o0", "o1", "o2"]);
+    expect([...toggleSelection(doc(), new Set(), "gone", "o2", true)]).toEqual(["o2"]);
   });
 });
