@@ -87,6 +87,8 @@ def make_paragraphs_pdf() -> bytes:
     page = doc.new_page(width=595, height=842)
     for i, text in enumerate(["Paragraf A baris satu yang cukup panjang", "baris dua lanjutan paragraf A yang", "berakhir di baris tiga A."]):
         page.insert_text((72, 100 + i * 14.4), text, fontname="helv", fontsize=12)
+    # A's frame: the measure it was wrapped to (alone on a wide page, its short lines would have room for the next word).
+    page.draw_rect(pymupdf.Rect(66, 84, 300, 136), color=(0.5, 0.5, 0.5), width=0.5)
     page.insert_textbox(pymupdf.Rect(72, 180, 372, 260), LOREM, fontname="tiro", fontsize=11,
                         align=pymupdf.TEXT_ALIGN_JUSTIFY)
     c = [(72, "Paragraf C1 baris pertama yang panjang sekali"), (72, "akhir C1."),
@@ -320,6 +322,129 @@ def make_form_table_pdf() -> bytes:
         for i, line in enumerate(lines):
             page.insert_text((x, 420 + 14 * i), line, fontname=font_name, fontsize=10)
     return doc.tobytes(garbage=3, deflate=True)
+
+
+ROWS_TOC = ["Halaman Sampul", "Halaman Pengesahan", "Kata Pengantar"]
+
+
+def make_rows_pdf() -> bytes:
+    """Rows and cells that must not become one paragraph (Helvetica 11), in content-stream order:
+    a label/value form (each value is followed by the next row's label), a table whose vertical borders are drawn
+    row by row with 0.5 pt gaps ("NIM" above the next row's "1."), one text run crossing a column rule
+    ("23/5/2026 Pengenalan"), a dot-leader row above the next label, and table-of-contents entries of similar
+    length under a full-width justified paragraph (the text column)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    for y, label, value in [(100, "Nama", ": Dr. Budi Santoso, S.T."), (113.3, "Jabatan", ": Ketua Program Studi")]:
+        page.insert_text((60, y), label, fontname="helv", fontsize=11)
+        page.insert_text((190, y), value, fontname="helv", fontsize=11)
+    for y0, y1 in [(160, 180.2), (180.7, 200.0)]:  # row by row: the borders leave a 0.5 pt gap at 180.2 … 180.7
+        for x in (100, 130, 300):
+            page.draw_line((x, y0), (x, y1), width=0.5)
+    page.draw_line((100, 180.45), (300, 180.45), width=0.5)
+    page.insert_text((240, 176), "NIM", fontname="helv", fontsize=11)
+    page.insert_text((104, 194), "1.", fontname="helv", fontsize=11)
+    page.insert_text((134, 194), "Budi", fontname="helv", fontsize=11)
+    w = pymupdf.get_text_length("23/5/2026 ", fontname="helv", fontsize=11)
+    page.draw_line((60 + w - 1.5, 230), (60 + w - 1.5, 280), width=0.5)  # the column rule inside the run's space
+    page.draw_line((60 + w + 80, 230), (60 + w + 80, 280), width=0.5)    # the cell's right border: it wraps
+    page.insert_text((60, 245), "23/5/2026 Pengenalan", fontname="helv", fontsize=11)
+    page.insert_text((60 + w, 258), "organisasi", fontname="helv", fontsize=11)
+    page.insert_text((60, 320), "Nama Mahasiswa : " + "." * 60, fontname="helv", fontsize=11)
+    page.insert_text((60, 334), "NIM", fontname="helv", fontsize=11)
+    assert page.insert_textbox(pymupdf.Rect(72, 370, 523, 450), LOREM + " " + LOREM, fontname="helv", fontsize=11,
+                               align=pymupdf.TEXT_ALIGN_JUSTIFY) >= 0
+    for i, entry in enumerate(ROWS_TOC):
+        page.insert_text((90, 470 + 13.8 * i), entry, fontname="helv", fontsize=11)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+LIST_ITEMS = [  # (marker, wrapped text): the first item is tabbed, the second has a plain space after "2."
+    ("1.", ["Pada saat saya mengajukan bantuan ini, saya masih berstatus aktif dan belum dinyatakan lulus",
+            "pada sidang yudisium dan pelaksanaan kegiatan paling lambat satu bulan setelah dinyatakan lulus",
+            "dalam sidang tersebut."]),
+    ("2.", ["Akan mengikuti kegiatan tersebut dengan sungguh-sungguh sesuai dengan jadwal yang telah",
+            "ditetapkan dan berusaha meraih hasil terbaik."]),
+]
+
+
+def make_lists_pdf() -> bytes:
+    """Numbered items, tab stops and hanging indents (Helvetica 11, 13 pt leading): two numbered items whose
+    continuation lines hang at the item's text, full width (item 1 has a tab after its marker, item 2 one space);
+    a form row "Nama Mahasiswa⇥:⇥……" written as one text run with tab-wide spaces; table-of-contents rows whose
+    number and title are separate runs a tab apart ("Bab I⇥Pendahuluan", "4.2⇥Rumusan Masalah"); a prose line
+    with a colon and ordinary spaces."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    body = 90.0
+    y = 100.0
+    for i, (marker, lines) in enumerate(LIST_ITEMS):
+        if i == 0:
+            page.insert_text((72, y), marker, fontname="helv", fontsize=11)
+            page.insert_text((body, y), lines[0], fontname="helv", fontsize=11)
+        else:
+            page.insert_text((72, y), f"{marker} {lines[0]}", fontname="helv", fontsize=11)
+            body2 = 72 + pymupdf.get_text_length(f"{marker} ", fontname="helv", fontsize=11)
+        for line in lines[1:]:
+            y += 13
+            page.insert_text((body if i == 0 else body2, y), line, fontname="helv", fontsize=11)
+        y += 13
+    row = "Nama Mahasiswa" + " " * 5 + ":" + " " * 4 + "." * 40
+    page.insert_text((72, 200), row, fontname="helv", fontsize=11)
+    for i, (num, title) in enumerate([("Bab I", "Pendahuluan"), ("4.2", "Rumusan Masalah")]):
+        page.insert_text((72, 240 + 14 * i), num, fontname="helv", fontsize=11)
+        page.insert_text((130, 240 + 14 * i), title, fontname="helv", fontsize=11)
+    page.insert_text((72, 300), "Dokumen yang diperlukan adalah sebagai berikut: surat pengantar dan formulir.",
+                     fontname="helv", fontsize=11)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+ALIGN_JUSTIFIED = ("Edith menyunting paragraf asli dengan rapi dan teks mengalir ulang di dalam kotak selebar "
+                   "tetap sampai akhir.")
+
+
+def make_align_pdf() -> bytes:
+    """Geometry and alignment cases (Helvetica 11): a line indented with spaces and ending in spaces, a 2-line
+    justified paragraph, a 2-line centred paragraph whose first line is shorter, a title centred on the page, a
+    label centred in a table cell, and a date right-aligned at the right margin (the mirrored left one)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 80), "Body text starts at the left margin of this page.", fontname="helv", fontsize=11)
+    page.insert_text((72, 100), " " * 20 + "Menyetujui,   ", fontname="helv", fontsize=11)
+    assert page.insert_textbox(pymupdf.Rect(72, 112, 390, 150), ALIGN_JUSTIFIED, fontname="helv", fontsize=11,
+                               align=pymupdf.TEXT_ALIGN_JUSTIFY) >= 0
+    for i, text in enumerate(["Laporan Mingguan", "Kerja Praktek Semester Ganjil"]):
+        w = pymupdf.get_text_length(text, fontname="helv", fontsize=11)
+        page.insert_text((400 - w / 2, 180 + 13 * i), text, fontname="helv", fontsize=11)
+    w = pymupdf.get_text_length("SURAT KETERANGAN", fontname="helv", fontsize=14)
+    page.insert_text((297.5 - w / 2, 250), "SURAT KETERANGAN", fontname="helv", fontsize=14)
+    page.draw_rect(pymupdf.Rect(100, 300, 220, 320), width=0.5)
+    w = pymupdf.get_text_length("Tanggal", fontname="helv", fontsize=11)
+    page.insert_text((160 - w / 2, 314), "Tanggal", fontname="helv", fontsize=11)
+    w = pymupdf.get_text_length("Tanggal 23 April 2018", fontname="helv", fontsize=9)
+    page.insert_text((523 - w, 400), "Tanggal 23 April 2018", fontname="helv", fontsize=9)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+TWIN_TEXTS = ("Halo dunia", "XYZ quiz")
+
+
+def make_twin_subsets_pdf() -> bytes:
+    """One page drawing two different subsets of Tinos that share the BaseFont name "Tinos-Regular" (as Word
+    embeds TimesNewRomanPSMT twice): TWIN_TEXTS[0] in one (top), TWIN_TEXTS[1] in the other (below)."""
+    out = pymupdf.open()
+    page = out.new_page(width=595, height=842)
+    for i, text in enumerate(TWIN_TEXTS):
+        src = pymupdf.open()
+        sp = src.new_page(width=595, height=100)
+        sp.insert_font(fontname="TI", fontfile=str(FONT_FILES / "Tinos-Regular.ttf"))
+        sp.insert_text((72, 50), text, fontname="TI", fontsize=12)
+        src.subset_fonts()
+        for xref, *_rest in sp.get_fonts(full=True):
+            src.xref_set_key(xref, "BaseFont", f"/{'ABCDEF' if i == 0 else 'GHIJKL'}+Tinos-Regular")
+        src = pymupdf.open(stream=src.tobytes(garbage=3), filetype="pdf")
+        page.show_pdf_page(pymupdf.Rect(0, 100 * i, 595, 100 * (i + 1)), src, 0)
+    return out.tobytes(garbage=3, deflate=True)
 
 
 CID_TEXT = "신청서 작성 방법 Visa Form"

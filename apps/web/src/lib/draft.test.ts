@@ -14,7 +14,7 @@ describe("draft", () => {
   it("round-trips and clears", () => {
     const doc = { pages: [], objects: {}, order: ["x"] };
     saveDraft("h", doc);
-    expect(loadDraft("h")).toEqual({ ...doc, paragraphsVersion: 2 }); // stamped: see dropStaleTextEdits
+    expect(loadDraft("h")).toEqual({ ...doc, paragraphsVersion: 3 }); // stamped: see dropStaleTextEdits
     clearDraft("h");
     expect(loadDraft("h")).toBeNull();
   });

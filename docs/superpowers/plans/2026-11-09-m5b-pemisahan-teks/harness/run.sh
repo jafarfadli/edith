@@ -10,7 +10,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="${EDITH_REPO:-$(cd "$HERE/../../../../.." && pwd)}"
 OUT="${1:-/private/tmp/claude-501/audit3/out}"
-PORT="${PORT:-19400}"
+PORT="${PORT:-19400}"  # PORT=19500 when 19400 is taken
 export EDITH_API="http://127.0.0.1:$PORT" OUT REFS="${REFS:-$REPO/references}"
 mkdir -p "$OUT"
 PY="$REPO/apps/api/.venv/bin/python"

@@ -84,3 +84,12 @@ def test_fill_and_stroke_rect_is_one_box():
 def test_identical_segments_are_deduplicated():
     r = Rules(horizontal=[Segment(100, 50, 300), Segment(100, 50, 300)], vertical=[Segment(5, 1, 20)] * 3)
     assert len(r.horizontal) == 1 and len(r.vertical) == 1
+
+
+def test_collinear_segments_with_small_gaps_are_one_rule():
+    """Word draws table borders row by row with 0.5 pt gaps: a test at the gap must still find the rule."""
+    r = Rules(vertical=[Segment(308.0, 300.0, 321.2), Segment(308.05, 321.7, 335.0), Segment(308.0, 340.0, 360.0)],
+              horizontal=[Segment(100, 50, 120), Segment(100, 120.8, 300)])
+    assert spans(r.vertical) == [(308.0, 300.0, 335.0), (308.0, 340.0, 360.0)]  # a 5 pt gap stays a gap
+    assert spans(r.horizontal) == [(100, 50, 300)]
+    assert r.v_between(300, 320, 318, 325)  # the middle of 318 … 325 lies in the old 0.5 pt gap

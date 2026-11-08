@@ -47,10 +47,10 @@ export function originalRanges(p: Paragraph, breaks: number[], boxText: string):
 
 /** True when `box` is where paragraphBox(p) puts it (same left edge, width, alignment, line height, first baseline):
  *  only then can original lines stay. A moved or resized text.edit redraws everything. */
-export function inPlace(box: TextBox, p: Paragraph, width: number): boolean {
+export function inPlace(box: TextBox, p: Paragraph, x: number, width: number): boolean {
   const first = box.layout[0];
   return !!first && p.lines.length > 0
-    && Math.abs(box.rect.x - p.rect.x) < IN_PLACE && Math.abs(box.rect.w - width) < IN_PLACE
+    && Math.abs(box.rect.x - x) < IN_PLACE && Math.abs(box.rect.w - width) < IN_PLACE
     && (box.align ?? "left") === p.align && Math.abs(box.lineHeight - p.lineHeight) < 1e-6
     && Math.abs(box.rect.y + first.baseline - p.lines[0].baseline) < IN_PLACE;
 }
@@ -78,7 +78,7 @@ export function editedBox(prev: TextBox, paragraphs: Run[][], p: Paragraph, metr
   }, metricsFor);
   const done = (r: ReturnType<typeof layoutText>, layout: LayoutLine[]) =>
     keepFirstBaseline(prev, { ...prev, paragraphs, layout, rect: { ...prev.rect, h: Math.max(r.height, prev.lineHeight) } });
-  if (!inPlace(prev, p, frame.width)) {
+  if (!inPlace(prev, p, frame.x, frame.width)) {
     const r = lay();
     return done(r, r.lines);
   }

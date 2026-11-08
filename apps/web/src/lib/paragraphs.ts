@@ -71,13 +71,19 @@ export function rawToBox(p: Paragraph, breaks: number[]): (offset: number) => nu
   };
 }
 
-/** What paragraphBox lays `p` out in: the box width, the lines followed by a hard break and the logical paragraphs. */
-export function paragraphFrame(p: Paragraph, metricsFor: MetricsFor): { width: number; breaks: number[]; paragraphs: Run[][] } {
-  // A left-aligned single line (a form label, a table cell) may grow into the room the API measured beside it.
-  const room = p.lines.length === 1 && p.align === "left" && p.maxWidth ? p.maxWidth + WIDTH_SLACK : 0;
+/** What paragraphBox lays `p` out in: the box left edge and width, the lines followed by a hard break and the
+ *  logical paragraphs. */
+export function paragraphFrame(p: Paragraph, metricsFor: MetricsFor): { x: number; width: number; breaks: number[]; paragraphs: Run[][] } {
+  // A single line (a form label, a table cell, a title) may grow into the room the API measured beside it:
+  // rightwards when left-aligned, around its centre when centred, leftwards when right-aligned (M5b).
+  const single = p.lines.length === 1 && p.align !== "justify";
+  const room = single && p.maxWidth ? p.maxWidth + WIDTH_SLACK : 0;
   const width = Math.max(paragraphWidth(p, metricsFor), room);
+  const x = !single ? p.rect.x
+    : p.align === "center" ? p.rect.x + p.rect.w / 2 - width / 2
+      : p.align === "right" ? p.rect.x + p.rect.w - width : p.rect.x;
   const breaks = hardBreaks(p, width, metricsFor);
-  return { width, breaks, paragraphs: paragraphRuns(p, breaks) };
+  return { x, width, breaks, paragraphs: paragraphRuns(p, breaks) };
 }
 
 /** The TextBox that redraws `p` in place: same lines, first baseline on the original one. `edit`
@@ -86,9 +92,9 @@ export function paragraphBox(
   p: Paragraph, metricsFor: MetricsFor,
   edit?: (paragraphs: Run[][], toBox: (offset: number) => number) => Run[][],
 ): TextBox {
-  const { width, breaks, paragraphs } = paragraphFrame(p, metricsFor);
+  const { x, width, breaks, paragraphs } = paragraphFrame(p, metricsFor);
   const box = relayout({
-    rect: { x: p.rect.x, y: 0, w: width, h: 0 }, align: p.align, lineHeight: p.lineHeight,
+    rect: { x, y: 0, w: width, h: 0 }, align: p.align, lineHeight: p.lineHeight,
     paragraphs: edit ? edit(paragraphs, rawToBox(p, breaks)) : paragraphs, layout: [],
   }, metricsFor);
   const first = box.layout[0]?.baseline ?? 0;

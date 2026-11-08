@@ -1,5 +1,6 @@
 """Fonts used by the uploaded PDF: what they are, whether they can be reused for new text, and
 which bundled family substitutes them."""
+import io
 import re
 from dataclasses import dataclass
 
@@ -28,6 +29,7 @@ class DocFont:
     keys: frozenset[str] = frozenset()  # name_key() of the BaseFont and of the embedded program's name
     symbolic: bool = False  # a symbol / dingbat font (Wingdings, Symbol, ZapfDingbats …)
     substitute: dict | None = None  # bundled FontRef JSON; filled by the text extraction
+    inked: frozenset[int] | None = None  # characters its program draws (see inked_chars()), measured when needed
 
     @property
     def ref(self) -> str:
@@ -123,6 +125,53 @@ def span_fonts(page: pymupdf.Page, fonts: dict[int, DocFont]) -> dict[str, DocFo
         for key in font.keys:
             out[key] = None if key in out and out[key] is not font else font
     return out
+
+
+def font_candidates(page: pymupdf.Page, fonts: dict[int, DocFont]) -> dict[str, list[DocFont]]:
+    """name_key(span font) → every font of the page with that name (several when the name is ambiguous)."""
+    out: dict[str, list[DocFont]] = {}
+    for entry in page.get_fonts(full=True):
+        font = fonts.get(entry[0])
+        if font is None:
+            continue
+        for key in font.keys:
+            if font not in out.setdefault(key, []):
+                out[key].append(font)
+    return out
+
+
+def inked_chars(doc: pymupdf.Document, font: DocFont) -> frozenset[int]:
+    """Characters the reusable program of `font` draws: a subset keeps the whole cmap but empties the outlines
+    of glyphs it dropped (TrueType); other programs: their cmap."""
+    if font.inked is None:
+        found = font_bytes(doc, font.xref)
+        chars: frozenset[int] = frozenset()
+        if found:
+            try:
+                from fontTools.ttLib import TTFont
+                tt = TTFont(io.BytesIO(found[0]), lazy=True)
+                cmap = tt.getBestCmap() or {}
+                if "glyf" in tt:
+                    glyf = tt["glyf"]
+                    chars = frozenset(c for c, name in cmap.items() if glyf[name].numberOfContours != 0)
+                else:
+                    chars = frozenset(cmap)
+            except Exception:  # noqa: BLE001 - unreadable for fontTools: whatever MuPDF maps
+                program = pymupdf.Font(fontbuffer=found[0])
+                chars = frozenset(c for c in range(0x20, 0x3000) if program.has_glyph(c))
+        font.inked = chars
+    return font.inked
+
+
+def pick_font(doc: pymupdf.Document, candidates: list[DocFont], key: str, span: dict) -> DocFont | None:
+    """The font of the page a span of an ambiguous name is drawn with: two subsets of one font share a name (Word
+    embeds TimesNewRomanPSMT twice). Same BaseFont first, then the same bold/italic, then the first reusable
+    program that draws every character of the span; None when none does (the span gets a substitute)."""
+    named = [f for f in candidates if name_key(f.name) == key] or candidates
+    bold, italic = bool(span["flags"] & pymupdf.TEXT_FONT_BOLD), bool(span["flags"] & pymupdf.TEXT_FONT_ITALIC)
+    styled = [f for f in named if (f.bold, f.italic) == (bold, italic)] or named
+    text = {ord(c) for c in span.get("text", "") if not c.isspace()}
+    return next((f for f in styled if f.reusable and text <= inked_chars(doc, f)), None)
 
 
 def fill_substitutes(fonts: dict[int, DocFont], registry: FontRegistry) -> None:

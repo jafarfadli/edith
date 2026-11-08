@@ -52,6 +52,23 @@ describe("paragraphBox", () => {
     expect(tight.layout.length).toBeGreaterThan(1); // without room it wraps at its own width
   });
 
+  it.each([["center", (r: { x: number; w: number }) => r.x + r.w / 2], ["right", (r: { x: number; w: number }) => r.x + r.w]] as const)(
+    "lets a %s-aligned single line grow around its anchor (maxWidth) instead of from its left edge", (align, anchor) => {
+      const mono: FontMetrics = { unitsPerEm: 1, ascent: 0.8, descent: 0.2, advance: () => 1 };
+      const p: Paragraph = {
+        id: "g0", rect: { x: 100, y: 0, w: 5, h: 1 }, lines: [{ rect: { x: 100, y: 0, w: 5, h: 1 }, baseline: 1, size: 1, start: 0, end: 5 }],
+        runs: [{ text: "Judul", font: { kind: "bundled", family: "Arimo" }, size: 1, color: "#000000" }],
+        align, lineHeight: 1.2, editable: true, maxWidth: 40,
+      };
+      const same = paragraphBox(p, () => mono);
+      expect(anchor(same.rect)).toBeCloseTo(anchor(p.rect), 1);
+      const seg = same.layout[0].segments[0];
+      expect(same.rect.x + seg.x).toBeCloseTo(100, 1); // unchanged text stays where it was
+      const longer = paragraphBox(p, () => mono, () => [[{ ...p.runs[0], text: "Judul yang lebih panjang" }]]);
+      expect(longer.layout).toHaveLength(1);
+      expect(anchor(longer.rect)).toBeCloseTo(anchor(p.rect), 1);
+    });
+
   it("keeps wrapped lines in one logical paragraph", () => {
     const p = paragraphs.find((x) => x.align === "justify")!;
     expect(paragraphRuns(p, hardBreaks(p, p.rect.w + 0.01, bundled))).toHaveLength(1);
