@@ -11,7 +11,8 @@ _MARKUP = {
     "underline": pymupdf.Page.add_underline_annot,
     "strike": pymupdf.Page.add_strikeout_annot,
 }
-NOTE_ICON = "Note"  # MuPDF draws it 16 × 16 pt with its top-left corner at the point
+NOTE_ICON = "Note"  # MuPDF draws it NOTE_SIZE × NOTE_SIZE pt with its top-left corner at the point
+NOTE_SIZE = 16
 
 
 @register("annot.add", phase="annot")

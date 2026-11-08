@@ -236,3 +236,21 @@ def make_cyclic_first_form_pdf() -> bytes:
     doc.update_object(a, f"<</Type/Annot/Subtype/Widget/FT/Tx/T(a)/Parent {b} 0 R/Rect[72 72 200 90]/P {page_xref} 0 R>>")
     doc.xref_set_key(page_xref, "Annots", f"[{a} 0 R {ok} 0 R]")
     return doc.tobytes()
+
+
+def make_secrets_pdf() -> bytes:
+    """Page 0: the text "Secret text here" with, over it (inside 60,80 – 220,112), a URI link, a highlight
+    whose comment is "secret note", a sticky note "sticky secret" and a text field `f` = "SSN 123".
+    Outside that area: a text field `keep` = "visible" and a sticky note "public note"."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 100), "Secret text here", fontname="helv", fontsize=12)
+    page.insert_link({"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(72, 88, 180, 104), "uri": "https://old.example/x"})
+    hl = page.add_highlight_annot(pymupdf.Rect(72, 88, 180, 104))
+    hl.set_info(content="secret note")
+    hl.update()
+    page.add_text_annot((190, 90), "sticky secret")
+    _widget(page, pymupdf.PDF_WIDGET_TYPE_TEXT, "f", (72, 85, 200, 105), field_value="SSN 123")
+    _widget(page, pymupdf.PDF_WIDGET_TYPE_TEXT, "keep", (72, 400, 272, 420), field_value="visible")
+    page.add_text_annot((400, 600), "public note")
+    return doc.tobytes(garbage=3, deflate=True)

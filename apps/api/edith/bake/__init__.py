@@ -6,7 +6,9 @@ import pymupdf
 from edith.bake.context import BakeContext
 from edith.bake.pages import build_pages
 from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
+from edith.bake.scrub import scrub_page, under_redaction
 from edith.bake.source import SourcePages
+from edith.bake.util import to_rect
 from edith.errors import BakeFailed, EdithError, InvalidOp
 from edith.forms import FieldValueError, fill_forms
 from edith.ops import DocSrc, LayoutPage, PageTarget, PagesLayout
@@ -98,10 +100,15 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                     _run(handlers[op.type], page, op, ctx)
                 if marked:
                     page.apply_redactions(**mode)
-            # Drawn content in stacking order, then native annotations over it, then links.
+            # What apply_redactions() leaves under a redaction box: annotations, links, form fields.
+            boxes = [to_rect(op.rect) for op in page_ops if op.type == "redact.add"]
+            if boxes:
+                scrub_page(page, boxes)
+            # Drawn content in stacking order, then native annotations over it, then links (none under
+            # a redaction box: it would show — or carry — what the box hides).
             for phase in ("draw", "annot", "link"):
                 for op in page_ops:
-                    if PHASE[op.type] == phase:
+                    if PHASE[op.type] == phase and not (phase != "draw" and under_redaction(op, boxes)):
                         _run(HANDLERS[op.type], page, op, ctx)
 
         _fill(doc, [op for op in ops if op.type == "form.set"], flatten_forms)
