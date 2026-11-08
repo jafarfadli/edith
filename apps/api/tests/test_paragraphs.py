@@ -247,3 +247,17 @@ def test_single_lines_get_room_up_to_the_next_rule_or_text():
     assert ps["<신청서 작성방법>"]["maxWidth"] == pytest.approx(595 - left - 2 - left, abs=0.01)  # mirrored left margin
     wrapped = paragraphs(make_paragraphs_pdf())[0]
     assert len(wrapped["lines"]) == 3 and "maxWidth" not in wrapped  # wrapped text keeps its measure
+
+
+@pytest.mark.parametrize("crop,width", [(None, 595), ((50, 60, 500, 700), 450)])
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+def test_room_is_measured_in_unrotated_points_whatever_the_page_rotation(rotation, crop, width):
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    if crop:
+        page.set_cropbox(pymupdf.Rect(*crop))
+    page.insert_text((100, 100), "Single line", fontname="helv", fontsize=10)
+    page.set_rotation(rotation)
+    (p,) = extract_paragraphs(doc[0])
+    assert p["maxWidth"] == pytest.approx(width - 100 - 2 - p["rect"]["x"], abs=0.01)  # mirrored left margin, 2 pt pad
+    assert p["rect"]["x"] == pytest.approx(100, abs=0.5)

@@ -343,7 +343,8 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
                 blocks.append([line])
             starts_block = False
     every = [line for lines in blocks for line in lines]
-    right_margin = page.rect.width - min((line.ink_x0 for line in every), default=0.0)  # the left margin, mirrored
+    # The left margin, mirrored; the cropbox is unrotated like the lines (page.rect swaps width and height at 90/270).
+    right_margin = page.cropbox.width - min((line.ink_x0 for line in every), default=0.0)
     paragraphs: list[dict] = []
     for lines in blocks:
         for group in _split(lines, rules):

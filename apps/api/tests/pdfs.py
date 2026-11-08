@@ -436,4 +436,4 @@ def make_korean_form_pdf() -> bytes:
     doc.subset_fonts()
     for xref, *_rest in page.get_fonts(full=True):
         doc.xref_set_key(xref, "BaseFont", "/EDITHB+Dotum")
-    return doc.tobytes(garbage=3, deflate=True)
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)  # no random trailer /ID: byte-reproducible
