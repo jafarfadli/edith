@@ -73,6 +73,7 @@ export const t = {
     scanned: "Halaman ini berupa gambar; OCR belum tersedia",
     overflow: "Teks lebih panjang dari paragraf asli dan bisa menimpa teks di bawahnya",
     unsupported: "beberapa karakter tidak didukung font ini",
+    markupRemoved: "Penanda pada teks yang diedit dihapus",
   },
   annot: {
     markup: "Penanda", highlight: "Stabilo", underline: "Garis bawah", strike: "Coret",

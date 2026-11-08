@@ -8,6 +8,7 @@ import { ApiError, fileUrl, getStructure } from "@/lib/api";
 import { toPage } from "@/lib/coords";
 import { fontStore } from "@/lib/fonts";
 import { loadDraft, saveDraft } from "@/lib/draft";
+import { noticeStore } from "@/lib/notices";
 import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { restoreDraft } from "@/lib/restore";
@@ -98,6 +99,9 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     window.addEventListener("pagehide", onHide);
     return () => { window.removeEventListener("pagehide", onHide); unsub(); saver.flush(); };
   }, []);
+
+  // Notices raised by store actions (e.g. a text commit that deleted marks).
+  useEffect(() => noticeStore.subscribe((s, prev) => { if (s.notice && s.notice !== prev.notice) setNotice(s.notice); }), []);
 
   // Info notices go away by themselves; errors stay until closed.
   useEffect(() => {

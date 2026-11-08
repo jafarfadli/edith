@@ -30,8 +30,8 @@ export interface EditorState {
   addObject(op: ContentOp): void;
   /** `coalesce`: successive updates with the same key within COALESCE_MS are one undo step (slider drags, typing a size). */
   updateObject(id: string, patch: Partial<ContentOp>, opts?: { coalesce?: string }): void;
-  /** Adds or replaces several objects as one undo step (Replace All). */
-  putObjects(ops: ContentOp[]): void;
+  /** Adds or replaces several objects and deletes the objects `remove` as one undo step (Replace All). */
+  putObjects(ops: ContentOp[], remove?: string[]): void;
   deleteObject(id: string): void;
   /** Sets AcroForm field `name` (every widget of that name); `coalesce` as in updateObject (typing). */
   setFormValue(name: string, value: FormValue, opts?: { coalesce?: string }): void;
@@ -135,17 +135,24 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
         }, opts?.coalesce);
       },
 
-      putObjects(ops) {
-        if (!ops.length) return;
+      putObjects(ops, remove = []) {
+        const gone = new Set(remove.filter((id) => !ops.some((op) => op.id === id)));
+        if (!ops.length && !gone.size) return;
         commit((d) => {
           const objects = { ...d.objects };
-          const order = [...d.order];
+          let order = [...d.order];
           for (const op of ops) {
             if (!objects[op.id]) order.push(op.id);
             objects[op.id] = op;
           }
+          if (gone.size) {
+            for (const id of gone) delete objects[id];
+            order = order.filter((id) => !gone.has(id));
+          }
           return { ...d, objects, order };
         });
+        const sel = get().selection;
+        if (sel !== null && gone.has(sel)) set({ selection: null });
       },
 
       deleteObject(id) {

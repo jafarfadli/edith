@@ -1,4 +1,4 @@
-import type { Rect } from "@edith/ops";
+import type { ContentOp, Rect } from "@edith/ops";
 
 /** Where MuPDF's appearance stream draws an underline/strike in quad `q`: a line q.h/16 thick whose
  *  centre is q.h/7 (underline) or 3·q.h/7 (strike) above the quad's bottom. */
@@ -74,6 +74,26 @@ export function markupQuads(lines: CharLine[], a: Caret, b: Caret): Rect[] {
     if (start >= end) continue;
     const { top, bottom } = band(l);
     out.push({ x: l.boxes[start][0], y: top, w: l.boxes[end - 1][1] - l.boxes[start][0], h: bottom - top });
+  }
+  return out;
+}
+
+/** A line of an original paragraph, as GET /documents/{id}/text lists it (subset of ParagraphLine). */
+interface TextLine { rect: Rect; baseline: number; size: number }
+
+/** Ids of the highlight/underline/strike ops on `pageKey` marking any of `lines` (an original paragraph
+ *  whose glyphs a text.edit replaces: the marks would float over nothing). A quad marks a line when it
+ *  overlaps it horizontally and its middle is in the line's markup band; sticky notes are kept. */
+export function markupOverLines(ops: Iterable<ContentOp>, pageKey: string, lines: TextLine[]): string[] {
+  const out: string[] = [];
+  for (const op of ops) {
+    if (op.type !== "annot.add" || op.kind === "note" || op.pageKey !== pageKey || !op.quads) continue;
+    const hit = op.quads.some((q) => lines.some((l) => {
+      const mid = q.y + q.h / 2;
+      return q.x < l.rect.x + l.rect.w && l.rect.x < q.x + q.w
+        && mid >= l.baseline - MARK_ASCENT * l.size && mid <= l.baseline + MARK_DESCENT * l.size;
+    }));
+    if (hit) out.push(op.id);
   }
   return out;
 }

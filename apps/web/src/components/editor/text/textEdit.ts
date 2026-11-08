@@ -2,16 +2,19 @@
 
 import { createStore } from "zustand/vanilla";
 import type { Editor } from "@tiptap/core";
-import type { ContentOp, Run, TextBox } from "@edith/ops";
+import type { ContentOp, Run, TextBox, TextEdit } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
+import { markupOverLines } from "@/lib/markup";
+import { noticeStore } from "@/lib/notices";
 import { newId } from "@/lib/id";
 import { paragraphBox, preloadFallback, prepareRuns, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
+import { t } from "@/lib/strings";
 import { boxFonts, boxLineHeight, newBox, relayout } from "@/lib/textbox";
-import { editorStore, textEditFor } from "@/store/editor";
-import { textStore } from "@/store/text";
+import { editorStore, textEditFor, type EditorDoc } from "@/store/editor";
+import { paragraphsOf, textStore } from "@/store/text";
 
 type Pt = [number, number];
 
@@ -67,6 +70,25 @@ export const textEditStore = createStore<TextEditState>()((set, get) => ({
 /** True when every font of `box` is loaded (metrics available synchronously). */
 export function fontsReady(box: TextBox): boolean {
   return boxFonts(box).every((f) => fontStore.peek(f) !== null);
+}
+
+/** Ids of the highlight/underline/strike ops on the original lines of the paragraphs `edits` rewrite: the
+ *  bake removes those glyphs, so the marks would float over the new text (owner decision: delete them). */
+export function markupUnderEdits(doc: EditorDoc, edits: TextEdit[]): string[] {
+  const { pages } = textStore.getState();
+  const ops = doc.order.map((id) => doc.objects[id]).filter((op): op is ContentOp => !!op);
+  const out = new Set<string>();
+  for (const e of edits) {
+    const entry = doc.pages.find((p) => p.pageKey === e.pageKey);
+    const p = entry ? paragraphsOf(entry.src, pages).find((x) => x.id === e.paragraphId) : undefined;
+    if (p) for (const id of markupOverLines(ops, e.pageKey, p.lines)) out.add(id);
+  }
+  return [...out];
+}
+
+/** Tells the user their marks on edited text went (after markupUnderEdits() removed some). */
+export function noteMarkupRemoved(removed: string[]): void {
+  if (removed.length) noticeStore.getState().show({ kind: "info", text: t.text.markupRemoved });
 }
 
 /** The commit that is waiting for its fonts (the text is not in the document yet). */
@@ -185,12 +207,18 @@ function land(e: Editing, box: TextBox): void {
   const op = (e.kind === "text.edit"
     ? { id: e.id, type: "text.edit", pageKey: e.pageKey, paragraphId: e.paragraphId as string, box } // checked in start()
     : { id: e.id, type: "text.add", pageKey: e.pageKey, box }) as ContentOp;
+  // A rewritten paragraph loses the marks on its original lines, in the same undo step as the edit.
+  const removed = op.type === "text.edit" ? markupUnderEdits(st.doc, [op as TextEdit]) : [];
   if (e.isNew) {
-    st.addObject(op);
+    st.putObjects([op], removed);
+    noteMarkupRemoved(removed);
   } else {
-    const cur = st.doc.objects[e.id] as { box: TextBox } | undefined;
+    const cur = st.doc.objects[e.id];
     if (!cur) return; // deleted meanwhile (e.g. undo)
-    if (JSON.stringify(cur.box) !== JSON.stringify(box)) st.updateObject(e.id, { box } as Partial<ContentOp>);
+    if (JSON.stringify((cur as { box: TextBox }).box) !== JSON.stringify(box)) {
+      st.putObjects([{ ...cur, box } as ContentOp], removed);
+      noteMarkupRemoved(removed);
+    }
   }
   // Another session started while the fonts loaded: leave tool/selection to it.
   if (textEditStore.getState().editing) return;
