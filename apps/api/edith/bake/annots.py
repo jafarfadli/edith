@@ -3,7 +3,7 @@ the unrotated page, so they rotate with the page when bake() restores its rotati
 import pymupdf
 
 from edith.bake.registry import register
-from edith.bake.util import rgb, to_rect
+from edith.bake.util import rgb, safe_uri, to_rect
 from edith.ops import AnnotAdd, LinkAdd, PageTarget
 
 _MARKUP = {
@@ -33,4 +33,4 @@ def link(page: pymupdf.Page, op: LinkAdd, ctx) -> None:
         page.insert_link({"kind": pymupdf.LINK_GOTO, "from": to_rect(op.rect), "page": target,
                           "to": pymupdf.Point(0, 0), "zoom": 0})
     else:
-        page.insert_link({"kind": pymupdf.LINK_URI, "from": to_rect(op.rect), "uri": op.target.url})
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": to_rect(op.rect), "uri": safe_uri(op.target.url)})

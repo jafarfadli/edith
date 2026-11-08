@@ -26,6 +26,14 @@ describe("normalizeUrl", () => {
     for (const bad of ["1.50", "v1.2.3", "file.p1", "file.pdf", "foto.JPG", "a.b", "https://", "mailto:"]) expect(normalizeUrl(bad)).toBeNull();
     expect(normalizeUrl("example.com")).toBe("https://example.com");
   });
+  it("percent-encodes what would break the PDF string, like the API's safe_uri", () => {
+    expect(normalizeUrl("https://a/)/S/JavaScript/JS(app.alert(1))/X(")).toBe("https://a/%29/S/JavaScript/JS%28app.alert%281%29%29/X%28");
+    expect(normalizeUrl("https://a/b\\c")).toBe("https://a/b%5Cc");
+    expect(normalizeUrl("https://a/é")).toBe("https://a/%C3%A9");
+    expect(normalizeUrl("contoh.id/ü(1)")).toBe("https://contoh.id/%C3%BC%281%29");
+    expect(normalizeUrl("https://a/%28x?q=1&r=2#f")).toBe("https://a/%28x?q=1&r=2#f"); // idempotent: % is kept
+    expect(normalizeUrl("https://a.co/" + "(".repeat(2048 - 13))).toBeNull(); // too long once encoded
+  });
   it("tells page targets from URLs", () => {
     expect(isPageTarget({ pageKey: "o1" })).toBe(true);
     expect(isPageTarget({ url: "https://a.b" })).toBe(false);

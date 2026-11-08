@@ -145,3 +145,27 @@ def test_link_to_unknown_page_is_invalid(ctx):
             layout(("o0", 0, 0)),
             {"id": "a", "type": "link.add", "pageKey": "o0", "rect": R(72, 100, 100, 20), "target": {"pageKey": "o1"}}), ctx)
     assert err.value.extra["op_index"] == 1
+
+
+def _link_action(doc: pymupdf.Document) -> dict:
+    [(xref, *_)] = doc[0].annot_xrefs()
+    return {k: doc.xref_get_key(xref, f"A/{k}") for k in ("S", "URI", "JS")}
+
+
+@pytest.mark.parametrize("url, stored", [
+    ("https://a/)/S/JavaScript/JS(app.alert(1))/X(", "https://a/%29/S/JavaScript/JS%28app.alert%281%29%29/X%28"),
+    ("https://a/b(c", "https://a/b%28c"),
+    ("https://a/b\\c", "https://a/b%5Cc"),
+    ("https://a/é", "https://a/%C3%A9"),
+    ("https://a/%28x?q=1&r=2#f", "https://a/%28x?q=1&r=2#f"),
+])
+def test_link_uri_cannot_break_out_of_its_pdf_string(ctx, url, stored):
+    """insert_link() writes the URI into a PDF literal string unescaped: `\\`, `(`, `)` and non-ASCII are
+    percent-encoded first, so the action stays /S /URI and an unbalanced paren does not drop the link."""
+    out = reload(bake(make_pdf(pages=1), ops(
+        {"id": "a", "type": "link.add", "pageKey": "o0", "rect": R(72, 100, 100, 20), "target": {"url": url}}), ctx))
+    action = _link_action(out)
+    assert action["S"] == ("name", "/URI")
+    assert action["JS"] == ("null", "null")
+    assert action["URI"] == ("string", stored)
+    assert [ln["uri"] for ln in links(out[0])] == [stored]
