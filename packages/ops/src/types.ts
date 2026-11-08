@@ -31,6 +31,7 @@ export type X1 = number;
 export type Text1 = string;
 export type Runindex = number;
 export type Segments = Segment[];
+export type Source = number | null;
 export type Layout = LayoutLine[];
 export type Id1 = string;
 export type Pagekey1 = string;
@@ -294,12 +295,17 @@ export interface OriginalFont {
   doc?: Doc;
 }
 /**
+ * `source` (text.edit only): the index of the original paragraph line this line repeats unchanged (same
+ * text, styles and line break, in place). The bake then keeps that line's original glyphs: it neither redacts
+ * nor redraws it. If the line no longer matches the original, the bake redraws it from `segments`.
+ *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "LayoutLine".
  */
 export interface LayoutLine {
   baseline: Baseline;
   segments: Segments;
+  source?: Source;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema

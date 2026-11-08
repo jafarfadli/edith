@@ -6,6 +6,7 @@ import pymupdf
 from edith.bake.registry import register
 from edith.bake.tounicode import fix_to_unicode
 from edith.bake.util import rgb
+from edith.doc_fonts import name_key
 from edith.ops import Run, TextAdd, TextBox, TextEdit
 
 # Decoration geometry, in multiples of the run's font size relative to the baseline (y grows down).
@@ -53,12 +54,15 @@ def _band(x: float, y: float, w: float, top: float, height: float, size: float) 
     return pymupdf.Rect(x, y + top * size, x + w, y + (top + height) * size)
 
 
-def draw_text_box(page: pymupdf.Page, box: TextBox, ctx) -> None:
+def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozenset[int] = frozenset()) -> None:
+    """Draws the box's layout, except the lines whose index is in `skip` (kept original lines of a text.edit)."""
     runs = [r for paragraph in box.paragraphs for r in paragraph]
     writers: dict[str, pymupdf.TextWriter] = defaultdict(lambda: pymupdf.TextWriter(page.rect))
     backgrounds: list[tuple[pymupdf.Rect, str]] = []
     lines: list[tuple[pymupdf.Rect, str]] = []
-    for line in box.layout:
+    for k, line in enumerate(box.layout):
+        if k in skip:
+            continue
         for seg in line.segments:
             if not seg.text:
                 continue
@@ -95,10 +99,12 @@ def text_add(page: pymupdf.Page, op: TextAdd, ctx) -> None:
     draw_text_box(page, op.box, ctx)
 
 
-def redaction_rects(paragraph: dict) -> list[pymupdf.Rect]:
-    """One thin band per original line of `paragraph` (see REDACT_BAND)."""
+def redaction_rects(paragraph: dict, keep: frozenset[int] | set[int] = frozenset()) -> list[pymupdf.Rect]:
+    """One thin band per original line of `paragraph` (see REDACT_BAND), except the lines in `keep`."""
     out = []
-    for line in paragraph["lines"]:
+    for i, line in enumerate(paragraph["lines"]):
+        if i in keep:
+            continue
         r = line["rect"]
         y = line["baseline"] - REDACT_BAND * line["size"]
         inset = 0.5 if r["w"] > 2 else 0
@@ -106,16 +112,65 @@ def redaction_rects(paragraph: dict) -> list[pymupdf.Rect]:
     return out
 
 
+# A kept line (LayoutLine.source) must be in place: the box's left edge on the paragraph's (pt) and the line's
+# baseline on the original line's (pt, or this share of its size when larger: originals may space lines unevenly).
+KEEP_X_TOL = 0.5
+KEEP_Y_TOL, KEEP_Y_EM = 1.0, 0.4
+SIZE_TOL = 0.05
+
+
+def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
+    """Layout line index → original line index, for the lines of a text.edit `box` whose `source` still
+    matches the original `paragraph` (SourcePages.paragraph: runs name their span font): the same characters
+    (whitespace aside) with the same size, colour, font and no decoration, the box in place with the original
+    alignment, each original line kept once. The bake keeps those lines' original glyphs; any other line is
+    redrawn. `font_keys(FontRef)` gives an original font's name keys (SourcePages.font_keys)."""
+    runs = [r for p in box.paragraphs for r in p]
+    lines = paragraph["lines"]
+    styles = [run for run in paragraph["runs"] for _ in run["text"]]  # original run of each character
+    text = "".join(r["text"] for r in paragraph["runs"])
+    if box.align != paragraph["align"] or abs(box.rect.x - paragraph["rect"]["x"]) > KEEP_X_TOL:
+        return {}
+    out: dict[int, int] = {}
+    for k, line in enumerate(box.layout):
+        j = line.source
+        if j is None or j >= len(lines) or j in out.values():
+            continue
+        orig = lines[j]
+        if abs(box.rect.y + line.baseline - orig["baseline"]) > max(KEEP_Y_TOL, KEEP_Y_EM * orig["size"]):
+            continue
+        want = [(text[i], styles[i]) for i in range(orig["start"], orig["end"]) if not text[i].isspace()]
+        got = [(c, runs[seg.runIndex]) for seg in line.segments for c in seg.text if not c.isspace()]
+        if len(want) == len(got) and all(_same_char(o, r, font_keys) for o, r in zip(want, got)):
+            out[k] = j
+    return out
+
+
+def _same_char(orig: tuple[str, dict], new: tuple[str, Run], font_keys) -> bool:
+    (c, span), (d, run) = orig, new
+    if c != d or abs(run.size - span["size"]) > SIZE_TOL or run.color.lower() != span["color"].lower():
+        return False
+    if run.bgColor or run.underline or run.strike:
+        return False
+    # A bundled font stands in for an original one the client could not reuse (or lacked a glyph of): accepted.
+    return run.font.kind != "original" or name_key(span["font"]["name"]) in font_keys(run.font)
+
+
+def _kept(op: TextEdit, ctx) -> dict[int, int]:
+    paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
+    return kept_lines(op.box, paragraph, lambda f: ctx.source.font_keys(f.ref, f.doc))
+
+
 @register("text.edit", phase="redact_text")
 def text_edit_redact(page: pymupdf.Page, op: TextEdit, ctx) -> None:
     paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
-    for rect in redaction_rects(paragraph):
+    for rect in redaction_rects(paragraph, set(_kept(op, ctx).values())):
         page.add_redact_annot(rect, fill=False)  # fill=False: paint nothing over what stays
 
 
 @register("text.edit")
 def text_edit(page: pymupdf.Page, op: TextEdit, ctx) -> None:
-    draw_text_box(page, op.box, ctx)
+    draw_text_box(page, op.box, ctx, skip=set(_kept(op, ctx)))
 
 
 def links_under_redactions(page: pymupdf.Page) -> list[str]:

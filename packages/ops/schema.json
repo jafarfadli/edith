@@ -492,6 +492,7 @@
     },
     "LayoutLine": {
       "additionalProperties": false,
+      "description": "`source` (text.edit only): the index of the original paragraph line this line repeats unchanged (same\ntext, styles and line break, in place). The bake then keeps that line's original glyphs: it neither redacts\nnor redraws it. If the line no longer matches the original, the bake redraws it from `segments`.",
       "properties": {
         "baseline": {
           "title": "Baseline",
@@ -503,6 +504,19 @@
           },
           "title": "Segments",
           "type": "array"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
         }
       },
       "required": [

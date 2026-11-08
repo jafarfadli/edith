@@ -151,3 +151,83 @@ def test_characters_missing_from_a_reused_subset_fail_the_bake(ctx):
     data = make_cid_subset_pdf()
     with pytest.raises(BakeFailed):  # the client sends them in a fallback font, never in the subset
         bake(data, ops(edit(text="가나다", font=cid_font_ref(data, "Dotum"), y=88)), ctx)
+
+
+# --- Kept lines (LayoutLine.source, M5b F1): unchanged original lines keep their glyphs -------------------------
+
+HELV_LINES = ("Paragraf yang diedit baris satu", "baris dua.")
+
+
+def two_lines(second="baris tiga.", sources=(0, None), first=HELV_LINES[0], color="#000000", x=72, y=88.0,
+              font=ARIMO):
+    """make_edit_pdf()'s g0 (baselines 100 / 112) as a text.edit whose layout lines carry `sources`."""
+    run = {"text": f"{first} {second}", "font": font, "size": 12, "color": color}
+    layout = []
+    for k, (text_, src) in enumerate(((first, sources[0]), (second, sources[1]))):
+        line = {"baseline": 12.0 + 12 * k, "segments": [{"x": 0, "text": text_, "runIndex": 0}]}
+        if src is not None:
+            line["source"] = src
+        layout.append(line)
+    return {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+            "box": {"rect": {"x": x, "y": y, "w": 300, "h": 28}, "align": "left", "lineHeight": 12,
+                    "paragraphs": [[run]], "layout": layout}}
+
+
+def line_spans(page, baseline):
+    return [s for s in spans(page) if abs(s["origin"][1] - baseline) < 0.5 and s["text"].strip()]
+
+
+def test_a_kept_line_keeps_its_original_glyphs_and_only_the_changed_line_is_redrawn(ctx):
+    out = reload(bake(make_edit_pdf(), ops(two_lines()), ctx))
+    first = line_spans(out[0], 100)
+    assert [s["text"] for s in first] == [HELV_LINES[0]]
+    assert first[0]["font"] == "Helvetica" and first[0]["origin"] == pytest.approx((72, 100), abs=0.01)
+    second = line_spans(out[0], 112)
+    assert [s["text"] for s in second] == ["baris tiga."] and "Arimo" in second[0]["font"]
+    t = text(out[0])
+    assert t.count(HELV_LINES[0]) == 1 and "baris dua." not in t  # the kept text exists once
+    assert "Paragraf tetangga tetap utuh di sini sampai akhir." in t
+
+
+def test_every_line_kept_leaves_the_page_text_as_it_was(ctx):
+    data = make_edit_pdf()
+    out = reload(bake(data, ops(two_lines(second=HELV_LINES[1], sources=(0, 1))), ctx))
+    orig = pymupdf.open(stream=data, filetype="pdf")[0]
+    assert [(s["text"], s["font"], s["origin"]) for s in spans(out[0])] == [(s["text"], s["font"], s["origin"]) for s in spans(orig)]
+    assert {f[3] for f in out[0].get_fonts(full=True)} == {f[3] for f in orig.get_fonts(full=True)}  # no Arimo embedded
+
+
+@pytest.mark.parametrize("change", [
+    dict(first="Paragraf yang diubah baris satu"),  # the text is not the original line's
+    dict(color="#ff0000"),                          # nor its colour
+    dict(x=80),                                     # the box moved sideways
+    dict(y=95.0),                                   # … or down
+    dict(sources=(1, None)),                        # the source names another line
+])
+def test_a_line_that_no_longer_matches_its_source_is_redrawn(ctx, change):
+    out = reload(bake(make_edit_pdf(), ops(two_lines(**change)), ctx))
+    first = line_spans(out[0], 100 + (change.get("y", 88.0) - 88.0))
+    assert first and all("Arimo" in s["font"] for s in first)  # drawn by the bake …
+    assert text(out[0]).count("Paragraf yang di") == 1  # … and the original redacted
+
+
+def test_an_original_line_is_kept_once(ctx):
+    op = two_lines(second=HELV_LINES[0], sources=(0, 0))
+    out = reload(bake(make_edit_pdf(), ops(op), ctx))
+    assert [s["font"] for s in line_spans(out[0], 100)] == ["Helvetica"]
+    assert "Arimo" in line_spans(out[0], 112)[0]["font"]
+
+
+def test_a_kept_line_must_name_the_original_font_when_it_uses_one(ctx):
+    data = make_cid_subset_pdf()
+
+    def op(name):
+        return {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+                "box": {"rect": {"x": 72, "y": 88, "w": 300, "h": 16}, "align": "left", "lineHeight": 14.4,
+                        "paragraphs": [[{"text": CID_TEXT, "font": cid_font_ref(data, name), "size": 12, "color": "#000000"}]],
+                        "layout": [{"baseline": 12.0, "source": 0, "segments": [{"x": 0, "text": CID_TEXT, "runIndex": 0}]}]}}
+    before = line_spans(pymupdf.open(stream=data, filetype="pdf")[0], 100)
+    kept = reload(bake(data, ops(op("Dotum")), ctx))
+    assert [(s["font"], s["origin"]) for s in line_spans(kept[0], 100)] == [(s["font"], s["origin"]) for s in before]
+    other = reload(bake(data, ops(op("Batang")), ctx))  # the Batang line's font is not this line's: redrawn in it
+    assert all("Batang" in s["font"] for s in line_spans(other[0], 100))

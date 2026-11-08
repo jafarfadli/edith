@@ -60,8 +60,12 @@ class Segment(Model):
 
 
 class LayoutLine(Model):
+    """`source` (text.edit only): the index of the original paragraph line this line repeats unchanged (same
+    text, styles and line break, in place). The bake then keeps that line's original glyphs: it neither redacts
+    nor redraws it. If the line no longer matches the original, the bake redraws it from `segments`."""
     baseline: float
     segments: list[Segment]
+    source: int | None = Field(default=None, ge=0)
 
 
 class TextBox(Model):
