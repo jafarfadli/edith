@@ -114,6 +114,13 @@ export const t = {
     cancel: "Batal",
     save: "Simpan",
   },
+  crop: {
+    title: "Crop",
+    thisPage: "Terapkan ke halaman ini",
+    allPages: "Terapkan ke semua halaman",
+    remove: "Hapus crop",
+    cancel: "Batal",
+  },
   form: {
     flatten: "Ratakan form",
     flattenHint: "Isian form menjadi bagian halaman dan tidak bisa diubah lagi",

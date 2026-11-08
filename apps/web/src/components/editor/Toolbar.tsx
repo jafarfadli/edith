@@ -8,6 +8,7 @@ import { fitImage } from "@/lib/image";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore, useEditor, type Tool } from "@/store/editor";
 import { SignatureModal } from "./marks/SignatureModal";
+import { cropStore } from "./pages/cropStore";
 import { ManagePagesModal } from "./pages/ManagePagesModal";
 import { StampPicker } from "./marks/StampPicker";
 import { currentPage, placeObject } from "./placement";
@@ -94,6 +95,10 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
         <span aria-hidden>▦</span><span className="hidden lg:inline">{t.pages.manage}</span>
       </button>
       {pagesOpen && <ManagePagesModal onClose={() => setPagesOpen(false)} />}
+      <button aria-label={t.crop.title} title={t.crop.title} onClick={() => { const at = currentPage(); if (at) cropStore.getState().open(at.entry.pageKey); }}
+        className="flex h-9 items-center gap-1 rounded-md px-2 text-sm hover:bg-bg">
+        <span aria-hidden>⛶</span><span className="hidden lg:inline">{t.crop.title}</span>
+      </button>
     </div>
   );
 }
