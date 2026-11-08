@@ -56,7 +56,8 @@ describe("editor store", () => {
     s().movePage("o2", 0);
     expect(s().doc.pages.map((p) => p.pageKey)).toEqual(["o2", "o0", "o1"]);
     const k = s().insertBlankAfter("o2");
-    expect(s().doc.pages[1]).toEqual({ pageKey: k, src: { blank: { width: 595, height: 842 } }, rotate: 0 });
+    // o2's source is rotated 90°: the blank page takes the shape it shows on screen (landscape).
+    expect(s().doc.pages[1]).toEqual({ pageKey: k, src: { blank: { width: 842, height: 595 } }, rotate: 0 });
     const first = s().insertBlankAfter(null);
     expect(s().doc.pages[0].pageKey).toBe(first);
     s().deletePage("o0");
@@ -199,5 +200,58 @@ describe("history coalescing and batches", () => {
     const before = st.getState().past.length;
     st.getState().redo(); st.getState().setFormValue("nama", "Bu"); // same value: no new step
     expect(st.getState().past.length).toBe(before + 1);
+  });
+});
+
+describe("page actions (M4)", () => {
+  const I = "I".repeat(22);
+  it("duplicates a page with its objects as one undo step", () => {
+    s().addObject(white("a", "o1"));
+    const k = s().duplicatePage("o1")!;
+    expect(s().doc.pages.map((p) => p.pageKey)).toEqual(["o0", "o1", k, "o2"]);
+    expect(Object.values(s().doc.objects).filter((o) => o.pageKey === k)).toHaveLength(1);
+    s().undo();
+    expect(s().doc.pages).toHaveLength(3);
+    expect(Object.keys(s().doc.objects)).toEqual(["a"]);
+  });
+
+  it("imports pages of another PDF and gives them their own geometry", () => {
+    expect(s().insertImportAfter("o0", I)).toEqual([]); // unknown until registered
+    s().addImport(I, [{ index: 0, width: 300, height: 400, rotation: 90, hasText: false }]);
+    const [k] = s().insertImportAfter("o0", I);
+    expect(s().doc.pages[1]).toEqual({ pageKey: k, src: { doc: I, index: 0 }, rotate: 0 });
+    expect(pageGeom(s().doc.pages[1], s().info!)).toEqual({ width: 300, height: 400, rotation: 90 });
+    s().undo();
+    expect(s().info!.imports![I]).toHaveLength(1); // the registry is not undone
+  });
+
+  it("crops and replaces the document as single undo steps", () => {
+    s().setCrop(["o0"], { x: 10, y: 20, w: 100, h: 200 });
+    expect(pageGeom(s().doc.pages[0], info).crop).toEqual({ x: 10, y: 20, w: 100, h: 200 });
+    const next = { ...s().doc, pages: s().doc.pages.slice(1) };
+    s().select(null);
+    s().replaceDoc(next);
+    expect(s().doc.pages.map((p) => p.pageKey)).toEqual(["o1", "o2"]);
+    expect(s().currentPage).toBe("o1");
+    s().undo();
+    expect(s().doc.pages).toHaveLength(3);
+    s().undo();
+    expect(s().doc.pages[0].crop).toBeUndefined();
+  });
+});
+
+describe("imported form fields", () => {
+  it("keep their values apart from the edited PDF's, with undo", () => {
+    const I = "I".repeat(22);
+    s().addImport(I, [{ index: 0, width: 300, height: 400, rotation: 0, hasText: true }], [{ name: "nama" } as never]);
+    expect(s().info!.importFields).toEqual({ [I]: [{ name: "nama" }] });
+    s().setFormValue("nama", "Utama");
+    s().setFormValue("nama", "Impor", undefined, I);
+    expect(s().doc.forms).toEqual({ nama: "Utama" });
+    expect(s().doc.importForms).toEqual({ [I]: { nama: "Impor" } });
+    s().setFormValue("nama", "Main", undefined, info.docId); // the edited PDF's own id = no doc
+    expect(s().doc.forms).toEqual({ nama: "Main" });
+    s().undo(); s().undo();
+    expect(s().doc.importForms?.[I]).toBeUndefined();
   });
 });

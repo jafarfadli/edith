@@ -8,6 +8,8 @@ import { fitImage } from "@/lib/image";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore, useEditor, type Tool } from "@/store/editor";
 import { SignatureModal } from "./marks/SignatureModal";
+import { cropStore } from "./pages/cropStore";
+import { ManagePagesModal } from "./pages/ManagePagesModal";
 import { StampPicker } from "./marks/StampPicker";
 import { currentPage, placeObject } from "./placement";
 import { SplitButton } from "./SplitButton";
@@ -32,6 +34,7 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
   const file = useRef<HTMLInputElement>(null);
   const [stampOpen, setStampOpen] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
+  const [pagesOpen, setPagesOpen] = useState(false);
   const s = editorStore.getState();
   const pick = (x: Tool) => s.setTool(x);
 
@@ -41,7 +44,7 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
     if (!f || !st.info || !at) return;
     try {
       const asset = await uploadAsset(st.info.docId, f);
-      const rect = fitImage(asset.width, asset.height, at.geom.width, at.geom.height);
+      const rect = fitImage(asset.width, asset.height, at.size.width, at.size.height);
       placeObject({ id: newId(), type: "image.add", pageKey: at.entry.pageKey, rect, assetId: asset.asset_id } as ContentOp);
     } catch (e) {
       onNotice({ kind: "error", text: errorMessage(e instanceof ApiError ? e.code : "generic") });
@@ -78,6 +81,9 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
         { tool: "ellipse", label: t.editor.ellipse, icon: "○" },
         { tool: "line", label: t.editor.line, icon: "╱" },
         { tool: "arrow", label: t.editor.arrow, icon: "→" },
+        { tool: "polygon", label: t.editor.polygon, icon: "⬠" },
+        { tool: "polyline", label: t.editor.polyline, icon: "⌇" },
+        { tool: "cloud", label: t.editor.cloud, icon: "☁" },
       ]} />
       <ToolButton tool="check" label={t.annot.check} icon="✓" active={tool} />
       <ToolButton tool="cross" label={t.annot.cross} icon="✗" active={tool} />
@@ -87,6 +93,15 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
       {signatureOpen && <SignatureModal onClose={() => setSignatureOpen(false)} onNotice={onNotice} />}
       <ToolButton tool="note" label={t.annot.note} icon="🗒" active={tool} />
       <ToolButton tool="link" label={t.annot.link} icon="🔗" active={tool} />
+      <div className="flex-1" />
+      <button aria-label={t.pages.manage} title={t.pages.manage} onClick={() => setPagesOpen(true)} className="flex h-9 items-center gap-1 rounded-md px-2 text-sm hover:bg-bg">
+        <span aria-hidden>▦</span><span className="hidden lg:inline">{t.pages.manage}</span>
+      </button>
+      {pagesOpen && <ManagePagesModal onClose={() => setPagesOpen(false)} />}
+      <button aria-label={t.crop.title} title={t.crop.title} onClick={() => { const at = currentPage(); if (at) cropStore.getState().open(at.entry.pageKey); }}
+        className="flex h-9 items-center gap-1 rounded-md px-2 text-sm hover:bg-bg">
+        <span aria-hidden>⛶</span><span className="hidden lg:inline">{t.crop.title}</span>
+      </button>
     </div>
   );
 }

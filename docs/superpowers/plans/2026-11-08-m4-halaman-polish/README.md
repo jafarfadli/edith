@@ -1,0 +1,122 @@
+# Edith M4 — Halaman & Polish: Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Each task lives in its own file in this folder; read README.md (this file) + your task file only.
+
+**Goal:** Manage pages in a modal (multi-select rotate/duplicate/move/delete, insert blank, import another PDF; Simpan/Batal), duplicate pages with their objects, import PDFs (whose text, markup, Find & Replace and form fields work like the main PDF's), crop this page or all pages (removing what it hides), a selection mini-bar with copy/paste/duplicate/align-to-page, rotation handles, opacity on every drawn object, dashed/dotted strokes, polygon/polyline/cloud shapes, and an Annotations panel — exported exactly as shown.
+
+**Architecture:** The op schema gains `opacity`/`rotation` on drawn ops, three shape kinds plus `dash`, and `crop` on layout pages. The bake draws every drawn op with its normal handler and then wraps the content streams it added in `q [gs] [cm] … Q` (one mechanism for rotation and opacity of all kinds), appends imported documents whole with `insert_pdf` (their own `form.set` values filled first) before the existing select/duplicate/AcroForm logic, reads paragraphs and embedded fonts of any source PDF (`OriginalFont.doc`), and sets the CropBox last after deleting what it hides. The web keeps one pdf.js document per source doc, loads `/text`, `/chars` and fonts per source PDF, renders cropped pages whole-but-clipped through crop-aware `coords.ts`, does all page edits through pure functions in `lib/pages.ts` (the modal edits a copy and commits it as one undo step), and draws polygons/clouds/dashes with geometry shared number-for-number with the bake.
+
+**Tech Stack:** As M3 (Python 3.12/uv/FastAPI/PyMuPDF 2.1 (MuPDF 1.28.6) · Next.js 16/React 19/Konva 10/react-konva/zustand/pdfjs-dist 6.5/dnd-kit/Vitest/Playwright). No new dependencies.
+
+Spec: `docs/superpowers/specs/2026-11-05-pdf-editor-design.md` — M4 row; Fitur v1 (Halaman, UX objek, Panel samping); Skema Ops (`opacity`/`rotation`, shape kinds, `dash`, `pages.layout {pageKey, src, rotate, crop?}`); Identitas halaman; Urutan bake 2 and 7; Frontend (ManagePagesModal, CropOverlay, SelectionMiniBar, shortcuts Ctrl/Cmd+C/V/D). Earlier plans (format, conventions, spikes): `../2026-11-05-m1-fondasi/`, `../2026-11-05-m2-edit-teks/`, `../2026-11-05-m3-anotasi-form/`.
+
+## Global Constraints
+
+Everything in the M1–M3 READMEs' Global Constraints still holds (repo root, npm + uv, error JSON shape, coordinates in unrotated-CropBox points of the page's *source* with pages unrotated while drawing, `pageKey` `o{n}`/`u-{uuid}`, `#rrggbb` colours, client = layout authority, snapshot undo with `coalesce`, Bahasa Indonesia UI strings only in `apps/web/src/lib/strings.ts`, new TextWriter text only through `draw_text_box`). In addition:
+
+- **Commands.** API `cd apps/api && uv run pytest -q` (warning-free). Web `npm test -w apps/web`; types `npx tsc --noEmit -p apps/web`; lint `npm run lint -w apps/web` (0 problems); E2E `npm run e2e -w apps/web` (starts uvicorn :8000 and `next dev` :3000, reuses servers already there — stop them first). Shell has `NODE_ENV=production`; root `.npmrc` has `include=dev`. After changing `apps/api/edith/ops.py`: `cd apps/api && uv run python -m scripts.export_schema && cd ../.. && npm run gen -w packages/ops` (never edit `schema.json`/`types.ts` by hand). `next dev` may rewrite `apps/web/tsconfig.json`; `git checkout apps/web/tsconfig.json` before committing.
+- **Commit trailer.** Every commit message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- **Code in the task files** was written and run in a throwaway worktree (branch from `main` at 77bca03): suite counts after each task — API 316 / 326 / 336 / 346 / 353 (Tasks 1–5), unchanged through Task 13, then 356 / 362 (Tasks 14–15); web 226 (Tasks 1–5) / 243 / 257 / 260 / 261 / 264 / 264 / 272 / 274 (Tasks 6–13), 274 / 274 (14–15), 276 / 279 (16–17); tsc and eslint clean at every task; E2E 6 passed after Task 8, 7 passed at Task 18. API Tasks 14–15 come after the web tasks because they were added by the owner's decisions; they only depend on Tasks 1–5. Modified files are unified diffs against the state the previous task leaves; new files are complete.
+- **Shared geometry contracts (change both sides together; both suites pin the same numbers):**
+  - Dash (`bake/geometry.py` ↔ `lib/geometry.ts`): w' = max(width, 0.5); `dashed` = `[3w', 2w']` butt caps; `dotted` = `[0, 2w']` round caps (zero-length dashes + round caps = dots, checked in MuPDF raster). Arrow heads stay solid (Konva's Arrow also draws its head undashed).
+  - Cloud: closed polygon; each edge split into n = max(1, floor(len / arc + 0.5)) chords, arc = 8 + 2·width; on each chord a half circle bulging away from the polygon (outward normal chosen by the shoelace sign: area2 > 0 = clockwise on screen) as two cubic Béziers with KAPPA = 0.5522847498. `floor(x + 0.5)` on both sides (Python `round` is banker's rounding).
+  - Rotation: degrees, clockwise on screen (Konva's convention), around the centre of the op's `rect` (`box.rect` for `text.add`, whose `rect.h` is the laid-out height). Points-based ops (ink, line, arrow, polygon, polyline, cloud) never carry `rotation`: rotating them moves their points.
+  - Opacity: one ExtGState `/CA = /ca = opacity` over the whole object; Konva sets the group's `opacity`, which also multiplies per shape — overlaps inside one object (stamp border + text) darken the same way on both sides.
+  - Crop: page coordinates (unrotated, relative to the source CropBox); bake `set_cropbox(crop + cropbox.top_left)` in MediaBox coordinates, then `set_rotation`.
+- **Bake order per document:** build pages (each import's own `form.set` values filled into it, then appended whole, once per doc, *before* `detach_acroform`) → per page: text-edit redactions → `redact.add` → drawn ops in op order (each wrapped for rotation/opacity) → `annot.add` → `link.add` → main `form.set` + flatten → per cropped page: delete annotations/links/widgets entirely outside the crop (drop XFA if a widget went), set CropBox → rotation.
+- **Several source PDFs:** paragraphs are keyed by source page `srcKey(doc, index)` on the web and `(doc, index)` in `SourcePages`; embedded fonts by `fontId` = `ref` (edited PDF) or `<doc>/<ref>` (imported; xref refs are only unique per PDF); `OriginalFont.doc` / `FormSet.doc` name the imported PDF, absent = the edited one (all M1–M3 ops and drafts stay valid).
+- **New error detail:** `doc_expired` (410) for an expired *imported* document carries `doc_id`.
+
+## Spike results (PyMuPDF 2.1 / MuPDF 1.28.6, Chromium) — the design relies on these
+
+- **`insert_pdf(src)`** copies annotations, links and widgets (`widgets=1` default). A field whose name already exists is **renamed `"name [xref]"`** (with `join_duplicates=0`), so the imported field keeps its own value and `form.set` by name never reaches it; `join_duplicates=1` would merge it with the main document's field (wrong). Inserting into a document without a form creates the catalog `/AcroForm`; detaching *after* the import keeps it through `select()` + `reattach_acroform`. Inserting whole documents keeps their internal links.
+- **`set_cropbox(r)`** takes MediaBox top-left coordinates and raises "CropBox not in MediaBox" outside it. After it, drawings, words, links and widgets read back shifted by exactly the crop origin. Annotations/links/widgets outside the crop would stay in the file (invisible, still in the AcroForm) — so Task 14 deletes them first (owner decision 4).
+- **Every PyMuPDF drawing call appends one new `/Contents` stream** (`draw_*`, `Shape.commit`, `insert_image`, `TextWriter.write_text`) — *except* that the first call on an unwrapped page also prepends a `q` stream and appends `Q`; calling `page.wrap_contents()` first avoids that. Merging the new streams into one and wrapping it in `q /GS gs a b c d e f cm … Q` works for every handler; `cm = TM · (T(−c) · Matrix(deg) · T(c)) · TM⁻¹` with `TM = page.transformation_matrix` gives a clockwise-on-screen rotation also on cropped / offset-MediaBox pages. `page._set_opacity(CA, ca)` registers the ExtGState. `insert_image(rotate=)` only does multiples of 90, and `show_pdf_page(rotate=)` has no opacity — so neither is used.
+- **`get_drawings()`** reports `dashes` as `"[ 6 4 ] 0"`, `stroke_opacity`/`fill_opacity`, and closed polylines as explicit `l` items (`closePath` False).
+- **Konva:** a click on an unfilled `Rect` only hits its stroke (`hitStrokeWidth` 'auto' = stroke width), so unfilled rect/ellipse get `hitStrokeWidth = max(width, 8)`; the hit canvas ignores dashes. Two clicks < 400 ms apart fire `dblclick` regardless of distance (polygon tool guards it). `Transformer` rotation works with a group whose `offset` = rect centre.
+
+## Decisions (and why)
+
+- **Rotation only on rect-placed objects; points-based objects rotate their points.** Avoids a second transform path in the bake for points and keeps their bounding boxes honest; the spec's "rotation around the rect centre" has no rect for them.
+- **Opacity on drawn objects only** (text.add, image, signature, stamp, symbol, shape, ink). Whiteout/redact must stay opaque (they hide content); links and annotations are not page content; edited original paragraphs keep the original's look.
+- **One content-stream wrapper** for rotation + opacity instead of per-handler code (morph/Shape/TextWriter `morph`/`show_pdf_page` hybrids): one mechanism, tested on rect, image, ink, text and stamp.
+- **Polygon/polyline/cloud are points-based** (`points`), drawn by clicking vertices; finished by same-spot double-click, Enter, or clicking the first vertex; Esc cancels; back to Pilih afterwards (spec: Bentuk returns to Select). Cloud = a polygon with a scalloped border (Acrobat's "cloud" polygon), filled like a polygon.
+- **Imported PDFs are separate documents** (POST /documents), referenced by `{doc, index}`; the client keeps their page sizes and form fields in non-undoable registries `DocInfo.imports` / `DocInfo.importFields`, records their ids in `EditorDoc.imports` (so a restored draft can tell them from the main document after a re-upload changes the main id), and loads their pdf.js documents, `/text` and `/chars` on demand. **Imported pages support everything** (owner decision 1): Tasks 4–13 first make them drawable and croppable (text, markup and fields main-only), Tasks 15–17 then add original-text editing (fonts reused from the imported PDF via `OriginalFont.doc`), Penanda markup, Find & Replace and form filling. Imported field values are stored per PDF (`EditorDoc.importForms[doc][name]`) and sent as `form.set {doc, fieldName}` with the field's *own* name; the bake fills them into the imported PDF before `insert_pdf` renames colliding names to `"name [xref]"` — so the client never needs the renamed name. A restored draft whose import expired loses those pages with a notice (owner decision 2).
+- **Manage Pages works on a copy** of the whole `EditorDoc` and commits it with `replaceDoc` (one undo step); importing inside the modal uploads immediately but only Simpan inserts the pages. Page edits are pure functions in `lib/pages.ts`, reused by the thumbnail menu. "Pindah" moves the selection one place left/right as a block, plus drag-to-reorder.
+- **Duplicating a page copies all its objects** (text.edit, markup and links included) with new ids; links on the copy keep their targets; form widgets become shared fields (M3 behaviour).
+- **Crop removes what it hides** (owner decision 4): annotations, links and widgets whose rect does not intersect the crop are deleted at export (popups go with their parent); ones the crop cuts through stay; a removed widget drops `/XFA` like the redaction scrub.
+- **Crop UI:** Crop (toolbar, right) edits the page in view: whole page shown, outside shaded, dashed rect inside the page; *Terapkan ke halaman ini / semua halaman / Hapus crop / Batal*. "All pages" applies the same page-coordinate rect clamped to each page (pages it would shrink below 10 pt keep theirs). Display: the whole page is rendered and shifted under an `overflow:hidden` wrapper; overlays use crop-aware `coords.ts` and the Konva group's `offsetX/offsetY`.
+- **Clipboard is the editor's own** (not the system clipboard): Salin/Tempel/Duplikat (+ Ctrl/Cmd+C/V/D); paste lands on the page in view at the same coordinates (another page) or +10 pt per paste (same page), kept inside the visible area; text.edit and markup cannot be copied. **Align** works in screen orientation (rotated/cropped pages) on the object's rotated bounds.
+- **Sidebar tabs** Halaman | Anotasi (n) instead of a toolbar split button: same function, less chrome.
+- **Backlog folded in:** page-menu Duplikat + "+" menu (Halaman kosong / Impor PDF); blank pages take the neighbour's on-screen orientation and crop (M1 T12); Ctrl+Z/Shift+Z/Ctrl+Y inside form fields undo the document (M3 T12); `compact` drops `form.set` for fields whose pages were all deleted (M3 should-fix); bake test for a link to a duplicated page (M3 should-fix); `ShapeAdd` rejects stray `rect`/`points` (M1 T3); transformer `flipEnabled=false` (M1 T16); `scrollToPage` scrolled the thumbnail instead of the page (found by the E2E; the selector matched the thumbnail first).
+
+## Deviations from spec (intentional, M4)
+
+- Schema additions beyond the spec's table: `OriginalFont.doc` and `FormSet.doc` (imported PDFs).
+- `rotation` exists only on rect-placed drawn ops; points-based shapes and ink rotate by their points; whiteout/redact/link/annot/text.edit have neither `rotation` nor `opacity`.
+- Panel switch is a tab pair at the top of the sidebar, not a split button in toolbar row 1.
+- "Crop semua halaman" uses the same page-coordinate rect per page (clamped), not a proportional or screen-oriented mapping.
+- A crop also deletes annotations, links and widgets lying entirely outside it (the spec only says crop is applied last).
+- The spec's granular client page ops (rotate/delete/duplicate/insert/move/crop) are snapshot-undo steps on `EditorDoc` (as since M1), compacted into one `pages.layout`.
+
+## Deliberate exclusions (go to BACKLOG.md)
+
+- A re-upload flow for an expired import (its pages are dropped with a notice instead).
+- Caching `/text`, `/chars` and font files per document (each imported PDF adds one `/text` request per editor load).
+- Thumbnails re-rendered after edits (still the source page only); live thumbnails in the modal.
+- Multi-object selection, group align/distribute, align to other objects.
+- Rotation of whiteout/redaction/links/notes; a numeric rotation input.
+- System clipboard interop (pasting images/text from other apps) — owner decision 5.
+- Crop by drag on the page without the Crop button.
+- Konva hit canvas occasionally stale right after a tool click (seen in E2E: selection by canvas click right after placing a symbol); E2E selects via the Anotasi panel.
+- M2 "should fix soon" items (font subsetting, caching `/text`, same-name fonts) — untouched by M4 code.
+
+## Tasks
+
+| # | File | Deliverable |
+|---|---|---|
+| 1 | task-01-ops-schema.md | Schema: opacity/rotation, polygon/polyline/cloud + dash, layout crop; types + example |
+| 2 | task-02-bake-shapes.md | Bake new shape kinds and dash styles (shared geometry) |
+| 3 | task-03-bake-transform.md | Bake rotation + opacity for every drawn op (content-stream wrapper) |
+| 4 | task-04-bake-imports.md | Bake pages of imported PDFs (insert_pdf, forms, 410 with doc_id) |
+| 5 | task-05-bake-crop.md | Bake crop last |
+| 6 | task-06-web-model.md | Crop-aware coords, `geometry.ts`, object helpers, tool style |
+| 7 | task-07-web-pages-model.md | `lib/pages.ts`, store page actions, imports registry, compaction, drafts |
+| 8 | task-08-web-multidoc-render.md | Per-doc pdf.js, cropped rendering, "+" menu, import flow, page-menu Duplikat |
+| 9 | task-09-web-manage-pages.md | Kelola Halaman modal |
+| 10 | task-10-web-crop.md | Crop tool + overlay |
+| 11 | task-11-web-object-style.md | Rotation handle, opacity, dash, polygon/polyline/cloud tools |
+| 12 | task-12-web-minibar-clipboard.md | Mini-bar, copy/paste/duplicate, align, shortcuts, form-field undo |
+| 13 | task-13-web-annotations-panel.md | Anotasi panel |
+| 14 | task-14-bake-crop-scrub.md | Crop removes annotations/links/widgets it hides (+ XFA) |
+| 15 | task-15-bake-imported-text-forms.md | Imported PDFs at export: text.edit, `OriginalFont.doc`, `FormSet.doc` |
+| 16 | task-16-web-imported-text.md | Imported PDFs on the web: per-doc text/chars/fonts → edit, markup, Find & Replace |
+| 17 | task-17-web-imported-forms.md | Imported PDFs on the web: form inputs, values, compaction, drafts |
+| 18 | task-18-e2e-docs.md | E2E over the milestone (incl. imported text/markup/field) + PyMuPDF checks + README |
+
+Tasks 1–5 (API) build on each other in order. Task 6 needs 1 (types) and 2 (numbers); 7 needs 6; 8 needs 7; 9 needs 7–8; 10 needs 7–8; 11 needs 6 (and 8's PageOverlay crop changes); 12 needs 6 and 8 (`MenuButton`); 13 needs 8 (Sidebar); 14 needs 5; 15 needs 4; 16 needs 15 (types) and 8–9 (import flow); 17 needs 15 and 16; 18 needs everything.
+
+## Self-review (spec coverage)
+
+- Modal Kelola Halaman (multi-select; putar, hapus, duplikat, pindah, sisip kosong, impor; Simpan/Batal) → Tasks 7, 9 (+ E2E rotate/duplicate/delete/Simpan).
+- Duplikat (copies ops, new `u-` key) → 7, 8 (menu), 9; bake 4 (duplicate of imported page, link to duplicate).
+- Impor PDF (POST /documents, `{doc, index}`, insert_pdf, forms) → 4, 7, 8, 9 (+ E2E import); its text, markup, Find & Replace and fields → 15, 16, 17 (+ E2E edit paragraph, highlight, fill renamed field).
+- Crop halaman ini/semua (set_cropbox last, client clipping, hidden annotations removed) → 5, 6, 7, 8, 10, 14 (+ E2E crop).
+- Mini-bar + ⋯ (salin, tempel, duplikat, ratakan kiri/tengah/kanan/atas/tengah/bawah), Ctrl/Cmd+C/V/D → 12 (+ E2E paste + align).
+- Rotasi objek (handle) → 3, 6, 11 (+ E2E rotate 90° checked in PDF).
+- Opacity on all drawn objects → 1, 3, 11 (+ E2E 50 %).
+- Garis putus-putus (dash) → 1, 2, 6, 11 (+ E2E dashes).
+- Polygon/polyline/cloud → 1, 2, 6, 11 (+ E2E polygon + cloud).
+- Panel Anotasi (list per page, jump, delete) → 13 (+ E2E select + delete).
+
+## Owner decisions (2026-11-08, after plan review) — override the text above where they conflict
+
+1. **Imported pages get full text support now:** original-text editing (`text.edit`) on imported pages, Penanda markup via their `/chars`, Find & Replace across imported pages, and filling imported form fields (respecting PyMuPDF's `"name [xref]"` renaming). Original font references name their document (`OriginalFont.doc`), `/text` and `/chars` are loaded per source PDF, the font store fetches originals per PDF, and the bake's `SourcePages` reads every source PDF → Tasks 15–17; the E2E edits a paragraph, highlights a word and fills a field on an imported page (Task 18).
+2. **Expired import:** its pages are dropped with a notice (as planned, Tasks 7–8).
+3. **Crop semua halaman:** the same rectangle, clamped per page (as planned, Tasks 7 and 10).
+4. **Annotations, links and widgets entirely outside a crop are removed at export** (partly overlapping ones kept); if a widget is removed, `/XFA` is dropped like after the redaction scrub → Task 14.
+5. **Clipboard:** internal only (as planned, Task 12).
+
+## Results
+
+Final counts: API 369, web 292, E2E 8 tests (24 runs with `--repeat-each=3`, all passed); tsc, eslint and `next build` clean. The Task 18 E2E (pages.spec.ts) passed unchanged from the plan code, no UI fixes were needed. Counts exceed the plan's (362 / 279 / 7) because review-fix commits added tests and an editor.spec test.

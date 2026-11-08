@@ -11,7 +11,9 @@ import type { Editor } from "@tiptap/core";
 import { toScreen, type PageGeom } from "@/lib/coords";
 import { cssFamily, fontKey, fontStore } from "@/lib/fonts";
 import { attrsOf, docToRuns, runsToDoc, type RunAttrs } from "@/lib/richtext";
+import { rotationOf } from "@/lib/objects";
 import { boxFonts, boxLineHeight } from "@/lib/textbox";
+import { useEditor as useEditorStore } from "@/store/editor";
 import { isFindKey } from "../useShortcuts";
 import { createRunMark } from "./runMark";
 import { commitOpenSession, preloadSessionFonts, session, textEditStore, type Editing } from "./textEdit";
@@ -35,6 +37,8 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
   // Style of text that has none yet (an empty box, pasted text); fixed for the session.
   const [fallback] = useState(() => attrsOf(editing.box.paragraphs[0][0]));
   const editingId = editing.id;
+  // A rotated text box is edited turned the same way (around its rect's centre).
+  const turn = useEditorStore((s) => rotationOf(s.doc.objects[editing.id]));
   // Fonts this session asked for (a failing original is not re-fetched on every keystroke).
   const [requested] = useState(() => new Set<string>());
 
@@ -113,7 +117,10 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
         position: "absolute", left, top, zIndex: 10,
         // +1 pt: the browser measures unquantized advances, slightly wider than the layout's.
         width: (box.rect.w + 1) * scale, minHeight: box.lineHeight * scale,
-        transform: `rotate(${geom.rotation}deg)`, transformOrigin: "top left",
+        transform: turn
+          ? `rotate(${geom.rotation}deg) translate(${(box.rect.w * scale) / 2}px, ${(box.rect.h * scale) / 2}px) rotate(${turn}deg) translate(${(-box.rect.w * scale) / 2}px, ${(-box.rect.h * scale) / 2}px)`
+          : `rotate(${geom.rotation}deg)`,
+        transformOrigin: "top left",
         ["--edith-scale" as string]: scale,
         fontFamily: `"${cssFamily(fallback.font)}"`, fontSize: fallback.size * scale, color: fallback.color,
         lineHeight: `${box.lineHeight * scale}px`, textAlign: box.align ?? "left",

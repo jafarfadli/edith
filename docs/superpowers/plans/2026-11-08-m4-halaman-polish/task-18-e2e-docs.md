@@ -1,0 +1,327 @@
+# Task 18: E2E over the milestone + docs
+
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 17 leaves, new files are complete.
+
+**Goal:** One E2E covering Kelola Halaman (rotate + duplicate + delete + Simpan), importing a second PDF and — on its page — editing a paragraph, highlighting a word and filling its own `nama` field (same name as the main PDF's), a dashed translucent rect rotated with the handle, polygon and cloud, copy/paste to another page + align, crop of the current page, the Anotasi panel (select + delete), download and PyMuPDF checks; then README/BACKLOG updates.
+
+**Files:**
+- Create: `apps/api/scripts/e2e_pages_pdf.py`
+- Create: `apps/web/e2e/fixtures/import.pdf` (binary, written by the fixture script)
+- Create: `apps/web/e2e/fixtures/pages.pdf` (binary, written by the fixture script)
+- Create: `apps/web/e2e/pages.spec.ts`
+- Create: `apps/web/e2e/pdfShapes.ts`
+
+**Interfaces:**
+- Consumes: Everything.
+- Produces:
+- `apps/api/scripts/e2e_pages_pdf.py` (writes `e2e/fixtures/pages.pdf` and `import.pdf`), `e2e/pdfShapes.ts`, `e2e/pages.spec.ts` (also uses M3's `pdfAnnots.ts`).
+
+- [ ] **Step 1: Write the fixture script and generate the fixtures**
+
+Create `apps/api/scripts/e2e_pages_pdf.py`:
+
+```python
+"""Writes apps/web/e2e/fixtures/pages.pdf and import.pdf for the pages & polish E2E test.
+
+pages.pdf: three A4 pages reading "Halaman satu", "Halaman dua", "Halaman tiga" (Helvetica 14 pt at (72, 72));
+page 1 has a text field `nama` at (72, 100)–(272, 120).
+import.pdf: two 400 × 500 pt pages reading "Impor A" and "Impor B" (the PDF imported into the first); page 1 also
+has the line "kata penting di sini" (Helvetica 12, baseline 200; a paragraph of its own) and its own text field `nama` at (72, 230)–(272, 250)
+— the same name as the main PDF's, so the export renames it.
+"""
+import pymupdf
+
+from edith.settings import REPO_ROOT
+
+FIXTURES = REPO_ROOT / "apps" / "web" / "e2e" / "fixtures"
+
+
+def field(page: pymupdf.Page, name: str, rect: tuple[float, float, float, float]) -> None:
+    w = pymupdf.Widget()
+    w.field_type, w.field_name, w.rect, w.field_value = pymupdf.PDF_WIDGET_TYPE_TEXT, name, pymupdf.Rect(rect), ""
+    page.add_widget(w)
+
+
+def build(labels: list[str], size: tuple[float, float], imported: bool) -> bytes:
+    doc = pymupdf.open()
+    for i, label in enumerate(labels):
+        page = doc.new_page(width=size[0], height=size[1])
+        page.insert_text((72, 72), label, fontname="helv", fontsize=14)
+        if i == 0 and imported:
+            page.insert_text((72, 200), "kata penting di sini", fontname="helv", fontsize=12)
+            field(page, "nama", (72, 230, 272, 250))
+        elif i == 0:
+            field(page, "nama", (72, 100, 272, 120))
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+if __name__ == "__main__":
+    (FIXTURES / "pages.pdf").write_bytes(build(["Halaman satu", "Halaman dua", "Halaman tiga"], (595, 842), False))
+    (FIXTURES / "import.pdf").write_bytes(build(["Impor A", "Impor B"], (400, 500), True))
+    print("wrote", FIXTURES / "pages.pdf", FIXTURES / "import.pdf")
+```
+
+Run: `cd apps/api && uv run python -m scripts.e2e_pages_pdf`
+Expected: `wrote …/pages.pdf …/import.pdf`. Check that the imported page's two lines are separate paragraphs (`g0` "Impor A", `g1` "kata penting di sini") — editing g0 must not hide g1 from the markup tool.
+
+- [ ] **Step 2: Write the PyMuPDF report helper**
+
+Create `apps/web/e2e/pdfShapes.ts`:
+
+```ts
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+
+export interface DrawingInfo { rect: number[]; items: string[]; dashes: string | null; fill: number[] | null; color: number[] | null; strokeOpacity: number | null; fillOpacity: number | null }
+export interface ShapesPage { text: string; rotation: number; cropbox: number[]; width: number; height: number; drawings: DrawingInfo[] }
+
+const SCRIPT = `
+import json, sys, pymupdf
+doc = pymupdf.open(sys.argv[1])
+pages = []
+for page in doc:
+    rotation = page.rotation
+    page.set_rotation(0)
+    pages.append({
+        "text": " ".join(page.get_text().split()), "rotation": rotation, "cropbox": list(page.cropbox),
+        "width": page.rect.width, "height": page.rect.height,
+        "drawings": [{"rect": list(d["rect"]), "items": [i[0] for i in d["items"]], "dashes": d.get("dashes"),
+                      "fill": list(d["fill"]) if d.get("fill") else None, "color": list(d["color"]) if d.get("color") else None,
+                      "strokeOpacity": d.get("stroke_opacity"), "fillOpacity": d.get("fill_opacity")} for d in page.get_drawings()],
+    })
+print(json.dumps(pages))
+`;
+
+/** Text, rotation, CropBox and vector drawings (unrotated page coordinates) of every page, as PyMuPDF reads them. */
+export function pdfShapes(file: string): ShapesPage[] {
+  const out = execFileSync("uv", ["run", "python", "-c", SCRIPT, file], { cwd: path.join(__dirname, "..", "..", "api"), encoding: "utf8" });
+  return JSON.parse(out) as ShapesPage[];
+}
+```
+
+
+- [ ] **Step 3: Write the E2E**
+
+Create `apps/web/e2e/pages.spec.ts`:
+
+```ts
+import { expect, test, type Page } from "@playwright/test";
+import path from "node:path";
+import { pdfReport, wordBox } from "./pdfAnnots";
+import { pdfShapes } from "./pdfShapes";
+
+// apps/api/scripts/e2e_pages_pdf.py: pages.pdf = "Halaman satu/dua/tiga" (A4), field `nama` on page 1;
+// import.pdf = "Impor A/B" (400 × 500), page 1 also "kata penting di sini" and its own field `nama` at (72, 230).
+const PAGES_PDF = path.join(__dirname, "fixtures", "pages.pdf");
+const IMPORT_PDF = path.join(__dirname, "fixtures", "import.pdf");
+
+async function pageBox(page: Page, index: number) {
+  return (await page.getByTestId("page").nth(index).boundingBox())!; // zoom 100 %: 1 pt = 1 px
+}
+
+async function shapeTool(page: Page, name: string) {
+  await page.getByRole("button", { name: "Bentuk pilihan" }).click();
+  await page.getByRole("menuitem", { name, exact: true }).click();
+}
+
+test("manage pages, import, crop, shapes, copy/paste, align and the annotations panel", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  await page.getByTestId("file-input").setInputFiles(PAGES_PDF);
+  await expect(page).toHaveURL(/\/edit\//);
+  await expect(page.getByTestId("page")).toHaveCount(3);
+
+  // Kelola Halaman: rotate page 3, duplicate page 1, delete page 2, then Simpan (one undo step).
+  await page.getByRole("button", { name: "Kelola Halaman" }).click();
+  const modal = page.getByRole("dialog", { name: "Kelola Halaman" });
+  const tile = (key: string) => modal.locator(`[data-testid="manage-page"][data-page-key="${key}"]`);
+  await tile("o2").click();
+  await modal.getByRole("button", { name: /Putar kanan/ }).click();
+  await modal.getByRole("button", { name: "Batal pilih" }).click();
+  await tile("o0").click();
+  await modal.getByRole("button", { name: /Duplikat/ }).click();
+  await modal.getByRole("button", { name: "Batal pilih" }).click();
+  await tile("o1").click();
+  await modal.getByRole("button", { name: /Hapus/ }).click();
+  await expect(modal.getByTestId("manage-page")).toHaveCount(3);
+  await modal.getByRole("button", { name: "Simpan" }).click();
+  await expect(modal).toHaveCount(0);
+  await expect(page.getByTestId("page")).toHaveCount(3);
+
+  // Impor PDF after the last page, from the "+" below it.
+  await page.getByRole("button", { name: "Sisipkan halaman" }).last().click();
+  const chooser = page.waitForEvent("filechooser");
+  const importedText = page.waitForResponse((r) => /\/documents\/[^/]+\/text$/.test(r.url()) && r.ok());
+  await page.getByRole("menuitem", { name: "Impor PDF" }).click();
+  await (await chooser).setFiles(IMPORT_PDF);
+  await expect(page.getByTestId("page")).toHaveCount(5);
+  await expect(page.getByTestId("page-indicator")).toHaveText("4/5"); // scrolled to the first imported page
+  await importedText;
+  const top = Math.round((await page.locator("#page-scroller").boundingBox())!.y);
+  await expect.poll(async () => Math.round((await pageBox(page, 3)).y)).toBe(top); // the smooth scroll has settled
+
+  // On the imported page: edit its first paragraph, highlight "penting", fill its own `nama` field.
+  let box = await pageBox(page, 3);
+  const editor = page.getByTestId("text-editor");
+  await expect(async () => { // the paragraph targets appear once the overlay and its fonts are ready
+    await page.mouse.dblclick(box.x + 90, box.y + 66);
+    await expect(editor).toBeVisible({ timeout: 1000 });
+  }).toPass();
+  await expect(editor).toContainText("Impor A");
+  await editor.focus(); // else a typed space would scroll the page
+  await page.keyboard.press("End");
+  await page.keyboard.type(" diedit");
+  await expect(editor).toContainText("Impor A diedit");
+  await page.mouse.click(box.x + 300, box.y + 400);
+  await expect(editor).toHaveCount(0);
+  // Committing can scroll the page list: bring the imported page back to the top.
+  await page.getByTestId("thumb").nth(3).click();
+  await expect.poll(async () => Math.round((await pageBox(page, 3)).y)).toBe(top);
+  box = await pageBox(page, 3);
+  const [w0, , w1] = wordBox(IMPORT_PDF, "penting");
+  const chars = page.waitForResponse((r) => /\/pages\/0\/chars$/.test(r.url()) && r.ok());
+  await page.getByRole("button", { name: "Penanda", exact: true }).click();
+  await chars;
+  await page.mouse.move(box.x + w0 + 1, box.y + 196);
+  await page.mouse.down();
+  await page.mouse.move(box.x + (w0 + w1) / 2, box.y + 196, { steps: 3 });
+  await page.mouse.move(box.x + w1 - 1, box.y + 196, { steps: 3 });
+  await page.mouse.up();
+  await page.getByRole("button", { name: "Pilih", exact: true }).click();
+  await page.getByTestId("page").nth(3).getByRole("textbox", { name: "nama", exact: true }).fill("Impor Budi");
+
+  // Back to page 1 (its thumbnail scrolls it to the top); fill the main PDF's `nama` (same name, other field).
+  await page.getByTestId("thumb").nth(0).click();
+  await expect(page.getByTestId("page-indicator")).toHaveText("1/5");
+  await expect.poll(async () => Math.round((await pageBox(page, 0)).y)).toBe(top); // the smooth scroll has settled
+  await page.getByTestId("page").nth(0).getByRole("textbox", { name: "nama", exact: true }).fill("Utama Budi");
+
+  // A dashed, half-transparent rectangle on page 1, turned 90° with the rotation handle.
+  box = await pageBox(page, 0);
+  await shapeTool(page, "Persegi");
+  await page.mouse.move(box.x + 100, box.y + 250);
+  await page.mouse.down(); // (well below the `nama` field at y 100–120: its input would cover the rotation handle)
+  await page.mouse.move(box.x + 175, box.y + 300, { steps: 3 });
+  await page.mouse.move(box.x + 250, box.y + 350, { steps: 3 });
+  await page.mouse.up();
+  await page.getByRole("combobox", { name: "Gaya garis" }).selectOption("dashed");
+  await page.getByRole("slider", { name: "Opasitas" }).fill("0.5");
+  await expect(page.getByTestId("mini-bar")).toBeVisible();
+  // Konva's rotater sits 50 px above the top edge's middle; dragging it to the right of the centre turns 90°.
+  await page.mouse.move(box.x + 175, box.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 230, box.y + 230, { steps: 4 });
+  await page.mouse.move(box.x + 300, box.y + 300, { steps: 4 });
+  await page.mouse.up();
+
+  // A polygon closed on its first vertex, and a cloud finished with Enter.
+  await shapeTool(page, "Poligon");
+  for (const [x, y] of [[350, 150], [450, 150], [400, 230], [350, 150]]) await page.mouse.click(box.x + x, box.y + y);
+  await shapeTool(page, "Awan");
+  for (const [x, y] of [[350, 300], [470, 300], [470, 380], [350, 380]]) await page.mouse.click(box.x + x, box.y + y);
+  await page.keyboard.press("Enter");
+
+  // A check mark, deleted again from the Anotasi panel.
+  await page.getByRole("button", { name: "Centang", exact: true }).click();
+  await page.mouse.click(box.x + 500, box.y + 600);
+  await page.getByRole("button", { name: "Pilih", exact: true }).click();
+
+  // Anotasi panel: a click selects the rectangle; copy it, paste it on page 2, line it up with the page's left edge.
+  await page.getByRole("tab", { name: /Anotasi/ }).click();
+  const items = page.getByTestId("annotation-item");
+  await expect(items).toHaveCount(6); // + the edited paragraph and the highlight on the imported page
+  await items.filter({ hasText: "Persegi" }).click();
+  await expect(page.getByTestId("mini-bar")).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+c");
+  await page.getByRole("button", { name: "Halaman berikutnya" }).click();
+  await expect(page.getByTestId("page-indicator")).toHaveText("2/5");
+  await expect.poll(async () => Math.round((await pageBox(page, 1)).y)).toBe(top); // scrolling closes menus: let it settle
+  await page.keyboard.press("ControlOrMeta+v");
+  await expect(items).toHaveCount(7);
+  await page.getByTestId("mini-bar").getByRole("button", { name: "Lainnya" }).click();
+  await page.getByRole("menuitem", { name: "Ratakan ke kiri halaman" }).click();
+
+  // Crop page 2 (the default crop: 5 % in from every edge).
+  await page.getByRole("button", { name: "Crop", exact: true }).click();
+  await page.getByTestId("crop-bar").getByRole("button", { name: "Terapkan ke halaman ini" }).click();
+  await expect(page.getByTestId("crop-overlay")).toHaveCount(0);
+  box = await pageBox(page, 1);
+  expect(Math.round(box.width)).toBe(536); // 595 × 0.9
+
+  // The panel: the polygon is selected from it, the check mark deleted.
+  await items.filter({ hasText: "Poligon" }).click();
+  await expect(page.getByTestId("mini-bar")).toBeVisible();
+  await page.getByRole("button", { name: "Hapus Centang" }).click();
+  await expect(items).toHaveCount(6);
+
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Unduh" }).click();
+  const file = path.join(test.info().outputDir, "pages.pdf");
+  await (await pending).saveAs(file);
+
+  const pages = pdfShapes(file);
+  // Page text includes the filled fields' appearances; the duplicate shares the main PDF's `nama` field.
+  expect(pages.map((p) => p.text)).toEqual(["Halaman satu Utama Budi", "Halaman satu Utama Budi", "Halaman tiga",
+    "kata penting di sini Impor A diedit Impor Budi", "Impor B"]);
+  expect(pages.map((p) => p.rotation)).toEqual([0, 0, 90, 0, 0]);
+  expect([pages[3].width, pages[3].height]).toEqual([400, 500]);
+  // Crop: 5 % in from each edge, applied last.
+  expect(pages[1].cropbox.map((v) => Math.round(v))).toEqual([30, 42, 565, 800]);
+
+  const red = (d: { color: number[] | null }) => d.color && d.color[0] > 0.8 && d.color[1] < 0.2;
+  const [rect] = pages[0].drawings.filter((d) => red(d) && d.dashes === "[ 6 4 ] 0");
+  expect(rect.strokeOpacity).toBeCloseTo(0.5);
+  // 150 × 100 turned 90° around its centre (175, 300): 100 × 150.
+  expect(rect.rect.map((v) => Math.round(v))).toEqual([125, 225, 225, 375]);
+  const polygon = pages[0].drawings.find((d) => red(d) && d.items.length === 3 && d.items.every((i) => i === "l"));
+  expect(polygon).toBeTruthy();
+  const cloud = pages[0].drawings.find((d) => red(d) && d.items.every((i) => i === "c"));
+  expect(cloud!.items.length).toBeGreaterThan(16);
+  expect(pages[0].drawings.filter((d) => d.color && d.color[2] > 0.6 && d.color[0] < 0.2)).toHaveLength(0); // the check mark is gone
+  // The pasted copy: dashed and translucent too, its left edge on the page's left edge (before the crop: x = 0).
+  const [copy] = pages[1].drawings.filter((d) => red(d) && d.dashes === "[ 6 4 ] 0");
+  expect(copy.strokeOpacity).toBeCloseTo(0.5);
+  expect(Math.round(copy.rect[0] + 29.75)).toBe(0);
+
+  // The imported page's highlight and both `nama` fields: the imported one renamed, each with its own value.
+  const report = pdfReport(file);
+  expect(report.pages[3].annots.map((a) => a.type)).toEqual(["Highlight"]);
+  expect(report.pages[0].widgets).toEqual([{ name: "nama", value: "Utama Budi" }]);
+  expect(report.pages[1].widgets).toEqual([{ name: "nama", value: "Utama Budi" }]);
+  expect(report.pages[3].widgets).toHaveLength(1);
+  expect(report.pages[3].widgets[0].name).toMatch(/^nama \[\d+\]$/);
+  expect(report.pages[3].widgets[0].value).toBe("Impor Budi");
+});
+```
+
+Notes from running it: the thumbnail and page share `data-page-key`, hence Task 8's `scrollToPage` fix; scrolling closes portal menus, so the test waits for smooth scrolls to settle; committing a text edit can scroll the page list, so the test scrolls back before highlighting; focus the rich editor before typing (a stray space scrolls the page); objects are selected through the Anotasi panel (a canvas click right after another tool's click can hit a stale Konva hit canvas — see BACKLOG); the rectangle is drawn well below the `nama` field because the field's input would cover the rotation handle; two clicks < 400 ms apart are a Konva double-click anywhere, hence `doubleClick()` only finishing on the same spot (Task 11). Page text read by PyMuPDF includes filled fields' appearances.
+
+- [ ] **Step 4: Run everything**
+
+Stop any servers on :3000/:8000 first.
+
+Run: `cd apps/api && uv run pytest -q && npm test -w apps/web && npx tsc --noEmit -p apps/web && npm run lint -w apps/web && npm run e2e -w apps/web`
+Expected: API 362, web 279, E2E 7 passed. `next dev` may rewrite `apps/web/tsconfig.json`: `git checkout apps/web/tsconfig.json`.
+
+- [ ] **Step 5: Update the root README**
+
+Modify `README.md`:
+
+```diff
+-Editor PDF berbasis web: unggah PDF, edit teks aslinya (rich text per kata, Cari & Ganti), tambah teks, bentuk, gambar, gambar bebas, whiteout, redaksi, stabilo/garis bawah/coret dan catatan (anotasi PDF asli), tanda tangan (dengan pustaka di browser), stamp (34 preset Indonesia/Inggris), centang/silang, link, isi form (opsional diratakan), atur halaman, lalu unduh.
++Editor PDF berbasis web: unggah PDF, edit teks aslinya (rich text per kata, Cari & Ganti), tambah teks, bentuk (termasuk poligon, garis bersambung dan awan; garis putus-putus, opasitas dan rotasi), gambar, gambar bebas, whiteout, redaksi, stabilo/garis bawah/coret dan catatan (anotasi PDF asli), tanda tangan (dengan pustaka di browser), stamp (34 preset Indonesia/Inggris), centang/silang, link, isi form (opsional diratakan), kelola halaman (putar, duplikat, pindah, hapus, sisip halaman kosong, impor PDF lain yang teks dan form-nya juga bisa diedit), crop, salin/tempel/ratakan objek dan panel Anotasi, lalu unduh.
+@@
+     cd apps/api && uv run python -m scripts.e2e_annots_pdf # apps/web/e2e/fixtures/annots.pdf
++    cd apps/api && uv run python -m scripts.e2e_pages_pdf  # apps/web/e2e/fixtures/pages.pdf + import.pdf
+```
+
+- [ ] **Step 6: Update the plan folder**
+
+Append to `docs/superpowers/plans/2026-11-08-m4-halaman-polish/README.md` a section `## Results` with the final counts (API 362, web 279, E2E 7) and anything that changed during execution. Create `BACKLOG.md` in the same folder from the reviews, starting with the items under "Deliberate exclusions" in README.md.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add README.md apps/api/scripts/e2e_pages_pdf.py apps/web/e2e/fixtures/import.pdf apps/web/e2e/fixtures/pages.pdf apps/web/e2e/pages.spec.ts apps/web/e2e/pdfShapes.ts docs/superpowers/plans/2026-11-08-m4-halaman-polish
+git commit -m "test(e2e): pages, import, crop, shapes, clipboard and annotations panel" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```

@@ -15,7 +15,7 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
   const [name, setName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [flatten, setFlatten] = useState(false);
-  const hasForm = useEditor((s) => (s.info?.fields?.length ?? 0) > 0);
+  const hasForm = useEditor((s) => (s.info?.fields?.length ?? 0) > 0 || Object.values(s.info?.importFields ?? {}).some((f) => f.length > 0));
   const fileName = name ?? info?.fileName ?? "document.pdf";
 
   async function download() {
@@ -27,7 +27,7 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
       await whenTextCommitted(); // a text box whose fonts were still loading must be in the document first
       s = editorStore.getState();
       if (!s.info) return;
-      sent = compact(s.doc);
+      sent = compact(s.doc, s.info);
       const blob = await exportPdf(s.info.docId, { ops: sent, flatten_forms: hasForm && flatten, filename: fileName });
       downloadBlob(blob, fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`);
     } catch (e) {

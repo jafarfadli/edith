@@ -1,24 +1,65 @@
 import pymupdf
 
 from edith.bake.context import BakeContext
-from edith.errors import InvalidOp
-from edith.forms import detach_acroform, reattach_acroform, widget_xrefs
+from edith.errors import BakeFailed, DocExpired, DocNotFound, InvalidOp
+from edith.forms import FieldValueError, detach_acroform, drop_xfa, fill_forms, reattach_acroform, widget_xrefs
 from edith.ops import DocSrc, PagesLayout
 
 
+def _insert_imports(doc: pymupdf.Document, layout: PagesLayout, layout_index: int,
+                    ctx: BakeContext, forms: dict[str, list] | None = None) -> dict[str, tuple[int, int]]:
+    """Appends every other document the layout uses (imported PDFs), whole and once each; returns doc id →
+    (index of its first page in `doc`, its page count). insert_pdf() copies annotations, links and form fields; a field whose
+    name the document already has is renamed ("name [xref]"), so it stays a separate field — which is why the
+    import's own form.set ops (`forms[doc id]`, by its own field names) are applied before inserting it."""
+    spans: dict[str, tuple[int, int]] = {}
+    for entry in layout.pages:
+        if not isinstance(entry.src, DocSrc) or entry.src.doc == ctx.doc_id or entry.src.doc in spans:
+            continue
+        doc_id = entry.src.doc
+        if ctx.load_source is None:
+            raise InvalidOp(f"bad page source for {entry.pageKey}", op_index=layout_index)
+        try:
+            data = ctx.load_source(doc_id)
+        except DocNotFound:
+            raise InvalidOp(f"unknown document {doc_id} for {entry.pageKey}", op_index=layout_index) from None
+        except DocExpired:
+            raise DocExpired(f"imported document {doc_id} expired", doc_id=doc_id) from None
+        try:
+            src = pymupdf.open(stream=data, filetype="pdf")
+        except Exception as exc:  # noqa: BLE001
+            raise BakeFailed(f"cannot read imported document {doc_id}: {exc}") from exc
+        try:
+            if forms and forms.get(doc_id):
+                drop_xfa(src)
+                try:
+                    fill_forms(src, forms[doc_id])
+                except FieldValueError as exc:
+                    raise BakeFailed(str(exc), op_id=exc.op_id) from exc
+                except Exception as exc:  # noqa: BLE001
+                    raise BakeFailed(f"cannot fill the form of imported document {doc_id}: {exc}") from exc
+            spans[doc_id] = (doc.page_count, src.page_count)
+            doc.insert_pdf(src)
+        finally:
+            src.close()
+    return spans
+
+
 def build_pages(doc: pymupdf.Document, layout: PagesLayout, layout_index: int,
-                ctx: BakeContext) -> tuple[dict[str, int], list[int]]:
+                ctx: BakeContext, import_forms: dict[str, list] | None = None) -> tuple[dict[str, int], list[int]]:
     source_count = doc.page_count
-    acroform = detach_acroform(doc)
+    spans = {ctx.doc_id: (0, source_count), **_insert_imports(doc, layout, layout_index, ctx, import_forms)}
+    acroform = detach_acroform(doc)  # after the imports: one may have brought the document's first form
     copies: dict[int, int] = {}  # widget made by fullcopy_page -> the widget it was copied from
     seen: set[int] = set()
     selection: list[int] = []
     base_rotation: list[int] = []
     for entry in layout.pages:
         if isinstance(entry.src, DocSrc):
-            if entry.src.doc != ctx.doc_id or entry.src.index >= source_count:
+            first, count = spans.get(entry.src.doc, (0, 0))
+            if entry.src.index >= count:
                 raise InvalidOp(f"bad page source for {entry.pageKey}", op_index=layout_index)
-            idx = entry.src.index
+            idx = first + entry.src.index
             base_rotation.append(doc[idx].rotation)
             if idx in seen:
                 original = widget_xrefs(doc[idx])

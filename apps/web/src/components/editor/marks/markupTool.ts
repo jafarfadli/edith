@@ -2,6 +2,7 @@ import type { AnnotAdd, TextEdit } from "@edith/ops";
 import { caretAt, markupQuads, usableLines, type CharLine } from "@/lib/markup";
 import { maskRects } from "@/lib/paragraphs";
 import { editorStore, type MarkupTool } from "@/store/editor";
+import { srcKey } from "@/lib/sources";
 import { charLines } from "@/store/chars";
 import { paragraphsOf } from "@/store/text";
 
@@ -15,7 +16,7 @@ export function markLines(pageKey: string): CharLine[] {
   const edited = new Set(Object.values(s.doc.objects)
     .filter((op): op is TextEdit => op.type === "text.edit" && op.pageKey === pageKey).map((op) => op.paragraphId));
   const hidden = paragraphsOf(entry.src).filter((p) => edited.has(p.id)).flatMap(maskRects);
-  return usableLines(charLines(entry.src.index), hidden);
+  return usableLines(charLines(srcKey(entry.src.doc, entry.src.index)), hidden);
 }
 
 /** True when a press at `at` lands on markable text. */

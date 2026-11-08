@@ -45,7 +45,7 @@ def run_font(run: Run, ctx) -> pymupdf.Font:
     if run.font.kind == "original":
         if ctx.source is None:
             raise ValueError("original fonts need the source document")
-        return ctx.source.font(run.font.ref)
+        return ctx.source.font(run.font.ref, run.font.doc)
     return ctx.fonts.font(run.font.family, run.font.bold, run.font.italic)
 
 

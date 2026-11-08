@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 from dataclasses import replace
 
@@ -6,9 +7,10 @@ import pymupdf
 from edith.bake.context import BakeContext
 from edith.bake.pages import build_pages
 from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
-from edith.bake.scrub import scrub_page, under_redaction
+from edith.bake.scrub import scrub_outside, scrub_page, under_redaction
 from edith.bake.source import SourcePages
 from edith.bake.text import links_under_redactions, restore_links
+from edith.bake.transform import draw_transformed
 from edith.bake.util import to_rect
 from edith.errors import BakeFailed, EdithError, InvalidOp
 from edith.forms import FieldValueError, drop_xfa, fill_forms
@@ -33,15 +35,58 @@ def _default_layout(page_count: int, doc_id: str) -> PagesLayout:
 
 def _run(handler, page, op, ctx) -> None:
     try:
-        handler(page, op, ctx)
+        draw_transformed(page, op, lambda: handler(page, op, ctx))
     except EdithError as exc:
         raise BakeFailed(exc.message, op_id=op.id) from exc
     except Exception as exc:  # noqa: BLE001
         raise BakeFailed(str(exc), op_id=op.id) from exc
 
 
-def _fill(doc: pymupdf.Document, forms: list, flatten: bool, widgets_removed: bool) -> None:
-    if forms or flatten or widgets_removed:
+MAX_IMPORT_DOCS = 20  # distinct imported PDFs one export may reference
+
+
+def _check_import_docs(ops: list, layout, main_id: str) -> None:
+    """Imported documents are loaded and parsed per request: cap how many distinct ones a request names."""
+    ids: set[str] = {p.src.doc for p in layout.pages if isinstance(p.src, DocSrc)}
+    for op in ops:
+        if op.type == "form.set" and op.doc:
+            ids.add(op.doc)
+        box = getattr(op, "box", None)
+        for para in getattr(box, "paragraphs", None) or []:
+            for run in para:
+                if getattr(run.font, "kind", None) == "original" and run.font.doc:
+                    ids.add(run.font.doc)
+    ids.discard(main_id)
+    if len(ids) > MAX_IMPORT_DOCS:
+        raise InvalidOp(f"more than {MAX_IMPORT_DOCS} imported documents", op_index=None)
+
+
+def _memo(load):
+    cache: dict[str, bytes] = {}
+
+    def cached(doc_id: str) -> bytes:
+        if doc_id not in cache:
+            cache[doc_id] = load(doc_id)
+        return cache[doc_id]
+    return cached
+
+
+CROP_SLACK = 0.01  # pt: a crop this far past the page edge is clamped, not rejected
+
+
+def _crop_rect(page: pymupdf.Page, crop, layout_index: int) -> pymupdf.Rect:
+    """A layout crop (page coordinates of the unrotated page) as a rect inside the page."""
+    if not all(math.isfinite(v) for v in (crop.x, crop.y, crop.w, crop.h)):
+        raise InvalidOp("crop is not finite", op_index=layout_index)
+    r = pymupdf.Rect(crop.x, crop.y, crop.x + crop.w, crop.y + crop.h)
+    bounds = page.rect
+    if r.x1 > bounds.x1 + CROP_SLACK or r.y1 > bounds.y1 + CROP_SLACK:
+        raise InvalidOp("crop outside the page", op_index=layout_index)
+    return r & bounds
+
+
+def _fill(doc: pymupdf.Document, forms: list, flatten: bool, stale_xfa: bool) -> None:
+    if forms or flatten or stale_xfa:
         drop_xfa(doc)
     try:
         fill_forms(doc, forms)
@@ -67,12 +112,31 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
         if layout is None:
             layout = _default_layout(doc.page_count, ctx.doc_id)
 
-        pages_src = SourcePages(source, {
-            p.pageKey: (p.src.index if isinstance(p.src, DocSrc) and p.src.doc == ctx.doc_id
-                        and p.src.index < doc.page_count else None)
-            for p in layout.pages
-        })
+        _check_import_docs(ops, layout, ctx.doc_id)
+        # Each imported PDF is read once, by SourcePages (text.edit, original fonts) and build_pages alike.
+        if ctx.load_source is not None:
+            ctx = replace(ctx, load_source=_memo(ctx.load_source))
+        pages_src = SourcePages(ctx.doc_id, source, {
+            p.pageKey: (p.src.doc, p.src.index) if isinstance(p.src, DocSrc) else None for p in layout.pages
+        }, ctx.load_source)
         ctx = replace(ctx, source=pages_src)
+        # form.set with `doc` = the edited id is the same as none: one op per field name among them.
+        main_forms: list = []
+        main_names: set[str] = set()
+        import_forms: dict[str, list] = defaultdict(list)
+        for i, op in enumerate(ops):
+            if op.type != "form.set":
+                continue
+            if op.doc not in (None, ctx.doc_id):
+                import_forms[op.doc].append(op)
+                continue
+            if op.fieldName in main_names:
+                raise InvalidOp(f"more than one form.set for field {op.fieldName!r}", op_index=i)
+            main_names.add(op.fieldName)
+            main_forms.append(op)
+        # An imported PDF's fields filled into it end up in the merged AcroForm: the main XFA goes stale.
+        used_docs = {p.src.doc for p in layout.pages if isinstance(p.src, DocSrc)}
+        imports_filled = any(d in used_docs for d in import_forms)
 
         keys = {p.pageKey for p in layout.pages}
         content = [(i, op) for i, op in enumerate(ops) if op.type not in ("pages.layout", "form.set")]
@@ -86,8 +150,9 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             if op.type == "link.add" and isinstance(op.target, PageTarget) and op.target.pageKey not in keys:
                 raise InvalidOp(f"link to unknown pageKey {op.target.pageKey}", op_index=i)
 
-        key_to_index, base_rotation = build_pages(doc, layout, layout_index, ctx)
+        key_to_index, base_rotation = build_pages(doc, layout, layout_index, ctx, import_forms)
         ctx = replace(ctx, page_index=key_to_index)
+        crops = [_crop_rect(doc[i], entry.crop, layout_index) if entry.crop else None for i, entry in enumerate(layout.pages)]
 
         by_page: dict[int, list] = defaultdict(list)
         for _, op in content:
@@ -117,10 +182,19 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                     if PHASE[op.type] == phase and not (phase != "draw" and under_redaction(op, boxes)):
                         _run(HANDLERS[op.type], page, op, ctx)
 
-        _fill(doc, [op for op in ops if op.type == "form.set"], flatten_forms, widgets_removed)
+        _fill(doc, main_forms, flatten_forms, widgets_removed or imports_filled)
 
+        # Crop and rotation last: neither moves the content (spec: Urutan bake 7). Annotations, links and
+        # widgets the crop hides entirely go (owner decision); a removed widget makes the XFA stale.
+        cropped_widgets = 0
         for i, entry in enumerate(layout.pages):
+            if crops[i] is not None:
+                cropped_widgets += scrub_outside(doc[i], crops[i])
+                cb = doc[i].cropbox  # MediaBox coordinates, top-left origin
+                doc[i].set_cropbox(crops[i] + (cb.x0, cb.y0, cb.x0, cb.y0))
             doc[i].set_rotation((base_rotation[i] + entry.rotate) % 360)
+        if cropped_widgets:
+            drop_xfa(doc)
         return doc
     except BaseException:
         doc.close()

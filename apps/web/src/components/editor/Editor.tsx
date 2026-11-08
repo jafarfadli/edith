@@ -11,16 +11,19 @@ import { loadDraft, saveDraft } from "@/lib/draft";
 import { noticeStore } from "@/lib/notices";
 import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
-import { restoreDraft } from "@/lib/restore";
+import { resolveImports, restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
 import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
+import { pdfStore } from "@/store/pdfs";
+import { charsStore } from "@/store/chars";
 import { textStore } from "@/store/text";
 import { FormLayer } from "./forms/FormLayer";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
 import { PageList } from "./PageList";
+import { SelectionMiniBar } from "./objects/SelectionMiniBar";
 import { PropertiesBar } from "./PropertiesBar";
 import { Sidebar } from "./Sidebar";
 import { Toolbar } from "./Toolbar";
@@ -34,6 +37,7 @@ const PageOverlay = dynamic(async () => {
 }, { ssr: false });
 const TextEditor = dynamic(() => import("./text/TextEditor").then((m) => m.TextEditor), { ssr: false });
 const LinkPopover = dynamic(() => import("./marks/LinkPopover").then((m) => m.LinkPopover), { ssr: false });
+const CropOverlay = dynamic(() => import("./pages/CropOverlay"), { ssr: false });
 const FindBar = dynamic(() => import("./find/FindBar").then((m) => m.FindBar), { ssr: false });
 
 const INFO_NOTICE_MS = 5000;
@@ -49,7 +53,6 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
 
   useEffect(() => {
     let cancelled = false;
-    let doc: PDFDocumentProxy | null = null;
     initialDoc.current = null;
     (async () => {
       let st;
@@ -60,18 +63,32 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
         return;
       }
       if (cancelled) return;
-      const draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
-      editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages, fields: st.fields }, draft);
+      let draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
+      // Pages of imported PDFs need those documents' page sizes; imports that expired lose their pages.
+      let resolved;
+      try {
+        resolved = draft?.imports?.length ? await resolveImports(draft, (id) => getStructure(id)) : null;
+      } catch (e) {
+        // Not "gone": keep the stored draft untouched (no init, so nothing autosaves over it).
+        if (!cancelled) setFatal(e instanceof ApiError ? e.code : "network");
+        return;
+      }
+      if (cancelled) return;
+      if (resolved) draft = resolved.doc;
+      editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages, fields: st.fields, imports: resolved?.imports, importFields: resolved?.fields }, draft);
       initialDoc.current = editorStore.getState().doc;
-      if (draft) setNotice({ kind: "info", text: t.editor.restored });
+      if (resolved?.missing) setNotice({ kind: "error", text: t.pages.importGone });
+      else if (draft) setNotice({ kind: "info", text: t.editor.restored });
       void textStore.getState().load(docId); // original paragraphs + fonts, in the background
+      for (const id of Object.keys(resolved?.imports ?? {})) void textStore.getState().loadImport(id);
+      charsStore.getState().reset();
       // Preload fonts of restored text boxes (in parallel with the PDF; TextNode also loads on demand).
       const texts = Object.values(editorStore.getState().doc.objects).filter(isTextOp);
       void Promise.all(texts.flatMap((o) => boxFonts(o.box)).map((f) => fontStore.load(f))).catch((e) => console.warn("font preload failed", e));
       try {
         const loaded = await loadPdf(fileUrl(docId));
         if (cancelled) { destroyPdf(loaded); return; }
-        doc = loaded;
+        pdfStore.getState().put(docId, loaded); // pages render from the store (imported PDFs load there on demand)
         setPdf(loaded);
       } catch {
         if (!cancelled) setFatal("network");
@@ -79,7 +96,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     })();
     return () => {
       cancelled = true;
-      if (doc) destroyPdf(doc);
+      pdfStore.getState().reset(); // destroys the main PDF and every imported one
       setPdf(null);
       setFatal(null);
     };
@@ -143,7 +160,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       <Toolbar onNotice={setNotice} />
       <PropertiesBar />
       <div className="flex min-h-0 flex-1">
-        {pdf ? <Sidebar pdf={pdf} /> : <aside className="w-48 shrink-0 border-r border-line bg-surface" />}
+        {pdf ? <Sidebar /> : <aside className="w-48 shrink-0 border-r border-line bg-surface" />}
         <main
           className="relative min-w-0 flex-1 overflow-auto bg-bg"
           id="page-scroller"
@@ -161,7 +178,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
           }}
           onPointerUp={() => { drag.current = null; }}
         >
-          {info && pdf ? <PageList pdf={pdf} overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><LinkPopover {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
+          {info && pdf ? <PageList overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><LinkPopover {...a} /><SelectionMiniBar {...a} /><CropOverlay {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
         </main>
       </div>
       <FindBar />

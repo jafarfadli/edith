@@ -61,3 +61,37 @@ describe("compact (M3)", () => {
     ]);
   });
 });
+
+describe("compact (M4)", () => {
+  const D = "D".repeat(22);
+  it("sends crops only when set and drops values of fields whose pages are gone", () => {
+    const doc: EditorDoc = {
+      pages: [{ pageKey: "o0", src: { doc: D, index: 0 }, rotate: 0, crop: { x: 1, y: 2, w: 30, h: 40 } }, { pageKey: "o2", src: { doc: D, index: 2 }, rotate: 0, crop: null }],
+      objects: {}, order: [], forms: { kept: "a", gone: "b", both: true },
+    };
+    const fields = [
+      { name: "kept", page: 0 }, { name: "gone", page: 1 }, { name: "both", page: 1 }, { name: "both", page: 2 },
+    ] as never[];
+    const ops = compact(doc, { docId: D, fields });
+    expect((ops[0] as { pages: unknown[] }).pages).toEqual([
+      { pageKey: "o0", src: { doc: D, index: 0 }, rotate: 0, crop: { x: 1, y: 2, w: 30, h: 40 } },
+      { pageKey: "o2", src: { doc: D, index: 2 }, rotate: 0 },
+    ]);
+    expect(ops.slice(1).map((o) => (o as { fieldName: string }).fieldName)).toEqual(["kept", "both"]);
+    expect(compact(doc).length).toBe(4); // without info every value is sent
+  });
+});
+
+describe("compact: imported fields", () => {
+  it("sends their values with the doc they belong to, only while one of their pages is left", () => {
+    const D = "D".repeat(22), I = "I".repeat(22);
+    const doc: EditorDoc = {
+      pages: [{ pageKey: "u-i0", src: { doc: I, index: 0 }, rotate: 0 }], objects: {}, order: [],
+      importForms: { [I]: { nama: "Budi", hilang: "x" } },
+    };
+    const importFields = { [I]: [{ name: "nama", page: 0 }, { name: "hilang", page: 1 }] as never[] };
+    expect(compact(doc, { docId: D, fields: [], importFields }).slice(1)).toEqual([
+      { id: "form-import-0", type: "form.set", fieldName: "nama", value: "Budi", doc: I },
+    ]);
+  });
+});

@@ -26,11 +26,22 @@ const doc: EditorDoc = {
   },
   order: ["e", "t", "u"],
 };
-const pages = { 0: [para("g0", 100, "asli lama"), para("g1", 300, "tergantikan lama")] };
+const pages = { "D:0": [para("g0", 100, "asli lama"), para("g1", 300, "tergantikan lama")] };
 
 describe("search targets", () => {
   it("lists unedited paragraphs and text ops by page and position", () => {
     expect(buildTargets(doc, pages).map((t) => t.key)).toEqual(["op:t", "para:o0:g0", "op:e", "op:u"]);
+  });
+
+  it("searches pages of imported PDFs by their own paragraphs, never the main document's at the same index", () => {
+    const d: EditorDoc = { ...doc, imports: ["IMP"], pages: [...doc.pages, { pageKey: "u9", src: { doc: "IMP", index: 0 }, rotate: 0 }] };
+    expect(buildTargets(d, pages).map((t) => t.key)).toEqual(["op:t", "para:o0:g0", "op:e", "op:u"]); // not loaded yet
+    const withImport = { ...pages, "IMP:0": [para("g7", 200, "impor lama")] };
+    const targets = buildTargets(d, withImport);
+    expect(targets.map((t) => t.key)).toEqual(["op:t", "para:o0:g0", "op:e", "op:u", "para:u9:g7"]);
+    const [m] = findMatches(targets.filter((t) => t.key === "para:u9:g7"), "lama", true);
+    expect(highlightRects(m, d, withImport, {}, () => mono)).toEqual([{ x: 130, y: 200.5, w: 20, h: 12 }]);
+    expect(highlightRects({ ...m, key: "para:u9:g0" }, d, withImport, {}, () => mono)).toEqual([]);
   });
 
   it("highlights a match in an original paragraph", () => {

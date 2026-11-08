@@ -63,6 +63,12 @@ export function isOriginal(f: FontRef): f is OriginalFont {
   return f.kind === "original";
 }
 
+/** Key of an embedded font in the font table: its ref, prefixed by the imported PDF it comes from (refs are
+ *  xref numbers, unique only per document). */
+export function fontId(f: OriginalFont): string {
+  return f.doc ? `${f.doc}/${f.ref}` : f.ref;
+}
+
 function style(f: BundledFont): Style {
   if (f.bold && f.italic) return "bolditalic";
   if (f.bold) return "bold";
@@ -84,7 +90,7 @@ export function pickFile(files: Partial<Record<Style, string>>, wanted: Style): 
 }
 
 export function fontKey(f: FontRef): string {
-  if (isOriginal(f)) return `orig-${f.ref}`;
+  if (isOriginal(f)) return f.doc ? `orig-${f.doc}-${f.ref}` : `orig-${f.ref}`;
   const s = style(f);
   return `${f.family}-${s === "bolditalic" ? "bold-italic" : s}`;
 }
@@ -99,12 +105,12 @@ export class FontStore {
   private manifest?: Promise<Manifest>;
   private loaded = new Map<string, FontMetrics>();
   private pending = new Map<string, Promise<FontMetrics>>();
-  private originalUrl: ((ref: string) => string) | null = null;
+  private originalUrl: ((f: OriginalFont) => string) | null = null;
 
   constructor(private baseUrl = "/fonts") {}
 
-  /** Where original (embedded) fonts of the open document come from; forgets the previous document's. */
-  setOriginalSource(url: ((ref: string) => string) | null): void {
+  /** Where original (embedded) fonts of the open document and its imports come from; forgets the previous document's. */
+  setOriginalSource(url: ((f: OriginalFont) => string) | null): void {
     this.originalUrl = url;
     for (const key of [...this.loaded.keys(), ...this.pending.keys()]) {
       if (key.startsWith("orig-")) { this.loaded.delete(key); this.pending.delete(key); }
@@ -131,7 +137,7 @@ export class FontStore {
   private async url(f: FontRef): Promise<string> {
     if (isOriginal(f)) {
       if (!this.originalUrl) throw new Error(`no source for original font ${f.ref}`);
-      return this.originalUrl(f.ref);
+      return this.originalUrl(f);
     }
     const fam = (await this.getManifest()).families[f.family];
     if (!fam) throw new Error(`unknown font family ${f.family}`);

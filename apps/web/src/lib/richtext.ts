@@ -1,8 +1,9 @@
 import type { FontRef, Run } from "@edith/ops";
 import type { DocFont } from "@/lib/api";
-import { cssFamily, isOriginal } from "@/lib/fonts";
+import { cssFamily, fontId, isOriginal } from "@/lib/fonts";
 import { normalizeRuns } from "@/lib/runs";
 
+/** Embedded fonts by `fontId`. */
 export type FontTable = Record<string, DocFont>;
 
 /** Character style of a run — the attributes of the rich editor's `run` mark. */
@@ -27,11 +28,11 @@ export function runOf(text: string, a: RunAttrs): Run {
   };
 }
 
-/** Family/bold/italic a font shows as in the properties bar; `original` is the ref of an embedded font. */
+/** Family/bold/italic a font shows as in the properties bar; `original` is the `fontId` of an embedded font. */
 export function fontStyle(f: FontRef, fonts: FontTable): { family: string; bold: boolean; italic: boolean; original: string | null } {
   if (isOriginal(f)) {
-    const info = fonts[f.ref];
-    return { family: info?.substitute.family ?? "Arimo", bold: info?.bold ?? false, italic: info?.italic ?? false, original: f.ref };
+    const info = fonts[fontId(f)];
+    return { family: info?.substitute.family ?? "Arimo", bold: info?.bold ?? false, italic: info?.italic ?? false, original: fontId(f) };
   }
   return { family: f.family, bold: f.bold ?? false, italic: f.italic ?? false, original: null };
 }
@@ -44,9 +45,10 @@ export function patchFont(f: FontRef, patch: StylePatch, fonts: FontTable): Font
   const bold = patch.bold ?? cur.bold;
   const italic = patch.italic ?? cur.italic;
   if (isOriginal(f) && patch.family === undefined) {
-    const info = fonts[f.ref];
-    const variant = info && Object.values(fonts).find((x) => x.reusable && x.family === info.family && x.bold === bold && x.italic === italic);
-    if (variant) return { kind: "original", ref: variant.ref };
+    const info = fonts[fontId(f)];
+    // A variant from the same PDF only.
+    const variant = info && Object.values(fonts).find((x) => x.reusable && x.doc === info.doc && x.family === info.family && x.bold === bold && x.italic === italic);
+    if (variant) return variant.doc ? { kind: "original", ref: variant.ref, doc: variant.doc } : { kind: "original", ref: variant.ref };
   }
   return { kind: "bundled", family: patch.family ?? cur.family, bold, italic };
 }

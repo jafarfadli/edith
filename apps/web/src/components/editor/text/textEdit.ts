@@ -12,6 +12,7 @@ import { paragraphBox, preloadFallback, prepareRuns, resolveLoadedRuns } from "@
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
 import { t } from "@/lib/strings";
+import { keepRotatedTopLeft, rotationOf } from "@/lib/objects";
 import { boxFonts, boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, textEditFor, type EditorDoc } from "@/store/editor";
 import { paragraphsOf, textStore } from "@/store/text";
@@ -219,6 +220,9 @@ function land(e: Editing, box: TextBox): void {
   } else {
     const cur = st.doc.objects[e.id];
     if (!cur) return; // deleted meanwhile (e.g. undo)
+    // A turned box grew while edited: keep its rotated top-left corner where the editor showed it.
+    const prev = (cur as { box: TextBox }).box.rect;
+    box = { ...box, rect: keepRotatedTopLeft(prev, box.rect, rotationOf(cur)) };
     if (JSON.stringify((cur as { box: TextBox }).box) !== JSON.stringify(box)) {
       st.putObjects([{ ...cur, box } as ContentOp], removed);
       noteMarkupRemoved(removed);

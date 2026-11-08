@@ -17,7 +17,9 @@ export interface Paragraph {
   id: string; rect: Rect; lines: ParagraphLine[]; runs: Run[];
   align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean;
 }
+/** `doc`: set by the client on fonts of an imported PDF (see `fontId`). */
 export interface DocFont {
+  doc?: string;
   ref: string; name: string; embedded: boolean; format: string | null; reusable: boolean;
   family: string; bold: boolean; italic: boolean; substitute: BundledFont;
 }

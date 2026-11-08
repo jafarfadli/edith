@@ -16,7 +16,8 @@ import { findStore } from "./findStore";
 import { applyReplacements } from "./replace";
 
 function reveal(pageKey: string) {
-  document.querySelector(`[data-page-key="${pageKey}"]`)?.scrollIntoView({ block: "center" });
+  // The page itself, not its thumbnail (which carries the same data-page-key and comes first in the DOM).
+  document.querySelector(`[data-testid="page"][data-page-key="${pageKey}"]`)?.scrollIntoView({ block: "center" });
 }
 
 export function FindBar() {

@@ -2,6 +2,8 @@
 
 export type Id = string;
 export type Pagekey = string;
+export type Opacity = number;
+export type Rotation = number;
 export type Type = "text.add";
 export type X = number;
 export type Y = number;
@@ -17,6 +19,7 @@ export type Bold = boolean;
 export type Italic = boolean;
 export type Kind1 = "original";
 export type Ref = string;
+export type Doc = string | null;
 export type Size = number;
 export type Color = string;
 export type Bgcolor = string | null;
@@ -35,18 +38,24 @@ export type Type1 = "text.edit";
 export type Paragraphid = string;
 export type Id2 = string;
 export type Pagekey2 = string;
+export type Opacity1 = number;
+export type Rotation1 = number;
 export type Type2 = "image.add";
 export type Assetid = string;
 export type Id3 = string;
 export type Pagekey3 = string;
+export type Opacity2 = number;
+export type Rotation2 = number;
 export type Type3 = "shape.add";
-export type Kind2 = "rect" | "ellipse" | "line" | "arrow";
+export type Kind2 = "rect" | "ellipse" | "line" | "arrow" | "polygon" | "polyline" | "cloud";
 export type Points = [number, number][] | null;
 export type Stroke = string;
 export type Fill = string | null;
 export type Width = number;
+export type Dash = "solid" | "dashed" | "dotted";
 export type Id4 = string;
 export type Pagekey4 = string;
+export type Opacity3 = number;
 export type Type4 = "ink.add";
 /**
  * @minItems 1
@@ -63,10 +72,14 @@ export type Type6 = "redact.add";
 export type Fill1 = "black" | "white";
 export type Id7 = string;
 export type Pagekey7 = string;
+export type Opacity4 = number;
+export type Rotation3 = number;
 export type Type7 = "signature.add";
 export type Assetid1 = string;
 export type Id8 = string;
 export type Pagekey8 = string;
+export type Opacity5 = number;
+export type Rotation4 = number;
 export type Type8 = "stamp.add";
 export type Preset =
   | (
@@ -112,6 +125,8 @@ export type Time = string | null;
 export type Color2 = string;
 export type Id9 = string;
 export type Pagekey9 = string;
+export type Opacity6 = number;
+export type Rotation5 = number;
 export type Type9 = "symbol.add";
 export type Kind3 = "check" | "cross";
 export type Color3 = string;
@@ -133,6 +148,7 @@ export type Id12 = string;
 export type Type12 = "form.set";
 export type Fieldname = string;
 export type Value = string | boolean;
+export type Doc1 = string | null;
 export type Id13 = string;
 export type Type13 = "pages.layout";
 /**
@@ -142,11 +158,15 @@ export type Type13 = "pages.layout";
 export type Pages = [LayoutPage, ...LayoutPage[]];
 export type Pagekey13 = string;
 export type Src = DocSrc | BlankSrc;
-export type Doc = string;
+export type Doc2 = string;
 export type Index = number;
 export type Width2 = number;
 export type Height = number;
 export type Rotate = 0 | 90 | 180 | 270;
+export type X2 = number;
+export type Y1 = number;
+export type W1 = number;
+export type H1 = number;
 /**
  * @maxItems 5000
  */
@@ -209,6 +229,8 @@ export interface ExportRequest {
 export interface TextAdd {
   id: Id;
   pageKey: Pagekey;
+  opacity?: Opacity;
+  rotation?: Rotation;
   type: Type;
   box: TextBox;
 }
@@ -257,7 +279,8 @@ export interface BundledFont {
   italic?: Italic;
 }
 /**
- * A font embedded in the uploaded PDF (`ref` from GET /documents/{id}/text), reused as is.
+ * A font embedded in an uploaded PDF (`ref` from GET /documents/{id}/text), reused as is. `doc`: the
+ * imported PDF it comes from (xref-based refs are only unique per document); none = the edited PDF.
  *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "OriginalFont".
@@ -265,6 +288,7 @@ export interface BundledFont {
 export interface OriginalFont {
   kind: Kind1;
   ref: Ref;
+  doc?: Doc;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
@@ -303,17 +327,24 @@ export interface TextEdit {
 export interface ImageAdd {
   id: Id2;
   pageKey: Pagekey2;
+  opacity?: Opacity1;
+  rotation?: Rotation1;
   type: Type2;
   rect: Rect;
   assetId: Assetid;
 }
 /**
+ * rect/ellipse use `rect` (and may be rotated); the other kinds use `points` (closed for polygon and
+ * cloud; a cloud's border is scalloped, see bake/geometry.py) and keep `rotation` 0.
+ *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "ShapeAdd".
  */
 export interface ShapeAdd {
   id: Id3;
   pageKey: Pagekey3;
+  opacity?: Opacity2;
+  rotation?: Rotation2;
   type: Type3;
   kind: Kind2;
   rect?: Rect | null;
@@ -321,6 +352,7 @@ export interface ShapeAdd {
   stroke: Stroke;
   fill?: Fill;
   width: Width;
+  dash?: Dash;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
@@ -329,6 +361,7 @@ export interface ShapeAdd {
 export interface InkAdd {
   id: Id4;
   pageKey: Pagekey4;
+  opacity?: Opacity3;
   type: Type4;
   paths: Paths;
   color: Color1;
@@ -364,6 +397,8 @@ export interface RedactAdd {
 export interface SignatureAdd {
   id: Id7;
   pageKey: Pagekey7;
+  opacity?: Opacity4;
+  rotation?: Rotation3;
   type: Type7;
   rect: Rect;
   assetId: Assetid1;
@@ -375,6 +410,8 @@ export interface SignatureAdd {
 export interface StampAdd {
   id: Id8;
   pageKey: Pagekey8;
+  opacity?: Opacity5;
+  rotation?: Rotation4;
   type: Type8;
   rect: Rect;
   preset?: Preset;
@@ -397,6 +434,8 @@ export interface StampCustom {
 export interface SymbolAdd {
   id: Id9;
   pageKey: Pagekey9;
+  opacity?: Opacity6;
+  rotation?: Rotation5;
   type: Type9;
   kind: Kind3;
   rect: Rect;
@@ -446,7 +485,9 @@ export interface AnnotAdd {
 }
 /**
  * Value of AcroForm field `fieldName` (every widget of that name): text/combo/list -> the string,
- * checkbox -> bool, radio -> the on-state name of the chosen button (or "Off").
+ * checkbox -> bool, radio -> the on-state name of the chosen button (or "Off"). `doc`: a field of that
+ * imported PDF, named as in its own structure (the export may rename it when the name is taken); none =
+ * the edited PDF.
  *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "FormSet".
@@ -456,6 +497,7 @@ export interface FormSet {
   type: Type12;
   fieldName: Fieldname;
   value: Value;
+  doc?: Doc1;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
@@ -467,6 +509,8 @@ export interface PagesLayout {
   pages: Pages;
 }
 /**
+ * `src.doc` is the edited document or another uploaded one (an imported PDF).
+ *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "LayoutPage".
  */
@@ -474,13 +518,14 @@ export interface LayoutPage {
   pageKey: Pagekey13;
   src: Src;
   rotate?: Rotate;
+  crop?: CropRect | null;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "DocSrc".
  */
 export interface DocSrc {
-  doc: Doc;
+  doc: Doc2;
   index: Index;
 }
 /**
@@ -497,6 +542,18 @@ export interface BlankSrc {
 export interface BlankSize {
   width: Width2;
   height: Height;
+}
+/**
+ * Visible part of a page, in the page's own coordinates (unrotated, relative to its source CropBox).
+ *
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "CropRect".
+ */
+export interface CropRect {
+  x: X2;
+  y: Y1;
+  w: W1;
+  h: H1;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema

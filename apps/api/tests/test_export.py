@@ -132,3 +132,31 @@ def test_export_text_edit(client):
     assert "Diganti" in text and "diedit" not in text and "tetangga" in text
     r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}]})
     assert r.status_code == 422 and r.json()["error"] == {"code": "invalid_op", "message": "no paragraph g9 on o0", "op_index": 0}
+
+
+def test_export_with_imported_document(client):
+    doc_id = new_doc(client, pages=1)
+    imported = new_doc(client, pages=2, size=(300, 400))
+    layout = {"id": "L", "type": "pages.layout", "pages": [
+        {"pageKey": "o0", "src": {"doc": doc_id, "index": 0}},
+        {"pageKey": "u-i1", "src": {"doc": imported, "index": 1}},
+    ]}
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [layout]})
+    assert r.status_code == 200, r.text
+    out = pymupdf.open(stream=r.content, filetype="pdf")
+    assert [p.get_text().strip() for p in out] == ["Page 0", "Page 1"]
+    assert out[1].rect.width == 300
+    r = client.post(f"/documents/{doc_id}/render-page", json={"pageKey": "u-i1", "ops": [layout]})
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+
+
+def test_export_with_expired_import(client):
+    doc_id = new_doc(client, pages=1)
+    imported = new_doc(client, pages=1)
+    storage = client.app.state.storage
+    storage._expire(imported)
+    layout = {"id": "L", "type": "pages.layout", "pages": [
+        {"pageKey": "o0", "src": {"doc": doc_id, "index": 0}}, {"pageKey": "u-i", "src": {"doc": imported, "index": 0}}]}
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [layout]})
+    assert r.status_code == 410
+    assert r.json()["error"]["code"] == "doc_expired" and r.json()["error"]["doc_id"] == imported
