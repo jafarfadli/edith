@@ -56,7 +56,8 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
 
   return (
     <div className="flex min-w-0 flex-1 items-center justify-center" role="toolbar" aria-label={t.editor.tools}>
-      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+      {/* p-1: room for the focus ring, which the horizontal scroller would otherwise clip. */}
+      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto p-1 [scrollbar-width:none]">
         <IconButton label={t.editor.undo} icon={Undo2} keys="Mod+Z" disabled={!canUndo} onClick={() => afterTextCommitted(() => editorStore.getState().undo())} />
         <IconButton label={t.editor.redo} icon={Redo2} keys="Mod+Shift+Z" disabled={!canRedo} onClick={() => afterTextCommitted(() => editorStore.getState().redo())} />
         <Sep />

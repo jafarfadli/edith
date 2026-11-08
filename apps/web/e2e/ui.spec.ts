@@ -84,3 +84,76 @@ test("on a narrow window the hint folds to its icon so every option stays in vie
   await expect(sentence).not.toHaveClass(/sr-only/);
   await expect.poll(() => bar.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 });
+
+test("tool menus and the colour popover work from the keyboard", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  await page.getByTestId("file-input").setInputFiles(SAMPLE);
+  await expect(page.getByTestId("page").first()).toBeVisible();
+  const chevron = page.getByRole("button", { name: "Bentuk pilihan" });
+  const menu = page.getByRole("menu", { name: "Bentuk" });
+  const item = (name: string) => menu.getByRole("menuitem", { name, exact: true });
+
+  // Enter on the chevron opens the menu with focus on the first item; arrows, Home and End move.
+  await chevron.focus();
+  await page.keyboard.press("Enter");
+  await expect(item("Persegi")).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(item("Elips")).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(item("Awan")).toBeFocused();
+  await page.keyboard.press("ArrowDown"); // wraps
+  await expect(item("Persegi")).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(item("Awan")).toBeFocused();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowDown");
+  // Enter picks Elips: the menu closes and focus is back on the chevron.
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveCount(0);
+  await expect(chevron).toBeFocused();
+  await expect(page.getByRole("button", { name: "Bentuk", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("tool-hint")).toContainText("elips");
+
+  // Escape closes without picking and without leaving the tool; focus returns to the chevron.
+  await page.keyboard.press("ArrowDown");
+  await expect(item("Persegi")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(chevron).toBeFocused();
+  await expect(page.getByRole("button", { name: "Bentuk", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+  // Tab closes the menu and moves on to the control after the chevron (Gambar).
+  await page.keyboard.press("Space");
+  await expect(item("Persegi")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(menu).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Gambar", exact: true })).toBeFocused();
+
+  // The colour popover of the shape tool: focus on the first swatch, arrows to the third, Enter picks it.
+  const chip = page.getByTestId("properties-bar").getByRole("button", { name: "Warna", exact: true });
+  const pop = page.getByRole("dialog", { name: "Warna" });
+  await chip.focus();
+  await page.keyboard.press("Enter");
+  await expect(pop.getByRole("button", { name: "Warna #111111" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(pop.getByRole("button", { name: "Warna #ffffff" })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(pop.getByLabel("Warna Warna lain…")).toBeFocused();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(pop.getByRole("button", { name: "Warna #e11d48" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(pop).toHaveCount(0);
+  await expect(chip).toBeFocused();
+  await expect(chip).toHaveCSS("background-color", "rgb(225, 29, 72)");
+
+  // Escape closes the popover and returns focus to the chip.
+  await page.keyboard.press("Enter");
+  await expect(pop.getByRole("button", { name: "Warna #111111" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(pop).toHaveCount(0);
+  await expect(chip).toBeFocused();
+  await expect(page.getByRole("button", { name: "Bentuk", exact: true })).toHaveAttribute("aria-pressed", "true");
+});

@@ -7,7 +7,8 @@ export const DIALOG_TITLE = "text-base font-medium text-ink";
 
 /** Floating panels: menus, popovers, the find bar, the crop bar, the mini-bar. */
 export const POPOVER = "rounded-lg bg-raised text-sm text-ink shadow-pop";
-export const MENU_ITEM = "flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left hover:bg-hover disabled:pointer-events-none disabled:opacity-45";
+/** A menu item; keyboard focus (arrow keys) shows the hover fill plus the focus ring drawn inside the item. */
+export const MENU_ITEM = "flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left hover:bg-hover focus-visible:bg-hover focus-visible:-outline-offset-2 disabled:pointer-events-none disabled:opacity-45";
 
 /** Buttons: primary (the one main action of a surface), secondary, quiet (icon or text), danger. */
 const BTN_BASE = "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-45";
@@ -33,6 +34,6 @@ export const toggle = (on: boolean) =>
 /** A small field label in the properties bar. */
 export const PROP_LABEL = "flex shrink-0 items-center gap-2 text-xs text-muted";
 
-/** A colour dot (swatch) with the selected one ringed in the accent. */
+/** A colour dot (swatch) with the selected one ringed in the accent; keyboard focus rings it in white instead. */
 export const swatch = (on: boolean) =>
-  `h-5 w-5 shrink-0 rounded-full ring-1 ring-inset ring-line-strong ${on ? "outline outline-2 outline-offset-2 outline-accent-text" : ""}`;
+  `h-5 w-5 shrink-0 rounded-full ring-1 ring-inset ring-line-strong ${on ? "outline outline-2 outline-offset-2 outline-accent-text" : ""} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink`;
