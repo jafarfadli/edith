@@ -7,16 +7,55 @@ import { useStore } from "zustand";
 import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
 import { groupTransform, pageBounds, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
-import { clampToBounds, createFromDrag, DRAG_TOOLS, inkWidth, isMarkup, isResizable, isTextOp, MARKUP_TOOLS, MIN_DRAG, moveOp, normalizeRect, noteAt, resizeOp, symbolAt, type DragTool, type Pt } from "@/lib/objects";
+import {
+  clampToBounds, createFromDrag, DRAG_TOOLS, hasRotation, inkWidth, isMarkup, isPointOp, isResizable, isRotatable, isTextOp, keepRotatedTopLeft, mapPoints, MARKUP_TOOLS,
+  MIN_DRAG, moveOp, normalizeRect, normalizeRotation, noteAt, opacityOf, opBounds, POLY_TOOLS, resizeOp, rotationOf, symbolAt, type DragTool, type PolyTool, type Pt,
+} from "@/lib/objects";
 import { charsStore } from "@/store/chars";
 import { editorStore, useEditor, type MarkupTool } from "@/store/editor";
 import { linkStore } from "./marks/linkStore";
 import { MarkupShape } from "./marks/MarkupShape";
 import { markupFromDrag, onMarkableText } from "./marks/markupTool";
 import { ObjectShape } from "./ObjectShape";
+import { usePolyTool } from "./shapes/usePolyTool";
 import { textEditStore } from "./text/textEdit";
 
 type TextOp = TextAdd | TextEdit;
+
+/** Konva attributes of an object's group: objects with a `rotation` turn around their rect's centre (the group's
+ *  origin sits there), and every drawn object has its opacity. */
+export function objectGroupAttrs(op: ContentOp) {
+  const opacity = opacityOf(op);
+  if (!hasRotation(op)) return { x: 0, y: 0, offsetX: 0, offsetY: 0, rotation: 0, opacity };
+  const b = opBounds(op);
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  return { x: cx, y: cy, offsetX: cx, offsetY: cy, rotation: rotationOf(op), opacity };
+}
+
+/** The op after its group was moved, resized or turned with the Transformer (`g`: the group's node). */
+function transformed(cur: ContentOp, g: Konva.Group, page: Konva.Group): ContentOp {
+  if (isPointOp(cur)) {
+    const m = g.getTransform().copy(); // group space (page coordinates before the change) -> page space
+    return mapPoints(cur, ([x, y]) => { const p = m.point({ x, y }); return [p.x, p.y]; });
+  }
+  if (hasRotation(cur)) {
+    const b = opBounds(cur);
+    const w = b.w * Math.abs(g.scaleX()), h = b.h * Math.abs(g.scaleY());
+    const to = { x: g.x() - w / 2, y: g.y() - h / 2, w, h };
+    const rotation = normalizeRotation(g.rotation());
+    if (isTextOp(cur) && overlayHooks.resizeText) {
+      // Only the width changes; the re-laid-out height may differ: keep the rotated top-left corner (the text's first line) in place.
+      const kept = { ...to, y: g.y() - b.h / 2, h: b.h };
+      const sized = overlayHooks.resizeText(cur, kept);
+      const rect = keepRotatedTopLeft(kept, sized.box.rect, rotation);
+      return { ...sized, box: { ...sized.box, rect }, rotation } as ContentOp;
+    }
+    return { ...resizeOp(cur, to), rotation } as ContentOp;
+  }
+  const box = g.getClientRect({ relativeTo: page, skipStroke: true });
+  const to = { x: box.x, y: box.y, w: box.width, h: box.height };
+  return isTextOp(cur) && overlayHooks.resizeText ? overlayHooks.resizeText(cur, to) : resizeOp(cur, to);
+}
 
 /** Highlights multiply over the pdf.js canvas below (as their /BM /Multiply appearance does in a
  *  viewer), so text under them stays dark: the markup layer's canvas blends with the page. */
@@ -70,6 +109,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   }, [selection, mine]);
 
   useEffect(() => () => drawing.current?.stop(), []);
+  const poly = usePolyTool(pageKey, POLY_TOOLS.has(tool) ? (tool as PolyTool) : null, scale);
 
   // Text markup needs the page's character boxes.
   useEffect(() => {
@@ -169,6 +209,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       s.setTool("select");
       s.select(note.id);
       linkStore.getState().setFocusNote(note.id); // the properties bar shows its text field
+    } else if (POLY_TOOLS.has(tool)) {
+      poly.click(at);
     } else if (tool === "link" || DRAG_TOOLS.has(tool)) {
       beginDraw(at, null);
     } else if (tool === "ink") {
@@ -186,6 +228,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
         width={size.width}
         height={size.height}
         onPointerDown={onDown}
+        onPointerMove={() => { if (poly.active) poly.hover(pos()); }}
+        onDblClick={() => poly.doubleClick()}
       >
         <Layer>
           <Group ref={pageRef} x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale} offsetX={tr.offsetX} offsetY={tr.offsetY}>
@@ -194,6 +238,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
               <Group
                 key={op.id}
                 ref={(n) => { if (n) nodes.current.set(op.id, n); else nodes.current.delete(op.id); }}
+                {...objectGroupAttrs(op)}
                 draggable={tool === "select"}
                 listening={tool === "select"}
                 onPointerDown={(e) => {
@@ -204,22 +249,18 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
                 }}
                 onDragEnd={(e) => {
                   const g = e.currentTarget as Konva.Group;
-                  const dx = g.x(), dy = g.y();
-                  g.position({ x: 0, y: 0 });
                   const cur = editorStore.getState().doc.objects[op.id];
+                  const home = objectGroupAttrs(cur ?? op);
+                  const dx = g.x() - home.x, dy = g.y() - home.y;
+                  g.position({ x: home.x, y: home.y });
                   if (cur && (dx || dy)) editorStore.getState().updateObject(op.id, moveOp(cur, dx, dy));
                 }}
                 onTransformEnd={(e) => {
                   const g = e.currentTarget as Konva.Group;
-                  const box = g.getClientRect({ relativeTo: pageRef.current!, skipStroke: true });
-                  g.setAttrs({ x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 });
                   const cur = editorStore.getState().doc.objects[op.id];
-                  if (!cur) return;
-                  const to = { x: box.x, y: box.y, w: box.width, h: box.height };
-                  const next = isTextOp(cur) && overlayHooks.resizeText
-                    ? overlayHooks.resizeText(cur, to)
-                    : resizeOp(cur, to);
-                  editorStore.getState().updateObject(op.id, next);
+                  const next = cur ? transformed(cur, g, pageRef.current!) : null;
+                  g.setAttrs({ ...objectGroupAttrs(next ?? op), scaleX: 1, scaleY: 1 });
+                  if (next) editorStore.getState().updateObject(op.id, next);
                 }}
                 onDblClick={() => overlayHooks.onDoubleClick?.(op)}
               >
@@ -228,12 +269,16 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
                   : <ObjectShape op={op} docId={docId} />}
               </Group>
             ))}
-            {draft && !isMarkup(draft) && <ObjectShape op={draft} docId={docId} />}
+            {draft && !isMarkup(draft) && <Group opacity={opacityOf(draft)}><ObjectShape op={draft} docId={docId} /></Group>}
+            {poly.preview && <Group opacity={opacityOf(poly.preview)} listening={false}><ObjectShape op={poly.preview} docId={docId} /></Group>}
             {overlayHooks.renderOver?.(pageKey)}
           </Group>
           <Transformer
             ref={trRef}
-            rotateEnabled={false}
+            rotateEnabled={!!selection && isRotatable(objects[selection])}
+            rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+            rotationSnapTolerance={4}
+            flipEnabled={false}
             resizeEnabled={!selection || isResizable(objects[selection])}
             // A note's icon is as big as its selection box: pad it so the border shows outside the icon's.
             padding={selection && !isResizable(objects[selection]) ? 3 : 0}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
 import {
   alignDelta, clampToBounds, copyOp, createFromDrag, hasOpacity, hasRotation, isCopyable, isPointOp, isRotatable, mapPoints,
-  opacityOf, polyFromPoints, rotatePoint, rotationOf, visualBounds,
+  keepRotatedTopLeft, normalizeRotation, opacityOf, polyClick, polyDoubleClick, polyFromPoints, rotatedTopLeft, rotatePoint, rotationOf, visualBounds,
 } from "@/lib/objects";
 import { DEFAULT_STYLE, type ToolStyle } from "@/store/editor";
 
@@ -80,5 +80,57 @@ describe("objects (M4)", () => {
 
   it("clamps to the visible part of a cropped page", () => {
     expect(clampToBounds([5, 500], { x: 20, y: 30, w: 100, h: 150 })).toEqual([20, 180]);
+  });
+});
+
+describe("object transforms (Task 11)", () => {
+  it("normalizes a Konva rotation to (-180, 180] in 0.01° steps", () => {
+    expect(normalizeRotation(45)).toBe(45);
+    expect(normalizeRotation(270)).toBe(-90);
+    expect(normalizeRotation(-90)).toBe(-90);
+    expect(normalizeRotation(180)).toBe(180);
+    expect(normalizeRotation(-180)).toBe(180);
+    expect(normalizeRotation(720.004)).toBe(0);
+    expect(normalizeRotation(359.999)).toBe(0);
+    expect(normalizeRotation(12.3456)).toBe(12.35);
+  });
+
+  it("keeps the rotated top-left corner of a box whose height changed", () => {
+    const prev = { x: 100, y: 100, w: 200, h: 100 };
+    // Not rotated: unchanged.
+    expect(keepRotatedTopLeft(prev, { ...prev, h: 140 }, 0)).toEqual({ ...prev, h: 140 });
+    const next = keepRotatedTopLeft(prev, { ...prev, h: 140 }, 90);
+    expect(next.w).toBe(200);
+    expect(next.h).toBe(140);
+    const [ax, ay] = rotatedTopLeft(prev, 90), [bx, by] = rotatedTopLeft(next, 90);
+    expect(bx).toBeCloseTo(ax, 9);
+    expect(by).toBeCloseTo(ay, 9);
+    // 90° clockwise around (200, 150): the top-left (100, 100) lands at (250, 50).
+    expect(ax).toBeCloseTo(250, 9);
+    expect(ay).toBeCloseTo(50, 9);
+  });
+
+  it("adds polygon vertices; a click on the first vertex finishes without adding it", () => {
+    let st = polyClick("polygon", [], [0, 0], 1);
+    expect(st).toEqual({ points: [[0, 0]], finish: false });
+    st = polyClick("polygon", st.points, [100, 0], 1);
+    // Too few vertices to close: a click near the first one is a vertex.
+    expect(polyClick("polygon", st.points, [3, 3], 1)).toEqual({ points: [[0, 0], [100, 0], [3, 3]], finish: false });
+    st = polyClick("polygon", st.points, [100, 100], 1);
+    expect(polyClick("polygon", st.points, [3, 3], 1)).toEqual({ points: [[0, 0], [100, 0], [100, 100]], finish: true });
+    // The close radius is in screen pixels: at zoom 4, 3 pt is 12 px (too far).
+    expect(polyClick("polygon", st.points, [3, 0], 4).finish).toBe(false);
+    // A polyline closes on its first vertex after two.
+    expect(polyClick("polyline", [[0, 0], [50, 0]], [1, 1], 1)).toEqual({ points: [[0, 0], [50, 0]], finish: true });
+  });
+
+  it("finishes on a double-click only when its two clicks hit the same spot, dropping the second", () => {
+    expect(polyDoubleClick([[0, 0], [100, 0], [100, 100], [101, 101]], 1)).toEqual([[0, 0], [100, 0], [100, 100]]);
+    expect(polyDoubleClick([[0, 0], [100, 0], [100, 100], [150, 100]], 1)).toBeNull();
+    expect(polyDoubleClick([[0, 0]], 1)).toBeNull();
+    expect(polyDoubleClick([], 1)).toBeNull();
+    // Same spot = within CLOSE_RADIUS screen pixels.
+    expect(polyDoubleClick([[0, 0], [100, 0], [103, 0]], 2)).toEqual([[0, 0], [100, 0]]);
+    expect(polyDoubleClick([[0, 0], [100, 0], [103, 0]], 3)).toBeNull();
   });
 });

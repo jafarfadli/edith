@@ -1,7 +1,8 @@
 "use client";
 
-import { Arrow, Ellipse, Image as KImage, Line, Rect } from "react-konva";
+import { Arrow, Ellipse, Image as KImage, Line, Rect, Shape } from "react-konva";
 import type { ContentOp, Rect as R } from "@edith/ops";
+import { cloudBeziers, dashPattern, type Dash, type Pt } from "@/lib/geometry";
 import { arrowHead, NOTE_SIZE } from "@/lib/objects";
 import { symbolPaths } from "@/lib/symbols";
 import { MarkupShape } from "./marks/MarkupShape";
@@ -25,6 +26,23 @@ function ImageObject({ docId, assetId, rect }: { docId: string; assetId: string;
   return img
     ? <KImage image={img} x={rect.x} y={rect.y} width={rect.w} height={rect.h} />
     : <Rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill="#e3e6eb" />;
+}
+
+/** A cloud: its scalloped border (shared geometry with the bake) as one closed Bézier path. */
+function Cloud({ points, width, stroke, fill, dash }: { points: Pt[]; width: number; stroke?: string; fill?: string; dash: ReturnType<typeof dashPattern> }) {
+  const arcs = cloudBeziers(points, width);
+  return (
+    <Shape
+      sceneFunc={(ctx, shape) => {
+        ctx.beginPath();
+        if (arcs.length) ctx.moveTo(arcs[0][0][0], arcs[0][0][1]);
+        for (const [, c1, c2, p] of arcs) ctx.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], p[0], p[1]);
+        ctx.closePath();
+        ctx.fillStrokeShape(shape);
+      }}
+      stroke={stroke} strokeWidth={width} fill={fill} lineJoin="round" lineCap={dash?.lineCap ?? "round"} dash={dash?.dash} hitStrokeWidth={12}
+    />
+  );
 }
 
 export function ObjectShape({ op, docId }: { op: ContentOp; docId: string }) {
@@ -67,11 +85,19 @@ export function ObjectShape({ op, docId }: { op: ContentOp; docId: string }) {
       )}</>;
     case "shape.add": {
       const stroke = o.stroke as string, width = o.width as number, fill = (o.fill as string | null) ?? undefined;
-      if (o.kind === "rect") { const r = o.rect as R; return <Rect x={r.x} y={r.y} width={r.w} height={r.h} stroke={width > 0 ? stroke : undefined} strokeWidth={width} fill={fill} />; }
-      if (o.kind === "ellipse") { const r = o.rect as R; return <Ellipse x={r.x + r.w / 2} y={r.y + r.h / 2} radiusX={r.w / 2} radiusY={r.h / 2} stroke={width > 0 ? stroke : undefined} strokeWidth={width} fill={fill} />; }
+      const d = dashPattern(o.dash as Dash | undefined, width);
+      const dashProps = d ? { dash: d.dash, lineCap: d.lineCap } : {};
+      if (o.kind === "rect") { const r = o.rect as R; return <Rect x={r.x} y={r.y} width={r.w} height={r.h} stroke={width > 0 ? stroke : undefined} strokeWidth={width} fill={fill} hitStrokeWidth={Math.max(width, 8)} {...dashProps} />; }
+      if (o.kind === "ellipse") { const r = o.rect as R; return <Ellipse x={r.x + r.w / 2} y={r.y + r.h / 2} radiusX={r.w / 2} radiusY={r.h / 2} stroke={width > 0 ? stroke : undefined} strokeWidth={width} fill={fill} hitStrokeWidth={Math.max(width, 8)} {...dashProps} />; }
+      if (o.kind === "cloud") return <Cloud points={o.points as Pt[]} width={width} stroke={width > 0 ? stroke : undefined} fill={fill} dash={d} />;
       const pts = (o.points as number[][]).flat();
-      if (o.kind === "arrow") { const h = arrowHead(width); return <Arrow points={pts} stroke={stroke} fill={stroke} strokeWidth={Math.max(width, 0.5)} lineCap="round" pointerLength={h.length} pointerWidth={h.width} hitStrokeWidth={12} />; }
-      return <Line points={pts} stroke={stroke} strokeWidth={Math.max(width, 0.5)} lineCap="round" hitStrokeWidth={12} />;
+      if (o.kind === "polygon" || o.kind === "polyline") {
+        const closed = o.kind === "polygon";
+        return <Line points={pts} closed={closed} stroke={width > 0 ? stroke : undefined} strokeWidth={width} fill={closed ? fill : undefined}
+          lineJoin="round" lineCap="round" hitStrokeWidth={12} {...dashProps} />;
+      }
+      if (o.kind === "arrow") { const h = arrowHead(width); return <Arrow points={pts} stroke={stroke} fill={stroke} strokeWidth={Math.max(width, 0.5)} lineCap="round" pointerLength={h.length} pointerWidth={h.width} hitStrokeWidth={12} {...dashProps} />; }
+      return <Line points={pts} stroke={stroke} strokeWidth={Math.max(width, 0.5)} lineCap="round" hitStrokeWidth={12} {...dashProps} />;
     }
     default:
       return null;

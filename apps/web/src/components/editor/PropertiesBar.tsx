@@ -3,7 +3,8 @@
 import type { ContentOp } from "@edith/ops";
 import { useEffect, useRef } from "react";
 import { useStore } from "zustand";
-import { inkWidth, isMarkup, isTextOp, MARKUP_TOOLS } from "@/lib/objects";
+import type { Dash } from "@/lib/geometry";
+import { hasOpacity, inkWidth, isMarkup, isTextOp, MARKUP_TOOLS, opacityOf, POLY_TOOLS } from "@/lib/objects";
 import { t } from "@/lib/strings";
 import { useChars } from "@/store/chars";
 import { editorStore, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
@@ -20,7 +21,7 @@ type Kind = "shape" | "line" | "ink" | "redact" | "text" | "markup" | "symbol" |
 
 function kindOf(op: ContentOp | undefined, tool: string): Kind {
   if (op) {
-    if (op.type === "shape.add") return (op as { kind: string }).kind === "line" || (op as { kind: string }).kind === "arrow" ? "line" : "shape";
+    if (op.type === "shape.add") return ["line", "arrow", "polyline"].includes((op as { kind: string }).kind) ? "line" : "shape";
     if (op.type === "ink.add") return "ink";
     if (op.type === "redact.add") return "redact";
     if (isTextOp(op)) return "text";
@@ -34,13 +35,15 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
   if (MARKUP_TOOLS.has(tool)) return "markup";
   if (tool === "check" || tool === "cross") return "symbol";
   if (tool === "note") return "note";
-  if (tool === "rect" || tool === "ellipse") return "shape";
-  if (tool === "line" || tool === "arrow") return "line";
+  if (tool === "rect" || tool === "ellipse" || tool === "polygon" || tool === "cloud") return "shape";
+  if (tool === "line" || tool === "arrow" || tool === "polyline") return "line";
   if (tool === "ink") return "ink";
   if (tool === "redact") return "redact";
   if (tool === "text") return "text";
   return null;
 }
+
+const DRAG_SHAPES: ReadonlySet<string> = new Set(["rect", "ellipse", "line", "arrow"]);
 
 export function PropertiesBar() {
   const selection = useEditor((s) => s.selection);
@@ -87,6 +90,21 @@ export function PropertiesBar() {
   const width = kind === "ink" ? inkWidth(rawWidth) : rawWidth;
   const fill = o ? ((o.fill as string | null | undefined) ?? null) : style.fill;
 
+  const dash = o ? ((o.dash as Dash | undefined) ?? "solid") : style.dash;
+  // Opacity: of the selected drawn object, or of the next shape a shape tool makes.
+  const showOpacity = o ? hasOpacity(o) : (kind === "shape" || kind === "line") && (DRAG_SHAPES.has(tool) || POLY_TOOLS.has(tool));
+  const opacity = o ? opacityOf(o) : style.opacity;
+
+  function setOpacity(v: number) {
+    if (o) s.updateObject(o.id, { opacity: v } as Partial<ContentOp>, { coalesce: `opacity:${o.id}` }); // a slider drag is one undo step
+    else s.setStyle({ opacity: v });
+  }
+
+  function setDash(v: Dash) {
+    if (o) s.updateObject(o.id, { dash: v } as Partial<ContentOp>);
+    else s.setStyle({ dash: v });
+  }
+
   function set(patch: { stroke?: string; width?: number; fill?: string | null; redactFill?: "black" | "white" }) {
     if (o) {
       const p: Record<string, unknown> = {};
@@ -116,6 +134,16 @@ export function PropertiesBar() {
             <span className="w-8 tabular-nums text-ink">{width}</span>
           </label>
         </>
+      )}
+      {(kind === "shape" || kind === "line") && (
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          {t.editor.dash}
+          <select value={dash} aria-label={t.editor.dash} onChange={(e) => setDash(e.target.value as Dash)} className="rounded border border-line px-1 py-0.5 text-ink">
+            <option value="solid">{t.editor.dashSolid}</option>
+            <option value="dashed">{t.editor.dashDashed}</option>
+            <option value="dotted">{t.editor.dashDotted}</option>
+          </select>
+        </label>
       )}
       {kind === "shape" && (
         <div className="flex items-center gap-2">
@@ -161,6 +189,14 @@ export function PropertiesBar() {
         </div>
       )}
       {kind === "text" && textPropsSlot.render?.()}
+      {showOpacity && (
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          {t.editor.opacity}
+          <input type="range" min={0.1} max={1} step={0.05} value={opacity} aria-label={t.editor.opacity}
+            onChange={(e) => setOpacity(Number(e.target.value))} className="w-20 accent-[var(--accent)]" />
+          <span className="w-9 tabular-nums text-ink">{Math.round(opacity * 100)}%</span>
+        </label>
+      )}
       {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
       <div className="flex-1" />
       {selection && (

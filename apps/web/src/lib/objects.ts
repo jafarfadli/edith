@@ -186,6 +186,43 @@ export function rotatePoint([x, y]: Pt, [cx, cy]: Pt, deg: number): Pt {
   return [cx + (x - cx) * cos - (y - cy) * sin, cy + (x - cx) * sin + (y - cy) * cos];
 }
 
+/** A rotation in degrees as stored in ops: in (-180, 180], rounded to 0.01°. */
+export function normalizeRotation(deg: number): number {
+  const r = Math.round((((deg % 360) + 360) % 360) * 100) / 100;
+  return r >= 360 ? 0 : r > 180 ? r - 360 : r;
+}
+
+/** Where the top-left corner of `r` lands when `r` turns `deg` degrees clockwise around its centre. */
+export function rotatedTopLeft(r: Rect, deg: number): Pt {
+  return rotatePoint([r.x, r.y], [r.x + r.w / 2, r.y + r.h / 2], deg);
+}
+
+/** `next` (a re-laid-out `prev`, e.g. a text box whose height changed) moved so its rotated top-left corner stays
+ *  where `prev`'s was: a turned text box grows away from its first line, as the editor shows it. */
+export function keepRotatedTopLeft(prev: Rect, next: Rect, deg: number): Rect {
+  if (!deg) return next;
+  const [ax, ay] = rotatedTopLeft(prev, deg), [bx, by] = rotatedTopLeft(next, deg);
+  return { ...next, x: next.x + ax - bx, y: next.y + ay - by };
+}
+
+/** A click of the polygon/polyline/cloud tool at `at` (page points, `scale` px per point): the vertices after it,
+ *  and whether it finished the shape (a click on the first vertex, once there are enough; it is not added). */
+export function polyClick(tool: PolyTool, points: readonly Pt[], at: Pt, scale: number): { points: Pt[]; finish: boolean } {
+  const first = points[0];
+  if (first && points.length >= MIN_POLY_POINTS[tool] && Math.hypot(at[0] - first[0], at[1] - first[1]) * scale <= CLOSE_RADIUS) {
+    return { points: [...points], finish: true };
+  }
+  return { points: [...points, at], finish: false };
+}
+
+/** A double-click of the polygon tool (Konva reports any two quick clicks as one): the vertices to finish with
+ *  when its two clicks hit the same spot (the second click's vertex dropped), else null. */
+export function polyDoubleClick(points: readonly Pt[], scale: number): Pt[] | null {
+  if (points.length < 2) return null;
+  const a = points[points.length - 2], b = points[points.length - 1];
+  return Math.hypot(a[0] - b[0], a[1] - b[1]) * scale <= CLOSE_RADIUS ? points.slice(0, -1) : null;
+}
+
 /** What the object covers on the page, its rotation included. */
 export function visualBounds(op: ContentOp): Rect {
   const b = opBounds(op);

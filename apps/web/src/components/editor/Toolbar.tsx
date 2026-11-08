@@ -81,6 +81,9 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
         { tool: "ellipse", label: t.editor.ellipse, icon: "○" },
         { tool: "line", label: t.editor.line, icon: "╱" },
         { tool: "arrow", label: t.editor.arrow, icon: "→" },
+        { tool: "polygon", label: t.editor.polygon, icon: "⬠" },
+        { tool: "polyline", label: t.editor.polyline, icon: "⌇" },
+        { tool: "cloud", label: t.editor.cloud, icon: "☁" },
       ]} />
       <ToolButton tool="check" label={t.annot.check} icon="✓" active={tool} />
       <ToolButton tool="cross" label={t.annot.cross} icon="✗" active={tool} />
