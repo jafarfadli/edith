@@ -207,11 +207,14 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             drop_xfa(doc)
         added = _font_xrefs(doc) - fonts_before if subset_fonts else set()
         if added:
-            form_fonts = form_font_programs(doc)  # a viewer filling a field later needs these whole
-            doc.subset_fonts()
-            restore_form_fonts(doc, form_fonts)
-            for xref in added:
-                trim_to_unicode(doc, xref)
+            try:
+                form_fonts = form_font_programs(doc)  # a viewer filling a field later needs these whole
+                doc.subset_fonts()
+                restore_form_fonts(doc, form_fonts)
+                for xref in added:
+                    trim_to_unicode(doc, xref)
+            except Exception as exc:  # noqa: BLE001
+                raise BakeFailed(f"cannot subset the fonts: {exc}") from exc
         return doc
     except BaseException:
         doc.close()
