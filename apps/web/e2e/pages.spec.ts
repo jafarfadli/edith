@@ -28,8 +28,15 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   await page.getByRole("button", { name: "Kelola Halaman" }).click();
   const modal = page.getByRole("dialog", { name: "Kelola Halaman" });
   const tile = (key: string) => modal.locator(`[data-testid="manage-page"][data-page-key="${key}"]`);
-  await tile("o2").click();
+  // Multi-select: page 1 .. 3 together (click + Shift+click), one rotation turns all of them ...
+  await tile("o0").click();
+  await tile("o2").click({ modifiers: ["Shift"] });
+  await expect(modal.locator('[data-testid="manage-page"][aria-pressed="true"]')).toHaveCount(3);
   await modal.getByRole("button", { name: /Putar kanan/ }).click();
+  await modal.getByRole("button", { name: "Batal pilih" }).click();
+  // ... so turning page 1 back left alone leaves it at 0° only if it had been turned to 90° (pages 1 and 3 are checked below).
+  await tile("o0").click();
+  await modal.getByRole("button", { name: /Putar kiri/ }).click();
   await modal.getByRole("button", { name: "Batal pilih" }).click();
   await tile("o0").click();
   await modal.getByRole("button", { name: /Duplikat/ }).click();
@@ -134,6 +141,17 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   await page.getByTestId("mini-bar").getByRole("button", { name: "Lainnya" }).click();
   await page.getByRole("menuitem", { name: "Ratakan ke kiri halaman" }).click();
 
+  // Two sticky notes on page 2: one entirely inside the coming crop, one entirely in the 5 % margin the crop hides.
+  box = await pageBox(page, 1);
+  await page.getByRole("button", { name: "Catatan", exact: true }).click();
+  await page.mouse.click(box.x + 300, box.y + 500);
+  await page.getByRole("textbox", { name: "Isi catatan" }).fill("dalam crop");
+  await page.getByRole("button", { name: "Catatan", exact: true }).click();
+  await page.mouse.click(box.x + 8, box.y + 8);
+  await page.getByRole("textbox", { name: "Isi catatan" }).fill("luar crop");
+  await page.getByRole("button", { name: "Pilih", exact: true }).click();
+  await expect(items).toHaveCount(9);
+
   // Crop page 2 (the default crop: 5 % in from every edge).
   await page.getByRole("button", { name: "Crop", exact: true }).click();
   await page.getByTestId("crop-bar").getByRole("button", { name: "Terapkan ke halaman ini" }).click();
@@ -142,16 +160,28 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   expect(Math.round(box.width)).toBe(536); // 595 × 0.9
 
   // The panel: the polygon is selected from it, the check mark deleted.
+  // Jumping: the polygon lives on page 1, so selecting it from the panel brings page 1 into view.
   await items.filter({ hasText: "Poligon" }).click();
+  await expect(page.getByTestId("page-indicator")).toHaveText("1/5");
   await expect(page.getByTestId("mini-bar")).toBeVisible();
+
+  const download = async (name: string) => {
+    const pending = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Unduh" }).click();
+    const f = path.join(test.info().outputDir, name);
+    await (await pending).saveAs(f);
+    return f;
+  };
+  const isBlue = (d: { color: number[] | null }) => !!d.color && d.color[2] > 0.6 && d.color[0] < 0.2;
+
+  // Positive control: before the delete the check mark is in the panel and in the export (blue vector on page 1) ...
+  await expect(items.filter({ hasText: "Centang" })).toHaveCount(1);
+  expect(pdfShapes(await download("before.pdf"))[0].drawings.filter(isBlue).length).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Hapus Centang" }).click();
-  await expect(items).toHaveCount(6);
+  await expect(items).toHaveCount(8);
+  await expect(items.filter({ hasText: "Centang" })).toHaveCount(0);
 
-  const pending = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
-  const file = path.join(test.info().outputDir, "pages.pdf");
-  await (await pending).saveAs(file);
-
+  const file = await download("pages.pdf");
   const pages = pdfShapes(file);
   // Page text includes the filled fields' appearances; the duplicate shares the main PDF's `nama` field.
   expect(pages.map((p) => p.text)).toEqual(["Halaman satu Utama Budi", "Halaman satu Utama Budi", "Halaman tiga",
@@ -170,7 +200,7 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   expect(polygon).toBeTruthy();
   const cloud = pages[0].drawings.find((d) => red(d) && d.items.every((i) => i === "c"));
   expect(cloud!.items.length).toBeGreaterThan(16);
-  expect(pages[0].drawings.filter((d) => d.color && d.color[2] > 0.6 && d.color[0] < 0.2)).toHaveLength(0); // the check mark is gone
+  expect(pages[0].drawings.filter(isBlue)).toHaveLength(0); // ... and gone after it
   // The pasted copy: dashed and translucent too, its left edge on the page's left edge (before the crop: x = 0).
   const [copy] = pages[1].drawings.filter((d) => red(d) && d.dashes === "[ 6 4 ] 0");
   expect(copy.strokeOpacity).toBeCloseTo(0.5);
@@ -179,6 +209,20 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   // The imported page's highlight and both `nama` fields: the imported one renamed, each with its own value.
   const report = pdfReport(file);
   expect(report.pages[3].annots.map((a) => a.type)).toEqual(["Highlight"]);
+  // The highlight covers "penting": x within ±1 pt of its word box.
+  const hv = report.pages[3].annots[0].vertices;
+  const [hx0, hx1] = [Math.min(...hv.map((v) => v[0])), Math.max(...hv.map((v) => v[0]))];
+  const [hy0, hy1] = [Math.min(...hv.map((v) => v[1])), Math.max(...hv.map((v) => v[1]))];
+  const wb = wordBox(IMPORT_PDF, "penting");
+  expect(Math.abs(hx0 - wb[0])).toBeLessThanOrEqual(1);
+  expect(Math.abs(hx1 - wb[2])).toBeLessThanOrEqual(1);
+  // Vertically the marker spans the text line (search_for's box is a little taller: it uses the font's full ascent/descent).
+  expect(hy0).toBeGreaterThanOrEqual(wb[1] - 1);
+  expect(hy1).toBeLessThanOrEqual(wb[3] + 1);
+  expect(hy0).toBeLessThan(200); // above the baseline (y = 200) ...
+  expect(hy1).toBeGreaterThan(200); // ... and below it
+  // Crop scrub: the note entirely outside the crop is gone from the export, the one inside stays.
+  expect(report.pages[1].annots.map((a) => [a.type, a.content])).toEqual([["Text", "dalam crop"]]);
   expect(report.pages[0].widgets).toEqual([{ name: "nama", value: "Utama Budi" }]);
   expect(report.pages[1].widgets).toEqual([{ name: "nama", value: "Utama Budi" }]);
   expect(report.pages[3].widgets).toHaveLength(1);
