@@ -33,6 +33,8 @@ def _insert_imports(doc: pymupdf.Document, layout: PagesLayout, layout_index: in
                     fill_forms(src, forms[doc_id])
                 except FieldValueError as exc:
                     raise BakeFailed(str(exc), op_id=exc.op_id) from exc
+                except Exception as exc:  # noqa: BLE001
+                    raise BakeFailed(f"cannot fill the form of imported document {doc_id}: {exc}") from exc
             spans[doc_id] = (doc.page_count, src.page_count)
             doc.insert_pdf(src)
         finally:

@@ -8,7 +8,7 @@ from edith.fonts import FontRegistry
 from edith.forms import extract_fields
 from edith.ops import ExportRequest
 from edith.settings import Settings
-from tests.pdfs import make_fonts_pdf, make_pdf
+from tests.pdfs import make_fonts_pdf, make_pdf, make_xfa_form_pdf
 
 MAIN, IMP = "M" * 22, "I" * 22
 
@@ -177,3 +177,38 @@ def test_expired_import_names_the_document():
     with pytest.raises(DocExpired) as e:
         bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0))), ctx_with({IMP: None}))
     assert e.value.extra["doc_id"] == IMP
+
+
+def test_form_fill_of_an_import_failing_otherwise_is_a_bake_failure(monkeypatch):
+    def broken(doc, forms):
+        raise RuntimeError("boom")
+    monkeypatch.setattr("edith.bake.pages.fill_forms", broken)
+    with pytest.raises(BakeFailed) as e:
+        bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0)),
+                                    {"id": "f2", "type": "form.set", "fieldName": "name", "value": "x", "doc": IMP}),
+             ctx_with({IMP: form_pdf("name", "x", "Import")}))
+    assert f"imported document {IMP}" in e.value.message
+
+
+def test_form_set_naming_the_edited_document_is_a_main_form_op():
+    ctx = ctx_with({})
+    out = bake(form_pdf("name", "MAIN", "Main"), ops(layout(page("o0", MAIN, 0)),
+               {"id": "f1", "type": "form.set", "fieldName": "name", "value": "Utama", "doc": MAIN}), ctx)
+    assert [(f["name"], f["value"]) for f in extract_fields(out)] == [("name", "Utama")]
+    with pytest.raises(InvalidOp) as e:  # `doc` none and `doc` = the edited id are the same field
+        bake(form_pdf("name", "MAIN", "Main"), ops(layout(page("o0", MAIN, 0)),
+             {"id": "f1", "type": "form.set", "fieldName": "name", "value": "a"},
+             {"id": "f2", "type": "form.set", "fieldName": "name", "value": "b", "doc": MAIN}), ctx)
+    assert e.value.extra["op_index"] == 2
+
+
+def test_filling_an_imported_form_drops_the_main_xfa():
+    def xfa(doc) -> str:
+        saved = pymupdf.open(stream=doc.tobytes(), filetype="pdf")
+        return saved.xref_get_key(saved.pdf_catalog(), "AcroForm/XFA")[0]
+    main = make_xfa_form_pdf()
+    ctx = ctx_with({IMP: form_pdf("name", "x", "Import")})
+    pages = layout(page("o0", MAIN, 0), page("u-a", IMP, 0))
+    assert xfa(bake(main, ops(pages), ctx)) != "null"  # untouched without a fill
+    filled = {"id": "f2", "type": "form.set", "fieldName": "name", "value": "Impor", "doc": IMP}
+    assert xfa(bake(main, ops(pages, filled), ctx)) == "null"

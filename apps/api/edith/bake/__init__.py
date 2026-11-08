@@ -66,8 +66,8 @@ def _crop_rect(page: pymupdf.Page, crop, layout_index: int) -> pymupdf.Rect:
     return r & bounds
 
 
-def _fill(doc: pymupdf.Document, forms: list, flatten: bool, widgets_removed: bool) -> None:
-    if forms or flatten or widgets_removed:
+def _fill(doc: pymupdf.Document, forms: list, flatten: bool, stale_xfa: bool) -> None:
+    if forms or flatten or stale_xfa:
         drop_xfa(doc)
     try:
         fill_forms(doc, forms)
@@ -100,12 +100,23 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             p.pageKey: (p.src.doc, p.src.index) if isinstance(p.src, DocSrc) else None for p in layout.pages
         }, ctx.load_source)
         ctx = replace(ctx, source=pages_src)
-        forms = [op for op in ops if op.type == "form.set"]
-        main_forms = [op for op in forms if op.doc in (None, ctx.doc_id)]
+        # form.set with `doc` = the edited id is the same as none: one op per field name among them.
+        main_forms: list = []
+        main_names: set[str] = set()
         import_forms: dict[str, list] = defaultdict(list)
-        for op in forms:
+        for i, op in enumerate(ops):
+            if op.type != "form.set":
+                continue
             if op.doc not in (None, ctx.doc_id):
                 import_forms[op.doc].append(op)
+                continue
+            if op.fieldName in main_names:
+                raise InvalidOp(f"more than one form.set for field {op.fieldName!r}", op_index=i)
+            main_names.add(op.fieldName)
+            main_forms.append(op)
+        # An imported PDF's fields filled into it end up in the merged AcroForm: the main XFA goes stale.
+        used_docs = {p.src.doc for p in layout.pages if isinstance(p.src, DocSrc)}
+        imports_filled = any(d in used_docs for d in import_forms)
 
         keys = {p.pageKey for p in layout.pages}
         content = [(i, op) for i, op in enumerate(ops) if op.type not in ("pages.layout", "form.set")]
@@ -151,7 +162,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                     if PHASE[op.type] == phase and not (phase != "draw" and under_redaction(op, boxes)):
                         _run(HANDLERS[op.type], page, op, ctx)
 
-        _fill(doc, main_forms, flatten_forms, widgets_removed)
+        _fill(doc, main_forms, flatten_forms, widgets_removed or imports_filled)
 
         # Crop and rotation last: neither moves the content (spec: Urutan bake 7). Annotations, links and
         # widgets the crop hides entirely go (owner decision); a removed widget makes the XFA stale.
