@@ -12,6 +12,7 @@ import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
 import { ICON } from "../ui/icon";
 import { IconButton } from "../ui/IconButton";
+import { Tip } from "../ui/Tooltip";
 import { openFind } from "./find/findStore";
 import { whenTextCommitted } from "./text/textEdit";
 
@@ -67,16 +68,19 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg) => voi
         aria-label={t.editor.fileName}
         value={fileName}
         onChange={(e) => setName(e.target.value)}
-        className="h-8 w-36 min-w-0 shrink truncate rounded-md xl:w-52 border border-transparent bg-transparent px-2 text-sm text-muted hover:border-line-strong focus:border-accent focus:text-ink focus:outline-none"
+        className="h-8 w-36 min-w-0 shrink truncate rounded-md xl:w-52 border border-transparent bg-transparent px-2 text-sm text-muted hover:border-line-strong focus:border-accent focus:text-ink focus:outline-none focus:ring-1 focus:ring-accent"
       />
       {children}
       <div className="flex shrink-0 items-center gap-1">
         <IconButton label={t.find.open} icon={Search} keys="Mod+F" disabled={!info} onClick={openFind} />
         {hasForm && (
-          <label className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs text-muted hover:bg-hover hover:text-ink" title={t.form.flattenHint}>
-            <input type="checkbox" checked={flatten} onChange={(e) => setFlatten(e.target.checked)} />
-            {t.form.flatten}
-          </label>
+          // Below xl only the checkbox shows (its name in the tooltip), so every tool still fits the bar at 1024 px.
+          <Tip label={`${t.form.flatten}. ${t.form.flattenHint}.`} wide>
+            <label className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs text-muted hover:bg-hover hover:text-ink">
+              <input type="checkbox" aria-label={t.form.flatten} checked={flatten} onChange={(e) => setFlatten(e.target.checked)} />
+              <span aria-hidden className="hidden xl:inline">{t.form.flatten}</span>
+            </label>
+          </Tip>
         )}
         <button
           onClick={download}

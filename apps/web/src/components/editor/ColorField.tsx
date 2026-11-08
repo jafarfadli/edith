@@ -33,7 +33,9 @@ export function ColorField({ label, value, onChange, textProps = false }: {
   function toggle() {
     if (open) { setAt(null); return; }
     const r = chip.current!.getBoundingClientRect();
-    setAt({ top: r.bottom + 8, left: Math.max(8, Math.min(r.left - 8, window.innerWidth - 216)) });
+    // Under the floating bar that holds the chip (not over its lower edge), else under the chip.
+    const bar = chip.current!.closest("[data-testid=properties-bar]")?.getBoundingClientRect();
+    setAt({ top: (bar?.bottom ?? r.bottom) + 6, left: Math.max(8, Math.min(r.left - 8, window.innerWidth - 216)) });
   }
 
   return (

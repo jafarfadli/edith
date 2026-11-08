@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import type Konva from "konva";
 import { Group, Layer, Rect, Stage, Transformer } from "react-konva";
 import { useStore } from "zustand";
-import { groupTransform, screenSize, type CropBox, type PageGeom } from "@/lib/coords";
+import { groupTransform, screenSize, toScreen, type CropBox, type PageGeom, type Pt } from "@/lib/coords";
 import { MIN_CROP } from "@/lib/pages";
 import { t } from "@/lib/strings";
 import { useEditor } from "@/store/editor";
@@ -15,6 +15,9 @@ import { ICON } from "../../ui/icon";
 import { BTN_PRIMARY, BTN_QUIET, POPOVER } from "../../ui/styles";
 
 const SHADE = CANVAS.cropShade;
+/** The bar's height (h-8 buttons + p-1) and its distance from the crop box's top edge (clears the 9 px handles). */
+const BAR_H = 40;
+const BAR_GAP = 12;
 
 /** The crop being edited on this page: the rest of the page is shaded, the crop rect can be moved and resized
  *  (kept inside the page), and a bar applies it to this page or to all pages. `geom` is the uncropped page. */
@@ -45,6 +48,12 @@ export default function CropOverlay({ pageKey, geom, scale }: { pageKey: string;
   const size = screenSize(geom, scale);
   const g = groupTransform(geom, scale);
   const W = geom.width, H = geom.height;
+  // The bar sits above the crop box when the page has room for it there, else just inside the box under its top
+  // edge: never over the top edge's handles.
+  const tops = ([[rect.x, rect.y], [rect.x + rect.w, rect.y], [rect.x, rect.y + rect.h], [rect.x + rect.w, rect.y + rect.h]] as Pt[])
+    .map((p) => toScreen(p, geom, scale)[1]);
+  const boxTop = Math.min(...tops);
+  const barTop = boxTop - BAR_H - BAR_GAP >= 0 ? boxTop - BAR_H - BAR_GAP : boxTop + BAR_GAP;
   // Commits `r` (or keeps the current rect when it is invalid) and always writes the node back from the result.
   const put = (n: Konva.Node, r: CropBox) => {
     const c = fitRect(r, rect, { width: W, height: H });
@@ -83,7 +92,7 @@ export default function CropOverlay({ pageKey, geom, scale }: { pageKey: string;
         </Layer>
       </Stage>
       <div role="toolbar" aria-label={t.crop.title} data-testid="crop-bar"
-        className={`absolute left-1/2 top-2 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap p-1 ${POPOVER}`}>
+        className={`absolute left-1/2 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap p-1 ${POPOVER}`} style={{ top: barTop }}>
         <button ref={apply} onClick={() => applyCrop(false)} className={BTN_PRIMARY}><Check {...ICON} />{t.crop.thisPage}</button>
         <button onClick={() => applyCrop(true)} className={BTN_QUIET}>{t.crop.allPages}</button>
         {cropped && <button onClick={clearCrop} className={BTN_QUIET}>{t.crop.remove}</button>}

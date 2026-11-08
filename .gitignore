@@ -9,6 +9,7 @@ __pycache__/
 apps/web/public/fonts/
 test-results/
 playwright-report/
+apps/web/ui-shots/
 .env*.local
 .DS_Store
 apps/web/public/pdf.worker.min.mjs

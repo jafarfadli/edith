@@ -3,7 +3,7 @@
 import { Copy, Ellipsis, Trash2 } from "lucide-react";
 import { useStore } from "zustand";
 import { toScreen, type PageGeom, type Pt } from "@/lib/coords";
-import { isCopyable, visualBounds, type Align } from "@/lib/objects";
+import { isCopyable, isRotatable, ROTATE_HANDLE_OFFSET, visualBounds, type Align } from "@/lib/objects";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
 import { ICON } from "../../ui/icon";
@@ -13,6 +13,8 @@ import { textEditStore } from "../text/textEdit";
 import { alignSelection, copySelection, duplicateSelection, hasClipboard, pasteClipboard } from "./clipboard";
 
 const BAR_H = 34;
+/** Room for the Transformer's rotation handle (its offset, half the 8 px anchor, a gap). */
+const ROTATER_CLEARANCE = ROTATE_HANDLE_OFFSET + 4 + 8;
 const ALIGNS: [Align, string][] = [
   ["left", t.objects.alignLeft], ["center", t.objects.alignCenter], ["right", t.objects.alignRight],
   ["top", t.objects.alignTop], ["middle", t.objects.alignMiddle], ["bottom", t.objects.alignBottom],
@@ -29,7 +31,12 @@ export function SelectionMiniBar({ pageKey, geom, scale }: { pageKey: string; ge
   const left = (Math.min(...corners.map((c) => c[0])) + Math.max(...corners.map((c) => c[0]))) / 2;
   const top = Math.min(...corners.map((c) => c[1]));
   const bottom = Math.max(...corners.map((c) => c[1]));
-  const y = top - BAR_H - 8 >= 0 ? top - BAR_H - 8 : bottom + 8; // above the object, below it at the page top
+  // Above the object, below it at the page top; never over the rotation handle, which PageOverlay puts above the
+  // box, or below it when the box is near the page top (rotateAnchorOffset).
+  const rotatable = isRotatable(op);
+  const handleAbove = rotatable && top >= ROTATE_HANDLE_OFFSET;
+  const above = top - BAR_H - (handleAbove ? ROTATER_CLEARANCE : 8);
+  const y = above >= 0 ? above : bottom + (rotatable && !handleAbove ? ROTATER_CLEARANCE : 8);
   const copyable = isCopyable(op);
   const s = editorStore.getState();
   const btn = "grid h-7 w-7 place-items-center rounded-md text-muted transition-colors hover:bg-hover hover:text-ink";

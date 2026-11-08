@@ -18,7 +18,7 @@
   /* Text. */
   --ink: oklch(95% 0.004 260);
   --muted: oklch(72% 0.01 260);
-  --faint: oklch(57% 0.01 260);
+  --faint: oklch(65% 0.01 260);          /* ≥ 4.5:1 on panel and raised (secondary text, page numbers) */
 
   /* The one accent: fills (white text on it ≥ 4.5:1), text and icons on dark, selection on the white page. */
   --accent: oklch(57% 0.22 262);
@@ -81,12 +81,15 @@
 html, body { overflow-x: clip; }
 body { background: var(--panel); color: var(--ink); }
 
-/* One focus ring everywhere, shown instantly. */
-:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+@layer base {
+  /* One focus ring everywhere, shown instantly. In the base layer so a control that draws its own focus state
+   * (fields: accent border + ring, `focus:outline-none`) is not ringed twice. */
+  :focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
 
-/* Native controls on dark surfaces. */
-select option { background: var(--raised); color: var(--ink); }
-input[type="range"], input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+  /* Native controls on dark surfaces. */
+  select option { background: var(--raised); color: var(--ink); }
+  input[type="range"], input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }

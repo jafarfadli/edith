@@ -77,6 +77,18 @@ export const overlayHooks: {
   renderOver?: (pageKey: string) => React.ReactNode;
 } = {};
 
+/** Below this size (px) a box side gets no middle anchor: on a small object (a check mark) eight anchors hid it. */
+const MIDDLE_ANCHOR_MIN = 40;
+
+/** The Transformer's anchors for a box: its corners, plus the middle of each side long enough to hold one. */
+function boxAnchors(op: ContentOp | undefined, scale: number): string[] {
+  const b = op ? opBounds(op) : undefined;
+  const wide = !b || Math.abs(b.w) * scale >= MIDDLE_ANCHOR_MIN;
+  const tall = !b || Math.abs(b.h) * scale >= MIDDLE_ANCHOR_MIN;
+  return ["top-left", "top-right", "bottom-left", "bottom-right",
+    ...(wide ? ["top-center", "bottom-center"] : []), ...(tall ? ["middle-left", "middle-right"] : [])];
+}
+
 export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const size = screenSize(geom, scale);
   const tr = groupTransform(geom, scale);
@@ -301,7 +313,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
             keepRatio={false}
             enabledAnchors={selection && isTextOp(objects[selection])
               ? ["middle-left", "middle-right"]
-              : ["top-left", "top-center", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-center", "bottom-right"]}
+              : boxAnchors(selection ? objects[selection] : undefined, tr.scale)}
             borderStroke={CANVAS.accent}
             anchorStroke={CANVAS.accent}
             anchorSize={8}
