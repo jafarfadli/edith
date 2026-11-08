@@ -120,7 +120,7 @@ export function TextProps() {
   return (
     <div
       data-text-props
-      className="flex flex-wrap items-center gap-2"
+      className="flex items-center gap-2"
       // Keep focus in the rich editor for buttons (a select/input takes focus; the session stays open).
       onMouseDown={(e) => { const tag = (e.target as HTMLElement).tagName; if (tag !== "SELECT" && tag !== "INPUT") e.preventDefault(); }}
     >

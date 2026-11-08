@@ -154,34 +154,35 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
   }
 
   return (
-    <div className="flex h-dvh flex-col">
-      <Header onNotice={setNotice} />
-      <Toolbar onNotice={setNotice} />
-      <PropertiesBar />
+    <div className="flex h-dvh flex-col bg-panel">
+      <Header onNotice={setNotice}><Toolbar onNotice={setNotice} /></Header>
       <div className="flex min-h-0 flex-1">
-        {pdf ? <Sidebar /> : <aside className="w-48 shrink-0 border-r border-line bg-surface" />}
-        <main
-          className="relative min-w-0 flex-1 overflow-auto bg-bg"
-          id="page-scroller"
-          style={{ cursor: tool === "pan" ? "grab" : undefined }}
-          onPointerDown={(e) => {
-            if (tool !== "pan") return;
-            const el = e.currentTarget;
-            drag.current = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop };
-          }}
-          onPointerMove={(e) => {
-            if (!drag.current || e.buttons !== 1) return;
-            const el = e.currentTarget;
-            el.scrollLeft = drag.current.l - (e.clientX - drag.current.x);
-            el.scrollTop = drag.current.t - (e.clientY - drag.current.y);
-          }}
-          onPointerUp={() => { drag.current = null; }}
-        >
-          {info && pdf ? <PageList overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><SelectionMiniBar {...a} /><CropOverlay {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
-        </main>
+        {pdf ? <Sidebar /> : <aside className="w-48 shrink-0 border-r border-line bg-panel" />}
+        <div className="relative min-w-0 flex-1">
+          <PropertiesBar />
+          <main
+            className="absolute inset-0 overflow-auto bg-canvas"
+            id="page-scroller"
+            style={{ cursor: tool === "pan" ? "grab" : undefined }}
+            onPointerDown={(e) => {
+              if (tool !== "pan") return;
+              const el = e.currentTarget;
+              drag.current = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop };
+            }}
+            onPointerMove={(e) => {
+              if (!drag.current || e.buttons !== 1) return;
+              const el = e.currentTarget;
+              el.scrollLeft = drag.current.l - (e.clientX - drag.current.x);
+              el.scrollTop = drag.current.t - (e.clientY - drag.current.y);
+            }}
+            onPointerUp={() => { drag.current = null; }}
+          >
+            {info && pdf ? <PageList overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><SelectionMiniBar {...a} /><CropOverlay {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
+          </main>
+          <ZoomPill />
+        </div>
       </div>
       <FindBar />
-      <ZoomPill />
       {notice && <Notice kind={notice.kind} action={notice.action} onClose={() => setNotice(null)}>{notice.text}</Notice>}
     </div>
   );

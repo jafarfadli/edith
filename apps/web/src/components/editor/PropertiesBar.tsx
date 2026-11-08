@@ -1,6 +1,7 @@
 "use client";
 
 import type { ContentOp } from "@edith/ops";
+import { Trash2, Undo2 } from "lucide-react";
 import { useStore } from "zustand";
 import type { Dash } from "@/lib/geometry";
 import { hasOpacity, inkWidth, isMarkup, isTextOp, MARKUP_TOOLS, opacityOf, POLY_TOOLS } from "@/lib/objects";
@@ -9,6 +10,7 @@ import { useChars } from "@/store/chars";
 import { editorStore, sourcePage, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
 import { srcKey } from "@/lib/sources";
 import { STAMP_COLORS } from "@/lib/stamps";
+import { ICON } from "../ui/icon";
 import { ColorField } from "./ColorField";
 import { textEditStore } from "./text/textEdit";
 
@@ -107,8 +109,14 @@ export function PropertiesBar() {
     }
   }
 
+  // Hidden when it would be empty (Pilih with nothing selected, Whiteout, a tool without options).
+  const empty = !selection && !showOpacity && !scanned && !noText
+    && (kind === null || (kind === "redact" && !o) || (kind === "stamp" && !o) || (kind === "text" && !editingText && !textPropsSlot.render));
+  if (empty) return null;
+
   return (
-    <div className="flex h-11 shrink-0 items-center gap-4 border-b border-line bg-surface px-3 text-sm" role="group" aria-label={t.editor.properties}>
+    <div role="group" aria-label={t.editor.properties} data-testid="properties-bar"
+      className="absolute left-1/2 top-3 z-30 flex h-10 max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-4 overflow-x-auto whitespace-nowrap rounded-lg bg-panel px-3 text-sm shadow-pop [scrollbar-width:none]">
       {(kind === "shape" || kind === "line" || kind === "ink") && (
         <>
           <ColorField label={t.editor.color} value={stroke} onChange={(v) => set({ stroke: v })} />
@@ -172,12 +180,16 @@ export function PropertiesBar() {
         </label>
       )}
       {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
-      <div className="flex-1" />
       {selection && (
         // Deleting a text.edit op brings the original paragraph back.
-        <button onClick={() => s.deleteObject(selection)} aria-label={op?.type === "text.edit" ? t.text.revert : t.editor.delete} className="rounded-md px-2 py-1 text-danger hover:bg-danger/10">
-          🗑 {op?.type === "text.edit" ? t.text.revert : t.editor.delete}
-        </button>
+        <>
+          <span aria-hidden className="h-5 w-px shrink-0 bg-line" />
+          <button onClick={() => s.deleteObject(selection)} aria-label={op?.type === "text.edit" ? t.text.revert : t.editor.delete}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-danger-text hover:bg-danger/15">
+            {op?.type === "text.edit" ? <Undo2 {...ICON} /> : <Trash2 {...ICON} />}
+            {op?.type === "text.edit" ? t.text.revert : t.editor.delete}
+          </button>
+        </>
       )}
     </div>
   );
