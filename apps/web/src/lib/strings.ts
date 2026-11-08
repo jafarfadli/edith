@@ -8,6 +8,13 @@ export const t = {
     choose: "Pilih file",
     limit: "Maksimal 50 MB atau 500 halaman",
     processing: "Memproses dokumen…",
+    lede: "Ubah teks, isi formulir, tanda tangani, dan atur halaman PDF tanpa memasang aplikasi apa pun.",
+    points: {
+      text: "Edit teks asli langsung di halaman",
+      forms: "Isi formulir PDF",
+      sign: "Tanda tangan, stempel, dan penanda",
+      pages: "Putar, susun, impor, dan crop halaman",
+    },
   },
   editor: {
     download: "Unduh",

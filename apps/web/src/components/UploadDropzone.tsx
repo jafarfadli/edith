@@ -1,9 +1,11 @@
 "use client";
 
+import { FileUp, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { ApiError, uploadDocument } from "@/lib/api";
 import { errorMessage, t } from "@/lib/strings";
+import { BTN_PRIMARY } from "./ui/styles";
 
 const MAX_BYTES = 50 * 1024 * 1024;
 
@@ -40,30 +42,31 @@ export function UploadDropzone() {
   }
 
   return (
-    <div
-      data-testid="dropzone"
-      onDragOver={(e) => { e.preventDefault(); if (!busy && !inFlight.current) setOver(true); }}
-      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
-      onDrop={(e) => { e.preventDefault(); setOver(false); if (!busy && !inFlight.current) handle(e.dataTransfer.files[0]); }}
-      className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed px-8 py-14 text-center transition ${over ? "border-accent bg-accent/5" : "border-line bg-surface"}`}
-    >
-      <p className="text-lg font-medium">{t.upload.drop}</p>
-      <p className="text-sm text-muted">{t.upload.or}</p>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => input.current?.click()}
-        className="rounded-lg bg-accent px-5 py-2.5 font-medium text-accent-ink hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+    // Narrower on phones so "Pilih file" stays above the fold; the error hangs under the sheet without moving it.
+    <div className="relative w-full max-w-[16rem] md:max-w-[22rem]">
+      <div
+        data-testid="dropzone"
+        onDragOver={(e) => { e.preventDefault(); if (!busy && !inFlight.current) setOver(true); }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
+        onDrop={(e) => { e.preventDefault(); setOver(false); if (!busy && !inFlight.current) handle(e.dataTransfer.files[0]); }}
+        // A blank page waiting on the canvas: the drop target has the proportions of an A4 sheet.
+        className={`flex aspect-[210/297] w-full flex-col items-center justify-center gap-5 rounded-sm px-8 text-center shadow-page transition-colors ${over ? "bg-accent/10 outline-2 outline-offset-4 outline-accent outline-dashed" : "bg-paper outline-1 outline-offset-4 outline-line-strong outline-dashed"}`}
       >
-        {t.upload.choose}
-      </button>
-      {busy ? (
-        <p className="text-sm text-muted" role="status">{t.upload.processing}</p>
-      ) : (
-        <p className="text-xs text-muted">{t.upload.limit}</p>
-      )}
-      <input ref={input} type="file" accept="application/pdf,.pdf" hidden data-testid="file-input" onChange={(e) => handle(e.target.files?.[0])} />
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        <span aria-hidden className={`grid h-12 w-12 place-items-center rounded-full ${over ? "bg-accent text-accent-ink" : "bg-accent/10 text-accent"}`}>
+          <FileUp size={22} strokeWidth={1.75} />
+        </span>
+        <div className="flex flex-col gap-1">
+          <p className={`text-base font-medium ${over ? "text-ink" : "text-paper-ink"}`}>{t.upload.drop}</p>
+          <p className="text-xs text-faint">{t.upload.or}</p>
+        </div>
+        <button type="button" disabled={busy} onClick={() => input.current?.click()} className={BTN_PRIMARY}>
+          {busy && <LoaderCircle size={16} strokeWidth={1.75} aria-hidden className="animate-spin" />}
+          {t.upload.choose}
+        </button>
+        {busy ? <p className="text-2xs text-faint" role="status">{t.upload.processing}</p> : <p className="text-2xs text-faint">{t.upload.limit}</p>}
+        <input ref={input} type="file" accept="application/pdf,.pdf" hidden data-testid="file-input" onChange={(e) => handle(e.target.files?.[0])} />
+      </div>
+      {error && <p role="alert" className="absolute inset-x-0 top-full mt-4 text-center text-sm text-danger-text">{error}</p>}
     </div>
   );
 }
