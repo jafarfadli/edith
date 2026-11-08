@@ -3,6 +3,7 @@ import { useStore } from "zustand";
 import type { ContentOp, TextEdit } from "@edith/ops";
 import type { FormField } from "@/lib/api";
 import { normRotation, type PageGeom, type Rotation } from "@/lib/coords";
+import type { Dash } from "@/lib/geometry";
 import { newId } from "@/lib/id";
 
 export interface StructurePage { index: number; width: number; height: number; rotation: number; hasText: boolean }
@@ -14,13 +15,15 @@ export type FormValue = string | boolean;
 export interface EditorDoc { pages: PageEntry[]; objects: Record<string, ContentOp>; order: string[]; forms?: Record<string, FormValue> }
 export type MarkupTool = "highlight" | "underline" | "strike";
 export type Tool = "select" | "text" | "whiteout" | "redact" | "ink" | "image" | "rect" | "ellipse" | "line" | "arrow" | "pan"
-  | MarkupTool | "check" | "cross" | "note" | "link";
+  | MarkupTool | "check" | "cross" | "note" | "link" | "polygon" | "polyline" | "cloud";
 export interface ToolStyle {
   stroke: string; fill: string | null; width: number; color: string;
   fontFamily: string; fontSize: number; bold: boolean; italic: boolean;
   align: "left" | "center" | "right" | "justify";
   /** Colors of new text markup, symbols and notes. */
   markup: Record<MarkupTool, string>; symbolColor: string; noteColor: string;
+  /** Stroke style and opacity of new shapes. */
+  dash: Dash; opacity: number;
 }
 
 export interface EditorState {
@@ -52,6 +55,7 @@ export const DEFAULT_STYLE: ToolStyle = {
   stroke: "#e11d48", fill: null, width: 2, color: "#111111",
   fontFamily: "Arimo", fontSize: 14, bold: false, italic: false, align: "left",
   markup: { highlight: "#ffeb3b", underline: "#e11d48", strike: "#e11d48" }, symbolColor: "#1d4ed8", noteColor: "#facc15",
+  dash: "solid", opacity: 1,
 };
 
 export function pageGeom(entry: PageEntry, info: DocInfo): PageGeom {
