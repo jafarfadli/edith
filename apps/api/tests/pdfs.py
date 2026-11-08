@@ -81,7 +81,7 @@ def make_paragraphs_pdf() -> bytes:
     D heading 18 pt + body 12 pt · E centered · F rotated 90°."""
     doc = pymupdf.open()
     page = doc.new_page(width=595, height=842)
-    for i, text in enumerate(["Paragraf A baris satu yang cukup panjang", "baris dua lanjutan paragraf A", "baris tiga akhir A."]):
+    for i, text in enumerate(["Paragraf A baris satu yang cukup panjang", "baris dua lanjutan paragraf A yang", "berakhir di baris tiga A."]):
         page.insert_text((72, 100 + i * 14.4), text, fontname="helv", fontsize=12)
     page.insert_textbox(pymupdf.Rect(72, 180, 372, 260), LOREM, fontname="tiro", fontsize=11,
                         align=pymupdf.TEXT_ALIGN_JUSTIFY)
@@ -91,7 +91,7 @@ def make_paragraphs_pdf() -> bytes:
         page.insert_text((x, 320 + i * 14.4), text, fontname="helv", fontsize=12)
     page.insert_text((72, 420), "Judul Besar", fontname="hebo", fontsize=18)
     page.insert_text((72, 440), "Isi di bawah judul.", fontname="helv", fontsize=12)
-    for i, text in enumerate(["Baris tengah pertama yang lebar", "lebih pendek", "tengah"]):
+    for i, text in enumerate(["Baris tengah pertama yang lebar", "lebih pendek namun tetap", "seimbang"]):
         w = pymupdf.get_text_length(text, fontname="helv", fontsize=12)
         page.insert_text((297.5 - w / 2, 500 + i * 14.4), text, fontname="helv", fontsize=12)
     page.insert_text((500, 700), "Teks diputar", fontname="helv", fontsize=12, rotate=90)
@@ -269,3 +269,50 @@ def make_xfa_form_pdf() -> bytes:
     doc.xref_set_key(acro, "XFA", f"[(datasets) {xfa} 0 R]")
     doc.xref_set_key(cat, "AcroForm", f"{acro} 0 R")
     return doc.tobytes()
+
+
+def _wrap(text: str, font: pymupdf.Font, size: float, width: float, by_char: bool) -> list[str]:
+    """Greedy line breaks of `text` at `width`: at spaces, or after any character (`by_char`, CJK)."""
+    lines, line = [], ""
+    for piece in (list(text) if by_char else text.split(" ")):
+        candidate = line + piece if by_char or not line else f"{line} {piece}"
+        if line and font.text_length(candidate, size) > width:
+            lines.append(line)
+            line = piece
+        else:
+            line = candidate
+    return lines + [line]
+
+
+FORM_EN = "The applicant must write in block letters either in English or Korean and sign the form at the end."
+FORM_JA = "これは日本語の段落です。行は文字単位で折り返され、単語の間に空白はありません。最後の行は短い。"
+FORM_KO = "신청서상의 모든 질문에 대한 답변은 한글 또는 영문으로 기재해야 하며 사실에 근거하여 빠짐없이 작성해야 합니다."
+
+
+def make_form_table_pdf() -> bytes:
+    """A form page like Korean visa applications: an instruction list, a bordered table (labels on one baseline in
+    two cells, a label above a field rule in one text block, checkbox rows, wrapped text in a cell), a bold heading,
+    and paragraphs wrapped at 200 pt in Japanese (by character) and Korean (by word), each followed by a short line."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    cjk = pymupdf.Font("korea")
+    page.insert_font(fontname="AR", fontfile=str(FONT_FILES / "Arimo-Regular.ttf"))
+    for i, text in enumerate(["<How to fill out this form>", "• Fill out this form completely and correctly.",
+                              "• Write in block letters either in English or Korean.", "• Check all that apply."]):
+        page.insert_text((56, 80 + 12.5 * i), text, fontname="AR", fontsize=9)
+    page.draw_rect(pymupdf.Rect(50, 200, 545, 330), color=(0, 0, 0), width=0.5)
+    page.draw_line((300, 200), (300, 330), color=(0, 0, 0), width=0.5)
+    page.draw_line((50, 220), (545, 220), color=(0, 0, 0), width=0.5)
+    page.insert_text((103, 215), "1.1 Full name in English (as shown in passport)", fontname="helv", fontsize=9)
+    page.insert_text((306, 215), "1.2 Sex", fontname="helv", fontsize=9)
+    page.insert_text((56, 230), "Family Name", fontname="helv", fontsize=9)
+    page.insert_text((306, 245), "Long-term stay over 90 days      [   ]", fontname="cour", fontsize=9)
+    page.insert_text((306, 257), "Short-term stay below 90 days    [   ]", fontname="cour", fontsize=9)
+    assert page.insert_textbox(pymupdf.Rect(56, 250, 294, 328), FORM_EN, fontname="helv", fontsize=9) >= 0
+    page.insert_text((56, 360), "SECTION TWO: GENERAL CONDITIONS OF THE APPLICATION", fontname="hebo", fontsize=10)
+    page.insert_text((56, 372), "Body text right below the heading.", fontname="helv", fontsize=10)
+    for x, (text, by_char, font_name) in [(56, (FORM_JA, True, "japan")), (300, (FORM_KO, False, "korea"))]:
+        lines = _wrap(text, cjk, 10, 200, by_char) + ["短い行。" if by_char else "짧은 줄.", text[:12]]
+        for i, line in enumerate(lines):
+            page.insert_text((x, 420 + 14 * i), line, fontname=font_name, fontsize=10)
+    return doc.tobytes(garbage=3, deflate=True)
