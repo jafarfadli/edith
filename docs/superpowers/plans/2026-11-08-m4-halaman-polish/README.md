@@ -116,3 +116,7 @@ Tasks 1–5 (API) build on each other in order. Task 6 needs 1 (types) and 2 (nu
 3. **Crop semua halaman:** the same rectangle, clamped per page (as planned, Tasks 7 and 10).
 4. **Annotations, links and widgets entirely outside a crop are removed at export** (partly overlapping ones kept); if a widget is removed, `/XFA` is dropped like after the redaction scrub → Task 14.
 5. **Clipboard:** internal only (as planned, Task 12).
+
+## Results
+
+Final counts: API 369, web 292, E2E 8 tests (24 runs with `--repeat-each=3`, all passed); tsc, eslint and `next build` clean. The Task 18 E2E (pages.spec.ts) passed unchanged from the plan code, no UI fixes were needed. Counts exceed the plan's (362 / 279 / 7) because review-fix commits added tests and an editor.spec test.
