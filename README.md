@@ -1,6 +1,6 @@
 # Edith
 
-Editor PDF berbasis web: unggah PDF, edit teks aslinya (rich text per kata, Cari & Ganti), tambah teks, bentuk (termasuk poligon, garis bersambung dan awan; garis putus-putus, opasitas dan rotasi), gambar, gambar bebas, whiteout, redaksi, stabilo/garis bawah/coret dan catatan (anotasi PDF asli), tanda tangan (dengan pustaka di browser), stamp (34 preset Indonesia/Inggris), centang/silang, link, isi form (opsional diratakan), kelola halaman (putar, duplikat, pindah, hapus, sisip halaman kosong, impor PDF lain yang teks dan form-nya juga bisa diedit), crop, salin/tempel/ratakan objek dan panel Anotasi, lalu unduh.
+Editor PDF berbasis web: unggah PDF, edit teks aslinya (paragraf dipisah per sel tabel, butir dan baris formulir; font asli PDF dipakai ulang, termasuk subset CJK tanpa cmap; rich text per kata, Cari & Ganti), tambah teks, bentuk (termasuk poligon, garis bersambung dan awan; garis putus-putus, opasitas dan rotasi), gambar, gambar bebas, whiteout, redaksi, stabilo/garis bawah/coret (anotasi PDF asli), tanda tangan (dengan pustaka di browser), stamp (34 preset Indonesia/Inggris), centang/silang, isi form (opsional diratakan), kelola halaman (putar, duplikat, pindah, hapus, sisip halaman kosong, impor PDF lain yang teks dan form-nya juga bisa diedit), crop, salin/tempel/ratakan objek dan panel Anotasi, lalu unduh.
 
 ## Struktur
 
@@ -26,7 +26,7 @@ Prasyarat: Node 22+, uv.
 
     npm run test:api
     npm test -w apps/web
-    npm run e2e -w apps/web
+    E2E_WEB_PORT=3000 E2E_API_PORT=8000 npm run e2e -w apps/web   # port bawaan; pakai port lain bila 3000/8000 sudah dipakai
 
 Fixture yang dihasilkan dari kode API (jalankan ulang setelah mengubah ekstraksi atau fixture-nya):
 
@@ -34,6 +34,11 @@ Fixture yang dihasilkan dari kode API (jalankan ulang setelah mengubah ekstraksi
     cd apps/api && uv run python -m scripts.e2e_text_pdf   # apps/web/e2e/fixtures/text.pdf
     cd apps/api && uv run python -m scripts.e2e_annots_pdf # apps/web/e2e/fixtures/annots.pdf
     cd apps/api && uv run python -m scripts.e2e_pages_pdf  # apps/web/e2e/fixtures/pages.pdf + import.pdf
+    cd apps/api && uv run python -m scripts.e2e_form_pdf   # apps/web/e2e/fixtures/form-ko.pdf
+
+Melihat pembagian paragraf sebuah PDF (kotak + id per paragraf, PNG per halaman):
+
+    cd apps/api && uv run python -m scripts.paragraph_overlay file.pdf /tmp/overlay
 
 Setelah mengubah `apps/api/edith/ops.py`:
 

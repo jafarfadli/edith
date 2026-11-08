@@ -6,7 +6,7 @@ import type { Paragraph } from "@/lib/api";
 import { fontStore, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
 import { noticeStore } from "@/lib/notices";
 import { t } from "@/lib/strings";
-import { boxLineHeight, newBox } from "@/lib/textbox";
+import { boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
 import { afterTextCommitted, commitEditing, materializeParagraph, startParagraphEdit, startTextAt, textEditStore, whenTextCommitted } from "./textEdit";
@@ -197,6 +197,20 @@ describe("font fallback on commit", () => {
     openParagraph("Halo", orig);
     await commitEditing(runs("Halo ꙮ", orig));
     expect(committed()).toEqual([["Halo ", orig], ["ꙮ", noto]]);
+  });
+
+  it("keeps an edited paragraph's first baseline when a fallback font is taller", async () => {
+    gate.resolve(); fontsLoaded = true; notoOnly = "ꙮ";
+    const tall: FontMetrics = { ...notoSans, ascent: notoSans.ascent * 2 };
+    const pick = (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? tall : metricsOf(f));
+    vi.spyOn(fontStore, "peek").mockImplementation(pick);
+    vi.spyOn(fontStore, "get").mockImplementation(pick);
+    const before = relayout({ ...newBox([72, 90], style), paragraphs: runs("Halo", orig) }, pick);
+    textEditStore.getState().start({ id: "e1", pageKey: "o0", box: before, isNew: true, kind: "text.edit", paragraphId: "g3", initial: before.paragraphs });
+    await commitEditing(runs("Halo ꙮ", orig));
+    const after = (editorStore.getState().doc.objects.e1 as TextEdit).box;
+    expect(after.layout[0].baseline).toBeGreaterThan(before.layout[0].baseline); // the taller line …
+    expect(after.rect.y + after.layout[0].baseline).toBeCloseTo(before.rect.y + before.layout[0].baseline); // … stays put
   });
 
   it("does the same while fonts load (slow path)", async () => {
