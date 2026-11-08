@@ -22,3 +22,6 @@ packages/fonts/files/cjk
 # Local agent/tooling state
 .claude/
 .superpowers/
+
+# Audit screenshots of the owner's reference documents (personal data): local only
+docs/superpowers/plans/2026-11-09-m5b-pemisahan-teks/shots/
