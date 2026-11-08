@@ -137,8 +137,8 @@ export function TextProps() {
       <button type="button" aria-label={t.editor.italic} aria-pressed={fs.italic} className={toggle(fs.italic)} onClick={() => set({ italic: !fs.italic })}><Italic {...ICON} /></button>
       <button type="button" aria-label={t.text.underline} aria-pressed={attrs.underline} className={toggle(attrs.underline)} onClick={() => set({ underline: !attrs.underline })}><Underline {...ICON} /></button>
       <button type="button" aria-label={t.text.strike} aria-pressed={attrs.strike} className={toggle(attrs.strike)} onClick={() => set({ strike: !attrs.strike })}><Strikethrough {...ICON} /></button>
-      <ColorField compact label={t.editor.color} value={attrs.color} onChange={(v) => set({ color: v })} />
-      <ColorField compact label={t.text.background} value={attrs.bgColor ?? "#ffff00"} onChange={(v) => set({ bgColor: v })} />
+      <ColorField textProps label={t.editor.color} value={attrs.color} onChange={(v) => set({ color: v })} />
+      <ColorField textProps label={t.text.background} value={attrs.bgColor ?? "#ffff00"} onChange={(v) => set({ bgColor: v })} />
       <button type="button" aria-label={t.text.noBackground} aria-pressed={attrs.bgColor === null} className={toggle(attrs.bgColor === null)}
         onClick={() => set({ bgColor: null })}><Ban {...ICON} /></button>
       <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-line" />

@@ -57,7 +57,7 @@ export function SplitButton({ label, options, active, onPick }: {
   return (
     <div ref={ref} className="flex shrink-0 items-center" onKeyDown={(e) => { if (e.key === "Escape" && open) { e.stopPropagation(); setAt(null); } }}>
       <Tip label={`${label}: ${current.label}`} keys={current.keys}>
-        <button aria-label={label} aria-pressed={pressed} onClick={() => choose(current)}
+        <button aria-label={label} aria-pressed={pressed} aria-keyshortcuts={current.keys} onClick={() => choose(current)}
           className={`grid h-8 w-8 place-items-center rounded-l-md transition-colors ${tone}`}>
           <Icon {...ICON} />
         </button>
@@ -74,7 +74,7 @@ export function SplitButton({ label, options, active, onPick }: {
             const OptIcon = o.icon;
             const on = o.tool !== undefined && o.tool === active;
             return (
-              <button key={keyOf(o)} role="menuitem" onClick={() => { setMemory(o); setAt(null); choose(o); }}
+              <button key={keyOf(o)} role="menuitem" aria-keyshortcuts={o.keys} onClick={() => { setMemory(o); setAt(null); choose(o); }}
                 className={`flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left hover:bg-hover ${on ? "text-accent-text" : "text-ink"}`}>
                 <OptIcon {...ICON} />
                 <span className="flex-1">{o.label}</span>

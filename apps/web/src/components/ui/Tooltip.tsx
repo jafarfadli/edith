@@ -7,11 +7,13 @@ import { formatKeys, isMac } from "@/lib/keys";
 /** Hover shows the tip after this delay; keyboard focus shows it at once. */
 const HOVER_DELAY_MS = 500;
 const EDGE = 8;
+const WIDE = 288;
 
+/** Key caps of a shortcut (hidden from assistive tech: the control carries `aria-keyshortcuts`). */
 export function Kbd({ keys }: { keys: string }) {
   const mac = isMac();
   return (
-    <span className="flex gap-0.5">
+    <span aria-hidden className="flex gap-0.5">
       {formatKeys(keys, mac).map((k, i) => (
         <kbd key={i} className="min-w-4 rounded-sm bg-hover px-1 text-center font-mono text-2xs leading-4 text-muted">{k}</kbd>
       ))}
@@ -21,8 +23,9 @@ export function Kbd({ keys }: { keys: string }) {
 
 /** A tooltip (label + shortcut keys) under or over its child. It renders in a portal with fixed positioning, so the
  *  scrolling toolbar cannot clip it; it hides on press, scroll, Escape and when the pointer or focus leaves. */
-export function Tip({ label, keys, side = "bottom", children }: {
-  label: string; keys?: string; side?: "bottom" | "top"; children: React.ReactNode;
+export function Tip({ label, keys, side = "bottom", wide = false, children }: {
+  /** `wide`: a sentence rather than a name; it wraps at a fixed width. */
+  label: string; keys?: string; side?: "bottom" | "top"; wide?: boolean; children: React.ReactNode;
 }) {
   const anchor = useRef<HTMLSpanElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -31,7 +34,8 @@ export function Tip({ label, keys, side = "bottom", children }: {
   const show = () => {
     const r = anchor.current?.getBoundingClientRect();
     if (!r) return;
-    const x = Math.min(Math.max(r.left + r.width / 2, EDGE + 60), window.innerWidth - EDGE - 60);
+    const half = wide ? WIDE / 2 : 60;
+    const x = Math.min(Math.max(r.left + r.width / 2, EDGE + half), window.innerWidth - EDGE - half);
     setAt({ x, y: side === "bottom" ? r.bottom + 6 : r.top - 6 });
   };
   const hide = () => { clearTimeout(timer.current); setAt(null); };
@@ -58,8 +62,8 @@ export function Tip({ label, keys, side = "bottom", children }: {
       {children}
       {at && createPortal(
         <div role="tooltip"
-          className={`pointer-events-none fixed z-[60] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-md bg-raised px-2 py-1 text-xs text-ink shadow-pop ${side === "top" ? "-translate-y-full" : ""}`}
-          style={{ left: at.x, top: at.y }}>
+          className={`pointer-events-none fixed z-[60] flex -translate-x-1/2 items-center gap-2 rounded-md bg-raised px-2 text-xs text-ink shadow-pop ${wide ? "whitespace-normal py-1.5" : "whitespace-nowrap py-1"} ${side === "top" ? "-translate-y-full" : ""}`}
+          style={{ left: at.x, top: at.y, width: wide ? WIDE : undefined }}>
           {label}
           {keys && <Kbd keys={keys} />}
         </div>,

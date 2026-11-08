@@ -10,6 +10,7 @@ import { ApiError, uploadAsset } from "@/lib/api";
 import { newId } from "@/lib/id";
 import { fitImage } from "@/lib/image";
 import { errorMessage, t } from "@/lib/strings";
+import { toolKey } from "@/lib/toolKeys";
 import { editorStore, useEditor, type Tool } from "@/store/editor";
 import { IconButton } from "../ui/IconButton";
 import { SignatureModal } from "./marks/SignatureModal";
@@ -23,7 +24,7 @@ import { afterTextCommitted } from "./text/textEdit";
 type NoticeFn = (n: { kind: "error" | "info"; text: string }) => void;
 
 function ToolButton({ tool, label, icon, active }: { tool: Tool; label: string; icon: LucideIcon; active: Tool }) {
-  return <IconButton label={label} icon={icon} pressed={active === tool} onClick={() => editorStore.getState().setTool(tool)} />;
+  return <IconButton label={label} icon={icon} keys={toolKey(tool)} pressed={active === tool} onClick={() => editorStore.getState().setTool(tool)} />;
 }
 
 const Sep = () => <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-line" />;
@@ -62,20 +63,20 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
         <ToolButton tool="select" label={t.editor.select} icon={MousePointer2} active={tool} />
         <ToolButton tool="text" label={t.editor.text} icon={Type} active={tool} />
         <SplitButton label={t.editor.erase} active={tool} onPick={pick} options={[
-          { tool: "whiteout", label: t.editor.whiteout, icon: Eraser },
+          { tool: "whiteout", label: t.editor.whiteout, icon: Eraser, keys: toolKey("whiteout") },
           { tool: "redact", label: t.editor.redact, icon: EyeOff },
         ]} />
         <Sep />
         <SplitButton label={t.annot.markup} active={tool} onPick={pick} options={[
-          { tool: "highlight", label: t.annot.highlight, icon: Highlighter },
+          { tool: "highlight", label: t.annot.highlight, icon: Highlighter, keys: toolKey("highlight") },
           { tool: "underline", label: t.annot.underline, icon: Underline },
           { tool: "strike", label: t.annot.strike, icon: Strikethrough },
         ]} />
         <ToolButton tool="ink" label={t.editor.draw} icon={Pencil} active={tool} />
         <SplitButton label={t.editor.shape} active={tool} onPick={pick} options={[
-          { tool: "rect", label: t.editor.rect, icon: Square },
-          { tool: "ellipse", label: t.editor.ellipse, icon: Circle },
-          { tool: "line", label: t.editor.line, icon: Slash },
+          { tool: "rect", label: t.editor.rect, icon: Square, keys: toolKey("rect") },
+          { tool: "ellipse", label: t.editor.ellipse, icon: Circle, keys: toolKey("ellipse") },
+          { tool: "line", label: t.editor.line, icon: Slash, keys: toolKey("line") },
           { tool: "arrow", label: t.editor.arrow, icon: ArrowUpRight },
           { tool: "polygon", label: t.editor.polygon, icon: Pentagon },
           { tool: "polyline", label: t.editor.polyline, icon: Spline },

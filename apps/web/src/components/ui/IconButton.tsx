@@ -10,7 +10,7 @@ export function IconButton({ label, icon: Icon, keys, pressed, disabled, onClick
 }) {
   return (
     <Tip label={label} keys={keys}>
-      <button aria-label={label} aria-pressed={pressed} disabled={disabled} onClick={onClick}
+      <button aria-label={label} aria-pressed={pressed} aria-keyshortcuts={keys?.replace("Mod", "Control")} disabled={disabled} onClick={onClick}
         className={`grid h-8 w-8 shrink-0 place-items-center rounded-md transition-colors disabled:pointer-events-none disabled:text-faint/60 ${pressed ? "bg-accent/20 text-accent-text" : "text-muted hover:bg-hover hover:text-ink"}`}>
         <Icon {...ICON} />
       </button>

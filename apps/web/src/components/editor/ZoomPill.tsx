@@ -3,7 +3,9 @@
 import { ChevronLeft, ChevronRight, Hand, Minus, Plus } from "lucide-react";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
+import { toolKey } from "@/lib/toolKeys";
 import { ICON } from "../ui/icon";
+import { Tip } from "../ui/Tooltip";
 
 export function scrollToPage(pageKey: string) {
   // The page itself, not its thumbnail (which carries the same data-page-key and comes first in the DOM).
@@ -31,8 +33,10 @@ export function ZoomPill() {
       <span className="min-w-11 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
       <button className={btn} onClick={() => s.setZoom(Math.round((zoom + 0.1) * 10) / 10)} aria-label={t.editor.zoomIn}><Plus {...ICON} /></button>
       <span aria-hidden className="mx-1 h-4 w-px bg-line-strong" />
-      <button className={`${btn} ${tool === "pan" ? "bg-accent/20 text-accent-text" : ""}`} onClick={() => s.setTool(tool === "pan" ? "select" : "pan")}
-        aria-label={t.editor.pan} aria-pressed={tool === "pan"}><Hand {...ICON} /></button>
+      <Tip label={t.editor.pan} keys={toolKey("pan")} side="top">
+        <button className={`${btn} ${tool === "pan" ? "bg-accent/20 text-accent-text" : ""}`} onClick={() => s.setTool(tool === "pan" ? "select" : "pan")}
+          aria-label={t.editor.pan} aria-pressed={tool === "pan"}><Hand {...ICON} /></button>
+      </Tip>
     </div>
   );
 }
