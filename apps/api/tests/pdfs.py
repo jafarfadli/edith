@@ -1,3 +1,4 @@
+import io
 from pathlib import Path
 
 import pymupdf
@@ -315,4 +316,37 @@ def make_form_table_pdf() -> bytes:
         lines = _wrap(text, cjk, 10, 200, by_char) + ["短い行。" if by_char else "짧은 줄.", text[:12]]
         for i, line in enumerate(lines):
             page.insert_text((x, 420 + 14 * i), line, fontname=font_name, fontsize=10)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+CID_TEXT = "신청서 작성 방법 Visa Form"
+
+
+def _renamed(buf: bytes, family: str) -> bytes:
+    """A copy of TrueType `buf` whose name table says `family` (two copies of one program stay two fonts)."""
+    from fontTools.ttLib import TTFont
+    font = TTFont(io.BytesIO(buf))
+    for rec in font["name"].names:
+        if rec.nameID in (1, 3, 4, 6, 16):
+            rec.string = family.replace(" ", "") if rec.nameID in (3, 6) else family
+    out = io.BytesIO()
+    font.save(out)
+    return out.getvalue()
+
+
+def make_cid_subset_pdf() -> bytes:
+    """Text in cmap-less CID TrueType subsets, as MS Word and Hancom export them: Korean + Latin in a gothic font
+    named "Dotum" (line 1), the same in "Batang" (line 2) and two characters in "Wingdings" (line 3). All three
+    are Droid Sans Fallback (built into MuPDF) embedded by insert_font, then subset by PyMuPDF, which drops the
+    cmap and keeps ToUnicode and CIDToGIDMap; the BaseFont names are set afterwards."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    droid = pymupdf.Font("korea").buffer
+    for i, (tag, name, text) in enumerate([("DO", "Dotum", CID_TEXT), ("BA", "Batang", CID_TEXT), ("WI", "Wingdings", "èô")]):
+        page.insert_font(fontname=tag, fontbuffer=_renamed(droid, name))  # short: MuPDF cuts span font names
+        page.insert_text((72, 100 + 30 * i), text, fontname=tag, fontsize=12)
+    doc.subset_fonts()
+    for xref, _ext, _type, basefont, *_rest in page.get_fonts(full=True):
+        name = next(n for n in ("Dotum", "Batang", "Wingdings") if n in basefont)
+        doc.xref_set_key(xref, "BaseFont", f"/EDITHA+{name}")
     return doc.tobytes(garbage=3, deflate=True)

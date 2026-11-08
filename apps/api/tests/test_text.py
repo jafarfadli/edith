@@ -1,6 +1,10 @@
-import pymupdf
+import io
 
-from tests.pdfs import make_fonts_pdf, make_paragraphs_pdf, make_pdf, make_pymupdf_subset_pdf, rename_font
+import pymupdf
+from fontTools.ttLib import TTFont
+
+from tests.pdfs import (CID_TEXT, make_cid_subset_pdf, make_fonts_pdf, make_paragraphs_pdf, make_pdf,
+                        make_pymupdf_subset_pdf, rename_font)
 from tests.test_documents import upload
 
 ARIMO = {"kind": "bundled", "family": "Arimo", "bold": False, "italic": False}
@@ -44,11 +48,35 @@ def test_runs_use_original_fonts_only_when_reusable(client):
     assert run_font(body, "Courier CFF")["family"] == "Cousine"
 
 
-def test_pymupdf_subset_without_cmap_is_not_reusable(client):
+def test_pymupdf_subset_without_cmap_is_reusable(client):
     body = text_of(client, make_pymupdf_subset_pdf())
     font = by_name(body)["Cousine Regular"]
-    assert (font["format"], font["reusable"]) == ("ttf", False)
-    assert body["pages"][0]["paragraphs"][0]["runs"][0]["text"] == "Cousine subset"  # nbsp → space
+    assert (font["format"], font["reusable"]) == ("ttf", True)  # cmap rebuilt from ToUnicode
+    run = body["pages"][0]["paragraphs"][0]["runs"][0]
+    assert run == run | {"text": "Cousine subset", "font": {"kind": "original", "ref": font["ref"]}}  # nbsp → space
+
+
+def test_cid_subsets_are_reused_and_served_with_a_cmap(client):
+    body = text_of(client, make_cid_subset_pdf())
+    f = by_name(body)
+    assert [f[n]["reusable"] for n in ("Dotum", "Batang", "Wingdings")] == [True, True, True]
+    paragraphs = body["pages"][0]["paragraphs"]
+    assert [p["runs"][0]["font"] for p in paragraphs] == [
+        {"kind": "original", "ref": f[n]["ref"]} for n in ("Dotum", "Batang", "Wingdings")]
+    assert all(p["editable"] for p in paragraphs)  # Wingdings too: its own glyphs are reused
+    r = client.get(f"/documents/{body['doc_id']}/fonts/{f['Dotum']['ref']}")
+    assert r.status_code == 200 and r.headers["content-type"] == "font/ttf"
+    cmap = TTFont(io.BytesIO(r.content)).getBestCmap()
+    assert {ord(c) for c in CID_TEXT} <= set(cmap)
+
+
+def test_text_in_a_symbol_font_that_cant_be_reused_is_not_editable(client):
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "abc", fontname="zadb", fontsize=12)  # ZapfDingbats, not embedded
+    page.insert_text((72, 140), "Teks biasa", fontname="helv", fontsize=12)
+    body = text_of(client, doc.tobytes())
+    assert [p["editable"] for p in body["pages"][0]["paragraphs"]] == [False, True]
 
 
 def test_calibri_maps_to_carlito(client):

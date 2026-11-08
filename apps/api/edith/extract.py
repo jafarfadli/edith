@@ -1,6 +1,6 @@
 import pymupdf
 
-from edith.doc_fonts import collect_fonts, fill_substitutes, name_key, span_fonts
+from edith.doc_fonts import collect_fonts, fill_substitutes, is_symbolic, name_key, span_fonts
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
 from edith.fonts import FontRegistry
 from edith.forms import extract_fields
@@ -46,7 +46,8 @@ def extract_structure(doc: pymupdf.Document) -> dict:
 
 def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
     """Paragraphs of every page plus the fonts they use. A run whose font is reusable gets
-    `{"kind": "original", "ref"}`; any other run gets its bundled substitute."""
+    `{"kind": "original", "ref"}`; any other run gets its bundled substitute. A paragraph with text in a
+    symbol font that can't be reused is not editable: no other font draws its characters."""
     fonts = collect_fonts(doc)
     pages = []
     for page in doc:
@@ -60,6 +61,10 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
                 font.substitute = registry.substitute(font.name, span["flags"])
             return {"kind": "original", "ref": font.ref} if font.reusable else dict(font.substitute)
 
-        pages.append({"index": page.number, "paragraphs": extract_paragraphs(page, resolve)})
+        def locked(span: dict, by_name=by_name) -> bool:
+            font = by_name.get(name_key(span["font"]))
+            return not font.reusable and font.symbolic if font is not None else is_symbolic(span["font"])
+
+        pages.append({"index": page.number, "paragraphs": extract_paragraphs(page, resolve, locked)})
     fill_substitutes(fonts, registry)
     return {"pages": pages, "fonts": [f.to_json() for f in fonts.values()]}

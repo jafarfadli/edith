@@ -5,11 +5,14 @@ from dataclasses import dataclass
 
 import pymupdf
 
+from edith.cid_fonts import add_cmap, char_to_glyph
 from edith.fonts import FontRegistry, base_font_name, parse_font_name
 
 # pymupdf extract_font() extensions → spec font formats.
 _FORMATS = {"ttf": "ttf", "otf": "otf", "cff": "cff", "cid": "cff", "pfa": "type1", "pfb": "type1"}
 _SAMPLE = [ord(c) for c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"]
+# Symbol and dingbat fonts: their characters only look right in the font itself (never substituted).
+_SYMBOL_NAMES = ("wingdings", "webdings", "symbol", "zapfdingbats", "dingbats", "marlett", "mtextra")
 
 
 @dataclass
@@ -23,6 +26,7 @@ class DocFont:
     bold: bool
     italic: bool
     keys: frozenset[str] = frozenset()  # name_key() of the BaseFont and of the embedded program's name
+    symbolic: bool = False  # a symbol / dingbat font (Wingdings, Symbol, ZapfDingbats …)
     substitute: dict | None = None  # bundled FontRef JSON; filled by the text extraction
 
     @property
@@ -37,14 +41,21 @@ class DocFont:
         }
 
 
+def is_symbolic(name: str) -> bool:
+    key = name_key(name)
+    return any(w in key for w in _SYMBOL_NAMES)
+
+
 def name_key(name: str) -> str:
     """Comparable form of a font name: span names come from the font program (`Arimo-Regular`)
     while BaseFont may differ in punctuation (`ABCDEF+Arimo Regular`)."""
     return re.sub(r"[^a-z0-9]", "", base_font_name(name).lower())
 
 
-def load_font(doc: pymupdf.Document, xref: int) -> pymupdf.Font | None:
-    """The embedded TTF/OTF program of font `xref` if it can draw new text (has a Unicode cmap), else None."""
+def font_bytes(doc: pymupdf.Document, xref: int) -> tuple[bytes, str] | None:
+    """(bytes, "ttf"|"otf") of the embedded program of font `xref` if it can draw new text, else None: as
+    embedded when it has a Unicode cmap; a CID TrueType subset without one gets a cmap rebuilt from the PDF's
+    ToUnicode and CIDToGIDMap (edith.cid_fonts), which covers exactly the characters the subset has."""
     try:
         _name, ext, _type, buf = doc.extract_font(xref)
     except Exception:  # noqa: BLE001 - unreadable font object
@@ -55,15 +66,20 @@ def load_font(doc: pymupdf.Document, xref: int) -> pymupdf.Font | None:
         font = pymupdf.Font(fontbuffer=buf)
     except Exception:  # noqa: BLE001
         return None
-    return font if any(font.has_glyph(c) for c in _SAMPLE) else None
+    if any(font.has_glyph(c) for c in _SAMPLE):
+        return buf, ext
+    if ext == "ttf":
+        _family, bold, italic = parse_font_name(base_font_name(doc.xref_get_key(xref, "BaseFont")[1].lstrip("/")))
+        rebuilt = add_cmap(buf, char_to_glyph(doc, xref), f"Edith Original {xref}", bold, italic)
+        if rebuilt is not None:
+            return rebuilt, "ttf"
+    return None
 
 
-def font_bytes(doc: pymupdf.Document, xref: int) -> tuple[bytes, str] | None:
-    """(bytes, "ttf"|"otf") of a reusable font, else None."""
-    if load_font(doc, xref) is None:
-        return None
-    _name, ext, _type, buf = doc.extract_font(xref)
-    return buf, ext
+def load_font(doc: pymupdf.Document, xref: int) -> pymupdf.Font | None:
+    """The program font_bytes() returns, loaded, else None."""
+    found = font_bytes(doc, xref)
+    return pymupdf.Font(fontbuffer=found[0]) if found else None
 
 
 def _doc_font(doc: pymupdf.Document, entry: tuple) -> DocFont:
@@ -81,7 +97,7 @@ def _doc_font(doc: pymupdf.Document, entry: tuple) -> DocFont:
             pass
     reusable = fmt in ("ttf", "otf") and load_font(doc, xref) is not None
     return DocFont(xref=xref, name=name, embedded=embedded, format=fmt, reusable=reusable,
-                   family=family, bold=bold, italic=italic, keys=frozenset(keys))
+                   family=family, bold=bold, italic=italic, keys=frozenset(keys), symbolic=is_symbolic(name))
 
 
 def collect_fonts(doc: pymupdf.Document) -> dict[int, DocFont]:

@@ -26,6 +26,7 @@ UNIFORM = 0.9        # bold / colour changes only split lines that are (nearly) 
 TAB_GAP = "   "      # a line with this many spaces in a row is laid out with spaces (form rows, columns), not prose
 
 FontResolver = Callable[[dict], dict]  # pymupdf span → FontRef JSON
+SpanCheck = Callable[[dict], bool]     # pymupdf span → True when the paragraph holding it can't be edited
 
 
 @dataclass
@@ -258,7 +259,7 @@ def _color(c: int) -> str:
     return f"#{c & 0xFFFFFF:06x}"
 
 
-def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None) -> dict:
+def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locked: SpanCheck | None = None) -> dict:
     runs: list[dict] = []
     out_lines: list[dict] = []
     offset = 0
@@ -303,7 +304,8 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None) -> di
         "runs": runs,
         "align": _align(lines),
         "lineHeight": line_height,
-        "editable": all(line.horizontal for line in lines),
+        "editable": all(line.horizontal for line in lines)
+                    and not (locked and any(locked(s) for line in lines for s in line.spans)),
     }
 
 
@@ -315,10 +317,12 @@ def _rect(x0: float, y0: float, x1: float, y1: float) -> dict:
     return {"x": _num(x0), "y": _num(y0), "w": _num(x1 - x0), "h": _num(y1 - y0)}
 
 
-def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None) -> list[dict]:
+def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
+                       locked: SpanCheck | None = None) -> list[dict]:
     """Paragraphs of `page` in content order, ids `g0`, `g1`, … (stable for a given file and extraction
     version). Coordinates are unrotated-CropBox points. `resolve` maps a span to its run FontRef (None →
-    runs get font None). Text is never merged across a drawn rule (table borders, separators)."""
+    runs get font None); a paragraph with a span `locked` accepts is not editable. Text is never merged
+    across a drawn rule (table borders, separators)."""
     rules = page_rules(page)
     blocks: list[list[_Line]] = []
     for block in page.get_text("rawdict", flags=FLAGS)["blocks"]:
@@ -339,5 +343,5 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None) 
     paragraphs: list[dict] = []
     for lines in blocks:
         for group in _split(lines, rules):
-            paragraphs.append(_paragraph(f"g{len(paragraphs)}", group, resolve))
+            paragraphs.append(_paragraph(f"g{len(paragraphs)}", group, resolve, locked))
     return paragraphs

@@ -4,11 +4,11 @@ import pytest
 from edith.bake import bake
 from edith.bake.context import BakeContext
 from edith.doc_fonts import collect_fonts
-from edith.errors import InvalidOp
+from edith.errors import BakeFailed, InvalidOp
 from edith.fonts import FontRegistry
 from edith.ops import ExportRequest
 from edith.settings import Settings
-from tests.pdfs import SUBSET_TTF, make_edit_pdf, make_fonts_pdf
+from tests.pdfs import CID_TEXT, SUBSET_TTF, make_cid_subset_pdf, make_edit_pdf, make_fonts_pdf
 
 DOC = "D" * 22
 ARIMO = {"kind": "bundled", "family": "Arimo", "bold": False, "italic": False}
@@ -125,3 +125,29 @@ def test_links_over_the_edited_paragraph_survive(ctx):
                    (pymupdf.LINK_URI, "https://contoh.id/a(b)", None, (72, 88, 250, 104)),
                    (pymupdf.LINK_URI, "https://lain.id", None, (400, 700, 450, 720))]
     assert "Teks baru" in text(out[0])
+
+
+def cid_font_ref(data: bytes, name: str) -> dict:
+    fonts = collect_fonts(pymupdf.open(stream=data, filetype="pdf")).values()
+    return {"kind": "original", "ref": next(f.ref for f in fonts if f.name == name)}
+
+
+def test_unchanged_edit_in_a_cmapless_cid_subset_redraws_the_line_like_the_original(ctx):
+    """MS Word / Hancom subsets have no cmap: the bake reuses them with one rebuilt from ToUnicode, so the same
+    text at the same place renders the same glyphs with the same advances."""
+    data = make_cid_subset_pdf()
+    clip = pymupdf.Rect(60, 84, 320, 106)
+    before = pymupdf.open(stream=data, filetype="pdf")[0].get_pixmap(dpi=144, clip=clip)
+    out = reload(bake(data, ops(edit(text=CID_TEXT, font=cid_font_ref(data, "Dotum"), y=88)), ctx))
+    after = out[0].get_pixmap(dpi=144, clip=clip)
+    changed = sum(a != b for a, b in zip(before.samples, after.samples))
+    assert changed / len(before.samples) < 0.01
+    span = next(s for s in spans(out[0]) if round(s["origin"][1]) == 100)
+    assert span["text"] == CID_TEXT and "Dotum" in span["font"]
+    assert text(out[0]).count(CID_TEXT) == 2  # the edited line and the Batang line below it
+
+
+def test_characters_missing_from_a_reused_subset_fail_the_bake(ctx):
+    data = make_cid_subset_pdf()
+    with pytest.raises(BakeFailed):  # the client sends them in a fallback font, never in the subset
+        bake(data, ops(edit(text="가나다", font=cid_font_ref(data, "Dotum"), y=88)), ctx)
