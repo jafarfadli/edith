@@ -19,6 +19,7 @@ UNDERLINE_EM = 0.15  # a rule this close below a baseline underlines it rather t
 CAP_EM = 0.6         # a rule must lie this far above the next line's baseline to separate it
 BULLETS = frozenset("•‣▪■□○●◦※►▶➢✓√·∙")
 HANG_EM = 0.3       # a list item's next line must start this far right of its bullet to continue it
+UNIFORM = 0.9        # bold / colour changes only split lines that are (nearly) entirely in one style
 TAB_GAP = "   "      # a line with this many spaces in a row is laid out with spaces (form rows, columns), not prose
 
 FontResolver = Callable[[dict], dict]  # pymupdf span → FontRef JSON
@@ -38,6 +39,7 @@ class _Line:
     ink_x1: float = 0.0      # right edge of the last non-space character
     first_word: float = 0.0  # width of the first word (CJK: first character), see _first_word()
     style: tuple = ()        # (size, bold, color) of the span style with the most characters
+    uniform: bool = True     # that style covers nearly every character (no inline bold phrase or link in the line)
     tabular: bool = False    # spaced out with runs of spaces (see TAB_GAP): never part of a wrapped paragraph
 
     @property
@@ -81,12 +83,14 @@ def _first_word(chars: list[dict]) -> float:
     return chars[j - 1]["bbox"][2] - chars[i]["bbox"][0]
 
 
-def _style(spans: list[dict]) -> tuple:
+def _style(spans: list[dict]) -> tuple[tuple, bool]:
+    """Dominant (size, bold, color) of a line and whether it covers at least UNIFORM of its characters."""
     weight: dict[tuple, int] = {}
     for s in spans:
         key = (round(s["size"], 1), bool(s["flags"] & pymupdf.TEXT_FONT_BOLD), s["color"])
         weight[key] = weight.get(key, 0) + len(s["text"].strip())
-    return max(weight, key=weight.get)
+    top = max(weight, key=weight.get)
+    return top, weight[top] >= UNIFORM * sum(weight.values())
 
 
 def _line(raw: dict) -> _Line | None:
@@ -102,9 +106,10 @@ def _line(raw: dict) -> _Line | None:
     main = max(spans, key=lambda s: (s["size"], len(s["text"].strip())))
     dx, dy = raw["dir"]
     x0, y0, x1, y1 = raw["bbox"]
+    style, uniform = _style(spans)
     return _Line(spans=spans, x0=x0, y0=y0, x1=x1, y1=y1, baseline=main["origin"][1], size=main["size"],
                  horizontal=abs(dx - 1) < 1e-3 and abs(dy) < 1e-3, ink_x0=ink[0]["bbox"][0],
-                 ink_x1=ink[-1]["bbox"][2], first_word=_first_word(chars), style=_style(spans),
+                 ink_x1=ink[-1]["bbox"][2], first_word=_first_word(chars), style=style, uniform=uniform,
                  tabular=TAB_GAP in "".join(c["c"] for c in chars).strip())
 
 
@@ -133,9 +138,11 @@ def _join(a: _Line, b: _Line) -> _Line:
     if not (a.text.endswith(" ") or b.text.startswith(" ")):
         spans.append(dict(a.spans[-1], text=" "))
     spans.extend(b.spans)
+    style, uniform = _style(spans)
     return _Line(spans=spans, x0=min(a.x0, b.x0), y0=min(a.y0, b.y0), x1=max(a.x1, b.x1), y1=max(a.y1, b.y1),
                  baseline=a.baseline, size=max(a.size, b.size), horizontal=True, ink_x0=a.ink_x0,
-                 ink_x1=b.ink_x1, first_word=a.first_word, style=_style(spans), tabular=a.tabular or b.tabular)
+                 ink_x1=b.ink_x1, first_word=a.first_word, style=style, uniform=uniform,
+                 tabular=a.tabular or b.tabular)
 
 
 def _spacing(lines: list[_Line]) -> float | None:
@@ -160,9 +167,12 @@ def _continues(block: list[_Line], line: _Line, rules: Rules) -> bool:
 
 
 def _restyled(a: _Line, b: _Line) -> bool:
-    """The dominant style changes between two lines (a heading above body text, a coloured label)."""
+    """The style changes between two lines (a heading above body text, a coloured label). Bold and colour only
+    count when both lines are uniform: a wrapped line that is mostly an inline bold phrase or link is still prose."""
     (size_a, bold_a, color_a), (size_b, bold_b, color_b) = a.style, b.style
-    return bold_a != bold_b or color_a != color_b or abs(size_a - size_b) > SIZE_CHANGE * max(size_a, size_b)
+    if abs(size_a - size_b) > SIZE_CHANGE * max(size_a, size_b):
+        return True
+    return a.uniform and b.uniform and (bold_a != bold_b or color_a != color_b)
 
 
 def _bulleted(line: _Line) -> bool:

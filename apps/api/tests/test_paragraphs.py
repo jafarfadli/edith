@@ -196,3 +196,31 @@ def test_first_word_of_cjk_is_one_character():
     assert _first_word(chars("本、次")) == 20            # … plus punctuation right after it
     assert _first_word(chars("한국어 단어")) == 30        # Hangul: a word (eojeol)
     assert _first_word(chars("   ")) == 0
+
+
+def test_inline_bold_phrase_or_link_does_not_split_prose():
+    """A wrapped line that is mostly a bold phrase / link is still prose; a whole bold heading is not."""
+    def draw(pg):
+        pg.insert_font(fontname="AR", fontfile=str(FONT_FILES / "Arimo-Regular.ttf"))
+        pg.insert_font(fontname="AB", fontfile=str(FONT_FILES / "Arimo-Bold.ttf"))
+        plain, bold = "AR", "AB"
+        pg.insert_text((72, 100), "Teks biasa pada baris pertama yang cukup panjang", fontname=plain, fontsize=11)
+        pg.insert_text((72, 113), "kedua masih biasa dan terus berlanjut ke bawah", fontname=plain, fontsize=11)
+        w = pymupdf.Font(fontfile=str(FONT_FILES / "Arimo-Regular.ttf")).text_length("sedikit ", fontsize=11)
+        pg.insert_text((72, 126), "sedikit ", fontname=plain, fontsize=11)
+        pg.insert_text((72 + w, 126), "frasa tebal yang memenuhi sebagian baris", fontname=bold, fontsize=11,
+                       color=(0, 0, 1))
+        pg.insert_text((72, 139), "lalu kembali biasa sampai akhir kalimat ini.", fontname=plain, fontsize=11)
+    ps = paragraphs(page_with(draw))
+    assert len(ps) == 1
+
+
+def test_uniform_bold_heading_still_splits_from_body():
+    def draw(pg):
+        pg.insert_font(fontname="AR", fontfile=str(FONT_FILES / "Arimo-Regular.ttf"))
+        pg.insert_font(fontname="AB", fontfile=str(FONT_FILES / "Arimo-Bold.ttf"))
+        pg.insert_text((72, 100), "Judul Bagian", fontname="AB", fontsize=11)
+        pg.insert_text((72, 113), "Isi bagian dimulai di sini dan berlanjut", fontname="AR", fontsize=11)
+        pg.insert_text((72, 126), "ke baris berikutnya sampai selesai.", fontname="AR", fontsize=11)
+    assert [text(p) for p in paragraphs(page_with(draw))] == [
+        "Judul Bagian", "Isi bagian dimulai di sini dan berlanjut ke baris berikutnya sampai selesai."]
