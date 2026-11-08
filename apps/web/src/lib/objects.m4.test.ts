@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
 import {
   alignDelta, clampToBounds, copyOp, createFromDrag, hasOpacity, hasRotation, isCopyable, isPointOp, isRotatable, mapPoints,
-  keepRotatedTopLeft, normalizeRotation, opacityOf, polyClick, polyDoubleClick, polyFromPoints, rotatedTopLeft, rotatePoint, rotationOf, visualBounds,
+  keepRotatedTopLeft, normalizeRotation, rotateAnchorOffset, opacityOf, polyClick, polyDoubleClick, polyFromPoints, rotatedTopLeft, rotatePoint, rotationOf, visualBounds,
 } from "@/lib/objects";
 import { DEFAULT_STYLE, type ToolStyle } from "@/store/editor";
 
@@ -132,5 +132,14 @@ describe("object transforms (Task 11)", () => {
     // Same spot = within CLOSE_RADIUS screen pixels.
     expect(polyDoubleClick([[0, 0], [100, 0], [103, 0]], 2)).toEqual([[0, 0], [100, 0]]);
     expect(polyDoubleClick([[0, 0], [100, 0], [103, 0]], 3)).toBeNull();
+  });
+});
+
+describe("rotation handle placement", () => {
+  it("sits above the box when there is room, else below it", () => {
+    expect(rotateAnchorOffset(200, 80)).toBe(50);
+    expect(rotateAnchorOffset(50, 80)).toBe(50);
+    expect(rotateAnchorOffset(49.9, 80)).toBe(-130);
+    expect(rotateAnchorOffset(-10, 20)).toBe(-70);
   });
 });

@@ -267,3 +267,12 @@ export function alignDelta(b: Rect, page: Rect, a: Align): Pt {
     case "bottom": return [0, page.y + page.h - b.h - b.y];
   }
 }
+
+/** Distance of the Transformer's rotation handle from the selection box (px); Konva's default. */
+export const ROTATE_HANDLE_OFFSET = 50;
+
+/** Konva `rotateAnchorOffset` for a box whose top edge is `topPx` below the stage's top and `heightPx` tall: the usual
+ *  offset above the box when there is room for the handle in the stage, else a negative one that puts it below the box. */
+export function rotateAnchorOffset(topPx: number, heightPx: number, base = ROTATE_HANDLE_OFFSET): number {
+  return topPx >= base ? base : -(heightPx + base);
+}

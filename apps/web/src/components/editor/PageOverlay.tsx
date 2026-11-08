@@ -9,7 +9,7 @@ import { groupTransform, pageBounds, screenSize, type PageGeom } from "@/lib/coo
 import { newId } from "@/lib/id";
 import {
   clampToBounds, createFromDrag, DRAG_TOOLS, hasRotation, inkWidth, isMarkup, isPointOp, isResizable, isRotatable, isTextOp, keepRotatedTopLeft, mapPoints, MARKUP_TOOLS,
-  MIN_DRAG, moveOp, normalizeRect, normalizeRotation, noteAt, opacityOf, opBounds, POLY_TOOLS, resizeOp, rotationOf, symbolAt, type DragTool, type PolyTool, type Pt,
+  MIN_DRAG, moveOp, normalizeRect, normalizeRotation, noteAt, opacityOf, opBounds, POLY_TOOLS, resizeOp, rotateAnchorOffset, rotationOf, symbolAt, type DragTool, type PolyTool, type Pt,
 } from "@/lib/objects";
 import { charsStore } from "@/store/chars";
 import { editorStore, useEditor, type MarkupTool } from "@/store/editor";
@@ -104,9 +104,15 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
 
   useEffect(() => {
     const node = selection ? nodes.current.get(selection) : undefined;
-    trRef.current?.nodes(node ? [node] : []);
+    const tr = trRef.current;
+    tr?.nodes(node ? [node] : []);
+    if (tr && node) {
+      // Keep the rotation handle inside the stage: below the box when the shape is near the page top.
+      const top = node.getClientRect({ relativeTo: tr.getStage() ?? undefined }).y;
+      tr.rotateAnchorOffset(rotateAnchorOffset(top, tr.height()));
+    }
     trRef.current?.getLayer()?.batchDraw();
-  }, [selection, mine]);
+  }, [selection, mine, objects]);
 
   useEffect(() => () => drawing.current?.stop(), []);
   const poly = usePolyTool(pageKey, POLY_TOOLS.has(tool) ? (tool as PolyTool) : null, scale);

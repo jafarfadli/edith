@@ -40,7 +40,7 @@ function Cloud({ points, width, stroke, fill, dash }: { points: Pt[]; width: num
         ctx.closePath();
         ctx.fillStrokeShape(shape);
       }}
-      stroke={stroke} strokeWidth={width} fill={fill} lineJoin="round" lineCap={dash?.lineCap ?? "round"} dash={dash?.dash} hitStrokeWidth={12}
+      stroke={stroke} strokeWidth={width} fill={fill} lineJoin="round" lineCap={dash?.lineCap ?? "round"} dash={dash?.dash} hitStrokeWidth={Math.max(width, 8)}
     />
   );
 }
@@ -94,7 +94,7 @@ export function ObjectShape({ op, docId }: { op: ContentOp; docId: string }) {
       if (o.kind === "polygon" || o.kind === "polyline") {
         const closed = o.kind === "polygon";
         return <Line points={pts} closed={closed} stroke={width > 0 ? stroke : undefined} strokeWidth={width} fill={closed ? fill : undefined}
-          lineJoin="round" lineCap="round" hitStrokeWidth={12} {...dashProps} />;
+          lineJoin="round" lineCap="round" hitStrokeWidth={Math.max(width, 8)} {...dashProps} />;
       }
       if (o.kind === "arrow") { const h = arrowHead(width); return <Arrow points={pts} stroke={stroke} fill={stroke} strokeWidth={Math.max(width, 0.5)} lineCap="round" pointerLength={h.length} pointerWidth={h.width} hitStrokeWidth={12} {...dashProps} />; }
       return <Line points={pts} stroke={stroke} strokeWidth={Math.max(width, 0.5)} lineCap="round" hitStrokeWidth={12} {...dashProps} />;
