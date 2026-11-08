@@ -1,3 +1,4 @@
+import { PARAGRAPHS_VERSION } from "@/lib/api";
 import type { EditorDoc } from "@/store/editor";
 
 const key = (sha: string) => `edith:draft:${sha}`;
@@ -12,8 +13,9 @@ function isEditorDoc(v: unknown): v is EditorDoc {
   );
 }
 
+/** Stores `doc` stamped with the paragraph segmentation its text.edit ids belong to (see dropStaleTextEdits). */
 export function saveDraft(sha256: string, doc: EditorDoc): void {
-  try { localStorage.setItem(key(sha256), JSON.stringify(doc)); } catch { /* storage full or blocked */ }
+  try { localStorage.setItem(key(sha256), JSON.stringify({ ...doc, paragraphsVersion: PARAGRAPHS_VERSION })); } catch { /* storage full or blocked */ }
 }
 
 export function loadDraft(sha256: string): EditorDoc | null {

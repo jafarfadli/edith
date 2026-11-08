@@ -3,6 +3,9 @@ import type { CharLine } from "@/lib/markup";
 import type { StructurePage } from "@/store/editor";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+/** Paragraph segmentation the client's paragraph ids (g0, g1, …) come from: shared contract with PARAGRAPHS_VERSION in
+ *  apps/api/edith/paragraphs.py. Exports send it (the API refuses text.edit ops of another version) and drafts store it. */
+export const PARAGRAPHS_VERSION = 2;
 
 export class ApiError extends Error {
   constructor(public code: string, public status: number, public extra: Record<string, unknown> = {}) {
@@ -23,7 +26,11 @@ export interface DocFont {
   ref: string; name: string; embedded: boolean; format: string | null; reusable: boolean;
   family: string; bold: boolean; italic: boolean; substitute: BundledFont;
 }
-export interface TextData { doc_id: string; pages: { index: number; paragraphs: Paragraph[] }[]; fonts: DocFont[] }
+export interface TextData {
+  doc_id: string; pages: { index: number; paragraphs: Paragraph[] }[]; fonts: DocFont[];
+  /** Segmentation version (2 since M5); absent in fixtures built from extract_text directly. */
+  paragraphsVersion?: number;
+}
 
 /** One AcroForm widget (GET /documents/{id}/structure). Radio buttons of a group share `name`. */
 export interface FormField {
@@ -98,7 +105,7 @@ export function assetUrl(docId: string, assetId: string): string {
 export const EXPORT_TIMEOUT_MS = 120_000;
 
 export async function exportPdf(docId: string, body: ExportRequest): Promise<Blob> {
-  const res = await request(`/documents/${docId}/export`, { ...json(body), signal: AbortSignal.timeout(EXPORT_TIMEOUT_MS) });
+  const res = await request(`/documents/${docId}/export`, { ...json({ paragraphs_version: PARAGRAPHS_VERSION, ...body }), signal: AbortSignal.timeout(EXPORT_TIMEOUT_MS) });
   try {
     return await res.blob();
   } catch (e) {
@@ -107,5 +114,5 @@ export async function exportPdf(docId: string, body: ExportRequest): Promise<Blo
 }
 
 export async function renderPage(docId: string, body: RenderPageRequest): Promise<Blob> {
-  return (await request(`/documents/${docId}/render-page`, json(body))).blob();
+  return (await request(`/documents/${docId}/render-page`, json({ paragraphs_version: PARAGRAPHS_VERSION, ...body }))).blob();
 }

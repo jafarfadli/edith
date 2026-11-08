@@ -11,7 +11,7 @@ import { loadDraft, saveDraft } from "@/lib/draft";
 import { noticeStore, type NoticeMsg } from "@/lib/notices";
 import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
-import { resolveImports, restoreDraft } from "@/lib/restore";
+import { dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
@@ -63,6 +63,9 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       }
       if (cancelled) return;
       let draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
+      // Text edits from before a segmentation change name other paragraphs now: drop them (with a notice below).
+      const stale = draft ? dropStaleTextEdits(draft) : null;
+      if (stale) draft = stale.doc;
       // Pages of imported PDFs need those documents' page sizes; imports that expired lose their pages.
       let resolved;
       try {
@@ -77,6 +80,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages, fields: st.fields, imports: resolved?.imports, importFields: resolved?.fields }, draft);
       initialDoc.current = editorStore.getState().doc;
       if (resolved?.missing) setNotice({ kind: "error", text: t.pages.importGone });
+      else if (stale?.dropped) setNotice({ kind: "error", text: t.editor.textEditsDropped });
       else if (draft) setNotice({ kind: "info", text: t.editor.restored });
       void textStore.getState().load(docId); // original paragraphs + fonts, in the background
       for (const id of Object.keys(resolved?.imports ?? {})) void textStore.getState().loadImport(id);

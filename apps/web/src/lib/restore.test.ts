@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
-import { resolveImports, restoreDraft } from "@/lib/restore";
+import { dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
 
 describe("restoreDraft", () => {
   const draft = {
@@ -95,5 +95,34 @@ describe("restoreDraft keeps imported field values", () => {
       importForms: { [I]: { nama: "Budi", rusak: 3 }, OTHER: { x: "y" } },
     };
     expect(restoreDraft(draft as never, "NEW", 1)!.importForms).toEqual({ [I]: { nama: "Budi" } });
+  });
+});
+
+describe("dropStaleTextEdits", () => {
+  const box = { rect: { x: 0, y: 0, w: 10, h: 10 }, lineHeight: 12, paragraphs: [], layout: [] };
+  const doc = {
+    pages: [{ pageKey: "o0", src: { doc: "D", index: 0 }, rotate: 0 as const }],
+    objects: {
+      e: { id: "e", type: "text.edit", pageKey: "o0", paragraphId: "g3", box },
+      w: { id: "w", type: "whiteout.add", pageKey: "o0", rect: { x: 0, y: 0, w: 5, h: 5 } },
+    },
+    order: ["e", "w"],
+  } as unknown as Parameters<typeof dropStaleTextEdits>[0];
+
+  it("drops text edits of drafts from another segmentation (unstamped = version 1) and keeps the rest", () => {
+    for (const stamp of [undefined, 1, 3]) {
+      const { doc: out, dropped } = dropStaleTextEdits({ ...doc, paragraphsVersion: stamp });
+      expect(dropped).toBe(1);
+      expect(out.order).toEqual(["w"]);
+      expect(Object.keys(out.objects)).toEqual(["w"]);
+      expect(out).not.toHaveProperty("paragraphsVersion");
+    }
+  });
+
+  it("keeps text edits of the current segmentation", () => {
+    const { doc: out, dropped } = dropStaleTextEdits({ ...doc, paragraphsVersion: 2 });
+    expect(dropped).toBe(0);
+    expect(out.order).toEqual(["e", "w"]);
+    expect(out).not.toHaveProperty("paragraphsVersion");
   });
 });

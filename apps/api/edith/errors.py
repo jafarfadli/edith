@@ -58,6 +58,11 @@ class InvalidOp(EdithError):
     status, code = 422, "invalid_op"
 
 
+class TextOutdated(EdithError):
+    """text.edit ops name paragraphs of another segmentation version (a draft or tab from before an update)."""
+    status, code = 409, "text_outdated"
+
+
 class BakeFailed(EdithError):
     status, code = 500, "bake_failed"
 

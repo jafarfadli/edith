@@ -7,8 +7,9 @@ from fastapi import APIRouter, Request, Response
 
 from edith.bake import bake
 from edith.bake.context import BakeContext
-from edith.errors import DocExpired, InvalidOp
+from edith.errors import DocExpired, InvalidOp, TextOutdated
 from edith.ops import ExportRequest, RenderPageRequest
+from edith.paragraphs import PARAGRAPHS_VERSION
 
 router = APIRouter()
 
@@ -66,8 +67,19 @@ def _page_index(ops: list, page_key: str, page_count: int) -> int:
     raise InvalidOp(f"unknown pageKey {page_key}")
 
 
+def _check_text_version(body: ExportRequest | RenderPageRequest) -> None:
+    """Paragraph ids are positions in one segmentation: ids of another version name other paragraphs."""
+    if (body.paragraphs_version or 1) == PARAGRAPHS_VERSION:
+        return
+    for i, op in enumerate(body.ops):
+        if op.type == "text.edit":
+            raise TextOutdated(f"paragraph ids of version {body.paragraphs_version or 1}, not {PARAGRAPHS_VERSION}",
+                               op_index=i)
+
+
 @router.post("/documents/{doc_id}/export")
 def export(request: Request, doc_id: str, body: ExportRequest) -> Response:
+    _check_text_version(body)
     source = _read_source(request, doc_id)
     doc = bake(source, body.ops, _ctx(request, doc_id), flatten_forms=body.flatten_forms, subset_fonts=True)
     try:
@@ -84,6 +96,7 @@ def export(request: Request, doc_id: str, body: ExportRequest) -> Response:
 
 @router.post("/documents/{doc_id}/render-page")
 def render_page(request: Request, doc_id: str, body: RenderPageRequest) -> Response:
+    _check_text_version(body)
     storage = request.app.state.storage
     source = _read_source(request, doc_id)
     index = _page_index(body.ops, body.pageKey, storage.meta(doc_id).page_count)

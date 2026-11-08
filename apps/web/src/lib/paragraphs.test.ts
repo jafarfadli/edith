@@ -35,10 +35,11 @@ describe("paragraphBox", () => {
     expect(box.rect.x).toBe(p.rect.x);
   });
 
-  it("splits hand-broken lines into logical paragraphs", () => {
-    const address = paragraphs.find((p) => p.runs[0].text.startsWith("Jl."))!;
-    const box = paragraphBox(address, bundled);
-    expect(box.paragraphs.map((ps) => ps.map((r) => r.text).join(""))).toEqual(["Jl. Merdeka Barat No. 17, Jakarta Pusat", "Indonesia"]);
+  it("gets hand-broken lines as paragraphs of their own from the API (segmentation version 2)", () => {
+    // "Jl. Merdeka Barat No. 17, Jakarta" / "Pusat" / "Indonesia": "Pusat" ended early, so "Indonesia" is a paragraph.
+    const texts = paragraphs.map((p) => runsText(p.runs));
+    expect(texts).toContain("Jl. Merdeka Barat No. 17, Jakarta Pusat");
+    expect(texts).toContain("Indonesia");
   });
 
   it("keeps wrapped lines in one logical paragraph", () => {
@@ -60,13 +61,16 @@ describe("paragraphBox", () => {
   });
 
   it("applies an edit to the logical paragraphs before layout", () => {
-    const address = paragraphs.find((p) => p.runs[0].text.startsWith("Jl."))!;
-    const raw = runsText(address.runs).indexOf("Indonesia");
-    const box = paragraphBox(address, bundled, (ps, toBox) => {
-      expect(toBox(raw)).toBe(runsText(ps[0]).length + 1); // start of the second logical paragraph
-      return [ps[0], [{ ...ps[1][0], text: "RI" }]];
+    // "ab-" / "cd" / "ef" again, in a box 10 units wide: three logical paragraphs.
+    const mono: FontMetrics = { unitsPerEm: 1, ascent: 0.8, descent: 0.2, advance: () => 1 };
+    const line = (start: number, end: number, y: number) => ({ rect: { x: 0, y, w: 3, h: 1 }, baseline: y + 1, size: 1, start, end });
+    const p: Paragraph = { id: "g0", rect: { x: 0, y: 0, w: 10, h: 3 }, lines: [line(0, 3, 0), line(3, 5, 1), line(6, 8, 2)],
+      runs: [{ text: "ab-cd ef", font: { kind: "bundled", family: "Arimo" }, size: 1, color: "#000000" }], align: "left", lineHeight: 1, editable: true };
+    const box = paragraphBox(p, () => mono, (ps, toBox) => {
+      expect(toBox(6)).toBe(7); // "e": start of the third logical paragraph ("ab-\ncd\nef")
+      return [ps[0], ps[1], [{ ...ps[2][0], text: "RI" }]];
     });
-    expect(box.paragraphs.map((ps) => ps.map((r) => r.text).join(""))).toEqual(["Jl. Merdeka Barat No. 17, Jakarta Pusat", "RI"]);
+    expect(box.paragraphs.map((ps) => ps.map((r) => r.text).join(""))).toEqual(["ab-", "cd", "RI"]);
     expect(box.layout).toHaveLength(3);
   });
 });

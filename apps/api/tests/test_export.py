@@ -249,3 +249,21 @@ def test_export_keeps_the_unicode_of_invisible_characters(client):
     r = client.post(f"/documents/{doc_id}/export", json={"ops": [text_add(text, "Tinos")]})
     out = pymupdf.open(stream=r.content, filetype="pdf")
     assert text in out[0].get_text()
+
+
+@pytest.mark.parametrize("version", [None, 1, 3])
+def test_text_edits_of_another_segmentation_version_are_refused(client, version):
+    """Ids g0, g1, … are positions in one segmentation: a draft or tab from before an update would edit
+    the wrong paragraph."""
+    from tests.pdfs import make_edit_pdf
+    doc_id = client.post("/documents", files={"file": ("e.pdf", make_edit_pdf(), "application/pdf")}).json()["doc_id"]
+    run = {"text": "Diganti", "font": {"kind": "bundled", "family": "Arimo"}, "size": 12, "color": "#000000"}
+    edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
+        "rect": R(72, 88, 300, 16), "lineHeight": 12, "paragraphs": [[run]],
+        "layout": [{"baseline": 12, "segments": [{"x": 0, "text": "Diganti", "runIndex": 0}]}]}}
+    body = {"ops": [edit]} if version is None else {"ops": [edit], "paragraphs_version": version}
+    for path in ("export", "render-page"):
+        r = client.post(f"/documents/{doc_id}/{path}", json={**body, **({"pageKey": "o0"} if path == "render-page" else {})})
+        assert r.status_code == 409 and r.json()["error"]["code"] == "text_outdated"
+        assert r.json()["error"]["op_index"] == 0
+    assert client.post(f"/documents/{doc_id}/export", json={"ops": []}).status_code == 200  # no text.edit: any version

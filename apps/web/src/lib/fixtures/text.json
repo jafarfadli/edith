@@ -373,7 +373,7 @@
       "x": 360.0,
       "y": 68.18,
       "w": 163.85,
-      "h": 41.11
+      "h": 28.11
      },
      "lines": [
       {
@@ -399,23 +399,11 @@
        "size": 11.0,
        "start": 34,
        "end": 39
-      },
-      {
-       "rect": {
-        "x": 360.0,
-        "y": 94.18,
-        "w": 47.7,
-        "h": 15.11
-       },
-       "baseline": 106.0,
-       "size": 11.0,
-       "start": 40,
-       "end": 49
       }
      ],
      "runs": [
       {
-       "text": "Jl. Merdeka Barat No. 17, Jakarta Pusat Indonesia",
+       "text": "Jl. Merdeka Barat No. 17, Jakarta Pusat",
        "font": {
         "kind": "bundled",
         "family": "Arimo",
@@ -429,6 +417,46 @@
      "align": "left",
      "lineHeight": 13.0,
      "editable": true
+    },
+    {
+     "id": "g6",
+     "rect": {
+      "x": 360.0,
+      "y": 94.18,
+      "w": 47.7,
+      "h": 15.11
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 360.0,
+        "y": 94.18,
+        "w": 47.7,
+        "h": 15.11
+       },
+       "baseline": 106.0,
+       "size": 11.0,
+       "start": 0,
+       "end": 9
+      }
+     ],
+     "runs": [
+      {
+       "text": "Indonesia",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 11.0,
+       "color": "#000000"
+      }
+     ],
+     "align": "left",
+     "lineHeight": 13.2,
+     "editable": true,
+     "maxWidth": 161.0
     }
    ]
   }
