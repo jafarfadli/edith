@@ -5,6 +5,7 @@ from dataclasses import replace
 import pymupdf
 
 from edith.bake.context import BakeContext
+from edith.bake.formfonts import protect as form_font_programs, restore as restore_form_fonts
 from edith.bake.pages import build_pages
 from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
 from edith.bake.scrub import scrub_outside, scrub_page, under_redaction
@@ -206,7 +207,9 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             drop_xfa(doc)
         added = _font_xrefs(doc) - fonts_before if subset_fonts else set()
         if added:
+            form_fonts = form_font_programs(doc)  # a viewer filling a field later needs these whole
             doc.subset_fonts()
+            restore_form_fonts(doc, form_fonts)
             for xref in added:
                 trim_to_unicode(doc, xref)
         return doc

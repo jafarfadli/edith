@@ -368,6 +368,24 @@ def fake_cjk_pack(root: Path, files: tuple[str, ...] = ("NotoSansKR-Regular.ttf"
     return root
 
 
+def make_dr_font_form_pdf(form: bool = True) -> bytes:
+    """One page with "Nama:Budi" in an embedded Tinos (the font keeps all its glyphs and its cmap in the file). With
+    `form`: a text widget `nama` whose appearance stream uses that same font and an AcroForm /DR listing it, as
+    Word/Acrobat forms do, so a viewer re-filling the field needs the whole program."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_font(fontname="FT", fontfile=str(FONT_FILES / "Tinos-Regular.ttf"))
+    page.insert_text((72, 90), "Nama:Budi", fontname="FT", fontsize=12)
+    if form:
+        _widget(page, pymupdf.PDF_WIDGET_TYPE_TEXT, "nama", (72, 100, 272, 120), field_value="Budi", text_fontsize=11)
+        font = page.get_fonts(full=True)[0][0]
+        widget = next(page.widgets())
+        ap = int(doc.xref_get_key(widget.xref, "AP/N")[1].split()[0])
+        doc.xref_set_key(ap, "Resources", f"<</Font<</FT {font} 0 R>>>>")
+        doc.xref_set_key(doc.pdf_catalog(), "AcroForm/DR", f"<</Font<</FT {font} 0 R>>>>")
+    return doc.tobytes(garbage=3, deflate=True)
+
+
 # Damage FreeType accepts but fontTools can't read (the rebuild must fall back to "not reusable").
 BROKEN_TABLES: dict[str, tuple[bytes, Callable[[bytes], bytes]]] = {
     "glyf garbage": (b"glyf", lambda t: b"\xff" * len(t)),

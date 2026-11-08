@@ -10,6 +10,7 @@ font it embeds: same mapping, except a printable ASCII code point wins over the 
 """
 
 import io
+import unicodedata
 
 import pymupdf
 from fontTools.ttLib import TTFont
@@ -17,6 +18,8 @@ from fontTools.ttLib import TTFont
 from edith.cid_fonts import parse_to_unicode
 
 _MARK = b"%edith-tounicode\n"
+# Characters whose glyph is legitimately empty: spaces, format characters (ZWSP, ZWJ, BOM...) and Hangul fillers.
+_BLANK_FILLERS = "\u115f\u1160\u3164\uffa0"
 _HEADER = b"""/CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
@@ -101,5 +104,9 @@ def trim_to_unicode(doc: pymupdf.Document, font_xref: int) -> None:
     except Exception:  # noqa: BLE001 - not a TrueType program with glyf/loca
         return
     kept = {gid: ord(text) for gid, text in parse_to_unicode(data).items()
-            if gid + 1 < len(loca) and (loca[gid] != loca[gid + 1] or text.isspace())}
+            if gid + 1 < len(loca) and (loca[gid] != loca[gid + 1] or _may_be_blank(text))}
     doc.update_stream(cmap_xref, to_unicode_cmap(kept))
+
+
+def _may_be_blank(text: str) -> bool:
+    return text.isspace() or text in _BLANK_FILLERS or unicodedata.category(text) in ("Cf", "Zs")

@@ -100,7 +100,17 @@ def test_cjk_manifest_entries():
     ("MS-Mincho", ("jp", "serif")), ("MS PGothic", ("jp", "sans")), ("KozMinPr6N-Regular", ("jp", "serif")),
     ("SimSun", ("sc", "serif")), ("Microsoft YaHei", ("sc", "sans")), ("PMingLiU", ("sc", "serif")),
     ("NotoSansCJKjp-Regular", ("jp", "sans")), ("NotoSerifKR-Bold", ("kr", "serif")),
+    ("HYSinMyeongJo-Medium", ("kr", "serif")), ("AdobeMyungjoStd-Medium", ("kr", "serif")),
+    ("AdobeSongStd-Light", ("sc", "serif")), ("AdobeMingStd-Light", ("sc", "serif")), ("Song", ("sc", "serif")),
+    ("Ming-Light", ("sc", "serif")), ("DFKai-SB", ("sc", "serif")), ("BiauKai", ("sc", "serif")),
+    ("SourceHanSansKR-Regular", ("kr", "sans")), ("SourceHanSerifJP-Bold", ("jp", "serif")),
+    ("ABCDEF+SourceHanSansCN-Light", ("sc", "sans")), ("SourceHanSerifTW-Regular", ("sc", "serif")),
+    ("SourceHanSans-Regular", None), ("HiraMinProN-W3", ("jp", "serif")), ("HiraKakuStdN-W8", ("jp", "sans")),
+    ("NotoSansMonoCJKkr-Regular", ("kr", "sans")), ("NotoSansMonoCJKtc-Bold", ("sc", "sans")),
+    ("NotoSansCJKhk-Regular", ("sc", "sans")), ("Noto Serif CJK SC", ("sc", "serif")),
     ("Arial", None), ("Century Gothic", None), ("Wingdings", None), ("TimesNewRomanPSMT", None),
+    ("Franklin Gothic Medium", None), ("LetterGothic", None), ("MinionPro-Regular", None), ("Kaiser", None),
+    ("Mingler", None), ("Songbird", None),
 ])
 def test_cjk_style(name, style):
     assert cjk_style(name) == style

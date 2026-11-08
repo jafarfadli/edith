@@ -11,7 +11,8 @@ ARG CJK_FONTS=1
 RUN if [ "$CJK_FONTS" = "1" ]; then node packages/fonts/scripts/fetch-cjk.mjs; fi
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-RUN npm run build -w apps/web
+# The runtime serves public/fonts (copied by sync-fonts); drop the source copy so the image holds the pack once.
+RUN npm run build -w apps/web && rm -rf packages/fonts/files
 
 FROM node:22-slim
 WORKDIR /app

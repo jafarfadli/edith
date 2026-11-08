@@ -27,16 +27,21 @@ FLAG_ITALIC, FLAG_SERIF, FLAG_MONO, FLAG_BOLD = 2, 4, 8, 16  # pymupdf TEXT_FONT
 # CJK font names (normalized: lowercase alphanumerics) → script of the optional fallback pack (manifest "cjk").
 _CJK_NAMES = {
     "kr": ("dotum", "gulim", "batang", "gungsuh", "malgun", "nanum", "haansoft", "hancom", "hymyeongjo", "hygothic",
-           "hygungso", "hyheadline", "applegothic", "applemyungjo", "undotum", "unbatang", "baekmuk"),
+           "hygungso", "hyheadline", "applegothic", "applemyungjo", "undotum", "unbatang", "baekmuk", "myeongjo", "myungjo"),
     "jp": ("msgothic", "mspgothic", "msuigothic", "msmincho", "mspmincho", "mincho", "meiryo", "yugothic", "hiragino",
-           "kozuka", "kozmin", "kozgo", "ipagothic", "ipaexgothic", "takao"),
+           "kozuka", "kozmin", "kozgo", "ipagothic", "ipaexgothic", "takao", "hiramin", "hirakaku", "hiramaru"),
     "sc": ("simsun", "simhei", "simkai", "kaiti", "fangsong", "songti", "heiti", "yahei", "pingfang", "stsong",
-           "stheiti", "stkaiti", "dengxian", "mingliu", "jhenghei"),
+           "stheiti", "stkaiti", "dengxian", "mingliu", "jhenghei", "adobesong", "adobeming", "dfkai", "biaukai"),
 }
-_NOTO_CJK = re.compile(r"noto(sans|serif)(cjk)?(kr|jp|sc|tc)")
+# Too short to match inside a name (Mingler, Songbird, Kaiser...): only the whole name, with weight words ("Song", "Ming-Light").
+_CJK_WHOLE = re.compile(r"(song|ming)(light|medium|regular|bold|std|pro|w\d)*")
+# Noto Sans (Mono) / Serif CJK and Source Han Sans / Serif: one family for every script, told apart by a suffix.
+_NOTO_CJK = re.compile(r"noto(sans|serif)(mono)?(cjk)?(kr|jp|sc|tc|hk)")
+_SOURCE_HAN = re.compile(r"sourcehan(sans|serif)(kr|jp|sc|tc|cn|hk|tw)")
+_SCRIPT_OF_SUFFIX = {"kr": "kr", "jp": "jp", "sc": "sc", "tc": "sc", "cn": "sc", "hk": "sc", "tw": "sc"}
 # Words of serif (Myeongjo / Mincho / Song) CJK designs; any other CJK font is matched with a gothic (sans) one.
 _CJK_SERIF = ("batang", "gungsuh", "myeongjo", "myungjo", "mincho", "kozmin", "song", "simsun", "ming", "kai",
-              "fangsong", "serif")
+              "fangsong", "serif", "hiramin")
 
 
 def style_key(bold: bool, italic: bool) -> str:
@@ -70,9 +75,13 @@ def cjk_style(name: str) -> tuple[str, str] | None:
     """(script, category) of the fallback for a CJK font name — script "kr" | "jp" | "sc" (Traditional Chinese
     fonts use "sc"), category "sans" | "serif" — or None when the name is not a known CJK font."""
     key = re.sub(r"[^a-z0-9]", "", base_font_name(name).lower())
-    noto = _NOTO_CJK.search(key)
-    script = ({"tc": "sc"}.get(noto.group(3), noto.group(3)) if noto else
-              next((s for s, words in _CJK_NAMES.items() if any(w in key for w in words)), None))
+    family = _NOTO_CJK.search(key) or _SOURCE_HAN.search(key)
+    if family:  # the family says the design; the script comes from the suffix
+        return _SCRIPT_OF_SUFFIX[family.group(family.lastindex)], "serif" if family.group(1) == "serif" else "sans"
+    if "sourcehan" in key:
+        return None  # Source Han without a script suffix: could be any
+    script = next((s for s, words in _CJK_NAMES.items() if any(w in key for w in words)), None)
+    script = script or ("sc" if _CJK_WHOLE.fullmatch(key) else None)
     if script is None:
         return None
     return script, "serif" if any(w in key for w in _CJK_SERIF) else "sans"

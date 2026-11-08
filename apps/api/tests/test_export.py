@@ -1,5 +1,8 @@
+import io
+
 import pymupdf
 import pytest
+from fontTools.ttLib import TTFont
 
 from tests.pdfs import make_pdf
 
@@ -196,3 +199,53 @@ def test_export_with_a_cjk_fallback_font_stays_small(tmp_path):
     out = pymupdf.open(stream=r.content, filetype="pdf")
     assert "한국어 텍스트" in out[0].get_text()
     assert len(r.content) < 100_000  # the fallback file is 4 MB
+
+
+def _export_with_korean(tmp_path, data: bytes) -> pymupdf.Document:
+    from fastapi.testclient import TestClient
+
+    from edith.main import create_app
+    from edith.settings import Settings
+    from tests.pdfs import fake_cjk_pack
+    settings = Settings(data_dir=tmp_path / "data", fonts_dir=fake_cjk_pack(tmp_path / "fonts"))
+    with TestClient(create_app(settings)) as c:
+        doc_id = c.post("/documents", files={"file": ("a.pdf", data, "application/pdf")}).json()["doc_id"]
+        r = c.post(f"/documents/{doc_id}/export", json={"ops": [text_add("한국어 텍스트", "Noto Sans KR")]})
+    assert r.status_code == 200, r.text
+    return pymupdf.open(stream=r.content, filetype="pdf")
+
+
+def _tinos_program(doc: pymupdf.Document) -> TTFont:
+    xref = next(x for x in range(1, doc.xref_length())
+                if doc.xref_get_key(x, "Type")[1] == "/Font" and "Tinos" in doc.xref_get_key(x, "BaseFont")[1])
+    return TTFont(io.BytesIO(doc.extract_font(xref)[3]))
+
+
+def test_subsetting_keeps_form_fonts_whole(tmp_path):
+    from tests.pdfs import make_dr_font_form_pdf
+    data = make_dr_font_form_pdf()
+    original = _tinos_program(pymupdf.open(stream=data, filetype="pdf"))
+    out = _export_with_korean(tmp_path, data)
+    kept = _tinos_program(out)
+    assert kept["maxp"].numGlyphs == original["maxp"].numGlyphs
+    assert "cmap" in kept and len(kept.getBestCmap()) == len(original.getBestCmap())
+    # Tinos stays whole (270 KB deflated); the 4 MB Korean fallback is subset to a few KB
+    assert len(out.tobytes(garbage=3, deflate=True)) < 400_000
+    assert "한국어 텍스트" in out[0].get_text() and "Nama:Budi" in out[0].get_text()
+
+
+def test_subsetting_still_shrinks_fonts_of_documents_without_a_form(tmp_path):
+    from tests.pdfs import make_dr_font_form_pdf
+    data = make_dr_font_form_pdf(form=False)
+    out = _export_with_korean(tmp_path, data)
+    assert len(_tinos_program(pymupdf.open(stream=data, filetype="pdf")).getGlyphOrder()) > 500
+    assert len(out.tobytes(garbage=3, deflate=True)) < 100_000
+    assert "Nama:Budi" in out[0].get_text()
+
+
+def test_export_keeps_the_unicode_of_invisible_characters(client):
+    text = "a\u200bb\u2060c"  # zero-width space and word joiner: glyphs without outlines
+    doc_id = new_doc(client, pages=1)
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [text_add(text, "Tinos")]})
+    out = pymupdf.open(stream=r.content, filetype="pdf")
+    assert text in out[0].get_text()
