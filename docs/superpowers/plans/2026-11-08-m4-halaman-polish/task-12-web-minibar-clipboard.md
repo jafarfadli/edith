@@ -1,8 +1,8 @@
 # Task 12: Selection mini-bar, clipboard, align, shortcuts
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 11 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 11 leaves, new files are complete.
 
-**Goal:** A floating bar over the selected object: Duplikat, Hapus, ⋯ (Salin, Tempel, Duplikat, six Ratakan-ke-halaman items, in screen orientation); Ctrl/Cmd+C/V/D; Ctrl/Cmd+Z/Shift+Z/Ctrl+Y inside a form field undo the document instead of the input (M3 backlog).
+**Goal:** A floating bar over the selected object: Duplikat, Hapus, ⋯ (Salin, Tempel, Duplikat, six Ratakan-ke-halaman items, in screen orientation); Ctrl/Cmd+C/V/D (internal clipboard); Ctrl/Cmd+Z/Shift+Z/Ctrl+Y inside a form field undo the document instead of the input (M3 backlog).
 
 **Files:**
 - Modify: `apps/web/src/components/editor/Editor.tsx`

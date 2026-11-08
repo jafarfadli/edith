@@ -1,8 +1,8 @@
 # Task 5: Bake crop last
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 4 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 4 leaves, new files are complete.
 
-**Goal:** A layout page's `crop` (page coordinates) becomes its CropBox after everything else (spec Urutan bake 7): `set_cropbox(crop + original CropBox origin)` in MediaBox coordinates, then the rotation. Content does not move.
+**Goal:** A layout page's `crop` (page coordinates) becomes its CropBox after everything else (spec Urutan bake 7): `set_cropbox(crop + original CropBox origin)` in MediaBox coordinates, then the rotation. Content does not move. (Task 14 removes what the crop hides.)
 
 **Files:**
 - Modify: `apps/api/edith/bake/__init__.py`

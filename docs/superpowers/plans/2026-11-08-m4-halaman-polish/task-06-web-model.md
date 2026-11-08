@@ -1,6 +1,6 @@
 # Task 6: Web model: crop-aware coords, shared geometry, object helpers
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 5 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 5 leaves, new files are complete.
 
 **Goal:** Pure web foundations: `coords.ts` understands a page crop, `geometry.ts` mirrors `bake/geometry.py`, `objects.ts` knows opacity/rotation/points/copy/align, `ToolStyle` gets `dash` and `opacity`, `Tool` gets polygon/polyline/cloud.
 

@@ -1,6 +1,6 @@
 # Task 9: Kelola Halaman modal
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 8 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 8 leaves, new files are complete.
 
 **Goal:** Toolbar button "Kelola Halaman" opens a modal working on a copy of the document: multi-select (click, Shift+click range, Pilih semua/Batal pilih), Putar kiri/kanan, Duplikat, Pindah ◀/▶ (block move), Hapus, drag to reorder, Halaman kosong, Impor PDF; Simpan applies everything as one undo step, Batal discards.
 

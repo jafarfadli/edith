@@ -1,6 +1,6 @@
 # Task 8: Render imported and cropped pages; insert menu; import flow
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 7 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 7 leaves, new files are complete.
 
 **Goal:** Pages render from a per-document pdf.js store (imports load on demand); cropped pages show only the crop (whole page rendered, shifted and clipped); the Konva group uses the crop offset; the "+" between thumbnails offers Halaman kosong / Impor PDF; the thumbnail menu gains Duplikat; restored drafts re-fetch imports; placement of stamps/signatures/images uses the visible area. Also fixes `scrollToPage` (it found the thumbnail, not the page — found by the E2E).
 

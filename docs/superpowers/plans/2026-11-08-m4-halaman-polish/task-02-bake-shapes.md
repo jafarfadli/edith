@@ -1,6 +1,6 @@
 # Task 2: Bake polygon, polyline, cloud and dashed strokes
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 1 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 1 leaves, new files are complete.
 
 **Goal:** `shape.add` bakes the three new kinds and the three dash styles with geometry shared with the web (`bake/geometry.py` ↔ `lib/geometry.ts`).
 
@@ -13,7 +13,7 @@
 - Consumes: Task 1 `ShapeAdd.kind/dash/points`.
 - Produces:
 - `edith/bake/geometry.py`: `dash_pattern(dash, width) -> ([on, off], cap) | None`, `dashes_arg(pattern) -> str`, `signed_area2(points)`, `cloud_beziers(points, width) -> list[(p0, c1, c2, p3)]`, constants `KAPPA, CLOUD_ARC=8, CLOUD_ARC_PER_WIDTH=2, BUTT=0, ROUND=1`.
-- Contract (pinned by both suites): w' = max(width, 0.5); dashed = [3w', 2w'] butt caps; dotted = [0, 2w'] round caps; cloud: per edge n = max(1, floor(len/arc + 0.5)), arc = 8 + 2·width, one half circle per chord bulging out of the polygon (outward normal from the shoelace sign), two cubic Béziers each (KAPPA = 0.5522847498). Floor+0.5 on both sides (Python's round() is banker's rounding).
+- Contract pinned by both suites (see README Global Constraints).
 
 - [ ] **Step 1: Write the failing tests**
 

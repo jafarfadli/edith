@@ -1,8 +1,8 @@
 # Task 7: Web page operations, imports registry, crop state, compaction
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 6 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 6 leaves, new files are complete.
 
-**Goal:** Pure page operations (`lib/pages.ts`) used by the page menu and the Manage Pages modal; store actions for duplicate/import/crop/replace; imported pages get geometry from `info.imports`; drafts remember imports; original text and character data stay main-document-only; `compact()` sends crops and drops `form.set` of fields whose pages are gone (M3 backlog).
+**Goal:** Pure page operations (`lib/pages.ts`) used by the page menu and the Manage Pages modal; store actions for duplicate/import/crop/replace; imported pages get geometry from `info.imports`; drafts remember imports; `compact()` sends crops and drops `form.set` of fields whose pages are gone (M3 backlog). Original text, character data and form inputs stay main-document-only here; Tasks 16–17 extend them to imported PDFs.
 
 **Files:**
 - Modify: `apps/web/src/components/editor/Header.tsx`
@@ -30,7 +30,6 @@
 - `DocInfo.imports?: Record<docId, StructurePage[]>`; `PageEntry.crop?: CropBox | null`; `EditorDoc.imports?: string[]`; `sourcePage(entry, info)`; `pageGeom` adds `crop`.
 - Store: `duplicatePage(key) -> key|null`, `addImport(docId, pages)`, `insertImportAfter(key|null, docId) -> keys`, `setCrop(keys, crop|null)`, `replaceDoc(next)` (one undo step each).
 - `compact(doc, info?)`; `restoreDraft` keeps imported doc ids; `resolveImports(doc, structure) -> {doc|null, imports, missing}`.
-- `paragraphsOf()` returns [] for pages of other documents; markup chars, the scanned-page hint and `FormLayer` likewise check `src.doc === info.docId`.
 
 - [ ] **Step 1: Write the failing tests**
 

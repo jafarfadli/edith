@@ -1,8 +1,8 @@
 # Task 4: Bake pages of imported PDFs
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 3 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 3 leaves, new files are complete.
 
-**Goal:** `pages.layout` may reference other uploaded documents (`src.doc` ≠ the edited one): they are appended whole once each with `insert_pdf` (annotations, links and form fields kept; colliding field names renamed by PyMuPDF), then selected/duplicated like main pages. Expired imports → 410 with `doc_id`.
+**Goal:** `pages.layout` may reference other uploaded documents (`src.doc` ≠ the edited one): they are appended whole once each with `insert_pdf` (annotations, links and form fields kept; colliding field names renamed by PyMuPDF), then selected/duplicated like main pages. Expired imports → 410 with `doc_id`. (Task 15 adds their text and form values.)
 
 **Files:**
 - Modify: `apps/api/edith/bake/context.py`
@@ -16,7 +16,7 @@
 - Produces:
 - `BakeContext.load_source: Callable[[str], bytes] | None` (export/render routes pass `_read_source`).
 - `build_pages` inserts imports before `detach_acroform` (an import may bring the first form). Unknown doc → `invalid_op` (op_index of the layout); `DocExpired(doc_id=…)` → 410 `{"error": {"code": "doc_expired", "doc_id": …}}`.
-- `text.edit` on an imported page stays `invalid_op` (SourcePages only maps the main document).
+- Until Task 15, `text.edit` on an imported page is `invalid_op` (SourcePages only maps the main document).
 
 - [ ] **Step 1: Write the failing tests**
 

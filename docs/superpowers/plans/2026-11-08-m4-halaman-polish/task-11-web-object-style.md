@@ -1,6 +1,6 @@
 # Task 11: Rotation handle, opacity, dash and polygon/polyline/cloud tools
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 10 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 10 leaves, new files are complete.
 
 **Goal:** Objects render with their opacity and rotation (Konva group turned around the rect centre — the same formula as the bake), the Transformer gets a rotation handle (snaps every 45°), point objects are rotated/resized by transforming their points; Bentuk▾ gains Poligon, Garis bersambung, Awan (click vertices; same-spot double-click, Enter or a click on the first vertex finishes; Esc cancels); the properties bar gets Gaya garis and Opasitas; the rich-text editor turns with a rotated text box; unfilled rects/ellipses get an 8 pt hit stroke.
 
@@ -480,7 +480,7 @@ Modify `apps/web/src/lib/strings.ts`:
 - [ ] **Step 2: Run the suites**
 
 Run: `npm test -w apps/web && npx tsc --noEmit -p apps/web && npm run lint -w apps/web`
-Expected: web 264 passed; tsc/eslint clean (behaviour covered by Task 14's E2E)
+Expected: web 264 passed; tsc/eslint clean (behaviour covered by Task 18's E2E)
 
 - [ ] **Step 3: Check in the browser**
 

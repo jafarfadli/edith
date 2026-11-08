@@ -1,6 +1,6 @@
 # Task 1: Ops schema: opacity, rotation, new shapes, dash, crop
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 0 (main) leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 0 (main) leaves, new files are complete.
 
 **Goal:** Every drawn op gets `opacity`; rect-placed drawn ops get `rotation`; `shape.add` gets polygon/polyline/cloud and `dash`; `pages.layout` pages get `crop`. Types regenerated; web stays green (all new fields optional).
 

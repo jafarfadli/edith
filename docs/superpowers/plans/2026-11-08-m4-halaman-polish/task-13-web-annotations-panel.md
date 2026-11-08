@@ -1,6 +1,6 @@
 # Task 13: Anotasi panel
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 12 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 12 leaves, new files are complete.
 
 **Goal:** Sidebar tabs Halaman | Anotasi (n). The panel lists every object grouped by page in page order (icon, kind, snippet); a click selects it and scrolls to its page; ✕ deletes it.
 

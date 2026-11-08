@@ -1,6 +1,6 @@
 # Task 3: Bake rotation and opacity of drawn objects
 
-> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 2 leaves, new files are complete.
+> Part of the M4 plan — read `README.md` in this folder first (Global Constraints, Decisions, Owner decisions). Code below was run in a throwaway worktree; modified files are unified diffs against the state Task 2 leaves, new files are complete.
 
 **Goal:** Any drawn op with `opacity < 1` or `rotation != 0` is drawn by its normal handler, then the content streams it added are merged and wrapped in `q [/GS gs] [cm] … Q` — one mechanism for shapes, images, signatures, stamps, symbols, ink and text.
 
