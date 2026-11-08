@@ -29,6 +29,15 @@ TAB_GAP = "   "      # a line with this many spaces in a row is laid out with sp
 LEADER = re.compile(r"(?:\.\s?){5,}|…{2,}|_{4,}")  # so is a dot leader or a blank to fill in ("Nama : ……", "____")
 ROOM_EM = 0.5        # a line ended early when the next line's first word fits in its own room with this much to spare …
 ROOM_SHARE = 0.25    # … and its room is this share of the paragraph's measure (a gutter alone is not room)
+# A list item starts with a bullet or a number/letter marker ("1.", "2)", "a.", "(i)", "IV.") and a gap.
+MARKER = (r"(?:[•‣▪■□○●◦※►▶➢✓√·∙]|\(?\d{1,2}(?:\.\d{1,2})*[.)]|\(?[a-z][.)]|\([A-Za-z]\)|[A-Z]\)"
+          r"|\(?[ivx]{1,4}[.)]|[IVX]{1,4}\.)")
+ITEM = re.compile(MARKER + r"(?=\s|$)")
+# What may stand left of a tab stop: a marker, or a section number ("4.1", "Bab IV", "Chapter 3").
+TAB_LEFT = re.compile(MARKER + r"|\d{1,2}(?:\.\d{1,2})*|\w+ (?:[IVX]{1,4}|\d{1,2}(?:\.\d{1,2})*)")
+TAB_EM = 0.6         # a tab gap is at least this wide (ink to ink) …
+TAB_WORD = 2.0       # … and this many times the line's usual word gap (under WIDE_EM); WIDE_EM wide without one
+WIDE_EM = 0.8
 
 FontResolver = Callable[[dict], dict]  # pymupdf span → FontRef JSON
 SpanCheck = Callable[[dict], bool]     # pymupdf span → True when the paragraph holding it can't be edited
@@ -50,6 +59,8 @@ class _Line:
     style: tuple = ()        # (size, bold, color) of the span style with the most characters
     uniform: bool = True     # that style covers nearly every character (no inline bold phrase or link in the line)
     tabular: bool = False    # spaced out with runs of spaces (see TAB_GAP): never part of a wrapped paragraph
+    gaps: tuple = ()         # word gaps (ink to ink between words), in ems
+    body_x: float | None = None  # a list item's text: x of its first character after the marker
 
     @property
     def text(self) -> str:
@@ -125,19 +136,48 @@ def _build(spans: list[dict], horizontal: bool, bbox: tuple | None = None) -> _L
     x0, y0, x1, y1 = bbox
     style, uniform = _style(spans)
     text = "".join(c["c"] for c in chars).strip()
+    sizes = [s["size"] for s in spans for _ in s["chars"]]
+    gaps = tuple(g / sizes[a] for a, b, g in _word_gaps(chars))
+    body_x = None
+    marker = ITEM.match(text)
+    if marker:
+        lead = len("".join(c["c"] for c in chars)) - len("".join(c["c"] for c in chars).lstrip())
+        body = [c for c in chars[lead + marker.end():] if not c["c"].isspace()]
+        body_x = body[0]["bbox"][0] if body else None
     return _Line(spans=spans, x0=x0, y0=y0, x1=x1, y1=y1, baseline=main["origin"][1], size=main["size"],
                  horizontal=horizontal, ink_x0=ink[0]["bbox"][0], ink_x1=ink[-1]["bbox"][2],
                  first_word=_first_word(chars), style=style, uniform=uniform,
-                 tabular=TAB_GAP in text or LEADER.search(text) is not None)
+                 tabular=TAB_GAP in text or LEADER.search(text) is not None, gaps=gaps, body_x=body_x)
+
+
+def _word_gaps(chars: list[dict]) -> list[tuple[int, int, float]]:
+    """(a, b, width) for every pair of ink characters a < b with only whitespace between them."""
+    ink = [i for i, c in enumerate(chars) if not c["c"].isspace()]
+    return [(a, b, chars[b]["bbox"][0] - chars[a]["bbox"][2]) for a, b in zip(ink, ink[1:]) if b > a + 1]
+
+
+def _tab_gap(gap: float, gaps: list[float], left: str, right: str) -> bool:
+    """A gap (ems) between `left` and `right` on one line is a tab stop, not a space: wide, and wider than the
+    line's other word gaps (a justified line stretches them all alike), after a list marker or section number,
+    or on either side of a colon ("Nama⇥:⇥……", ": value"). Not inside brackets ("[   ]")."""
+    left, right = left.strip(), right.strip()
+    if not left or not right or left[-1] in "([" or right[0] in ")]":
+        return False
+    usual = [g for g in gaps if g < WIDE_EM]
+    if gap < (max(TAB_EM, TAB_WORD * median(usual)) if usual else WIDE_EM):
+        return False
+    return TAB_LEFT.fullmatch(left) is not None or left.endswith(":") or right.startswith(":")
 
 
 def _piece(spans: list[dict], lo: int, hi: int) -> list[dict]:
-    """Characters lo … hi-1 (over all spans) as spans."""
+    """Characters lo … hi-1 (over all spans) as spans; a synthetic space (_join) inside the range stays."""
     out, k = [], 0
     for s in spans:
         n = len(s["chars"])
         a, b = max(lo - k, 0), min(hi - k, n)
-        if a < b:
+        if n == 0 and lo < k < hi:
+            out.append(s)
+        elif a < b:
             chars = s["chars"][a:b]
             out.append(dict(s, chars=chars, text="".join(c["c"] for c in chars)))
         k += n
@@ -145,14 +185,20 @@ def _piece(spans: list[dict], lo: int, hi: int) -> list[dict]:
 
 
 def _cuts(spans: list[dict], rules: Rules) -> list[tuple[int, int]]:
-    """(lo, hi) character ranges of a raw line cut where a vertical rule passes between two of its characters:
-    MuPDF sometimes puts the text of two table cells in one line ("23/5/2026 Pengenalan")."""
+    """(lo, hi) character ranges of a raw line cut where a vertical rule passes between two of its characters
+    (MuPDF sometimes puts the text of two table cells in one line: "23/5/2026 Pengenalan") or at a tab stop
+    (_tab_gap: "1.⇥Pada saat …", "Nama⇥:⇥……"). Each piece keeps its own position, so the gap survives an edit
+    and a list item's text keeps its hanging indent."""
     chars = [c for s in spans for c in s["chars"]]
+    sizes = [s["size"] for s in spans for _ in s["chars"]]
     ink = [i for i, c in enumerate(chars) if not c["c"].isspace()]
     y0, y1 = min(s["bbox"][1] for s in spans), max(s["bbox"][3] for s in spans)
+    gaps = {a: g / sizes[a] for a, _b, g in _word_gaps(chars)}
+    text = "".join(c["c"] for c in chars)
     out, lo = [], 0
     for a, b in zip(ink, ink[1:]):
-        if rules.v_between(chars[a]["bbox"][2], chars[b]["bbox"][0], y0, y1):
+        tab = a in gaps and _tab_gap(gaps[a], [g for k, g in gaps.items() if k != a], text[lo:a + 1], text[b:])
+        if tab or rules.v_between(chars[a]["bbox"][2], chars[b]["bbox"][0], y0, y1):
             out.append((lo, a + 1))
             lo = b
     out.append((lo, len(chars)))
@@ -189,9 +235,11 @@ def _ruled(a: _Line, b: _Line, rules: Rules) -> bool:
 
 
 def _same_row(a: _Line, b: _Line, rules: Rules) -> bool:
+    gap = (b.ink_x0 - a.ink_x1) / max(a.size, b.size)
     return (a.horizontal and b.horizontal and abs(a.baseline - b.baseline) <= 0.5
             and -0.5 <= b.x0 - a.x1 <= JOIN_EM * max(a.size, b.size)
-            and not rules.v_between(a.ink_x1, b.ink_x0, min(a.y0, b.y0), max(a.y1, b.y1)))
+            and not rules.v_between(a.ink_x1, b.ink_x0, min(a.y0, b.y0), max(a.y1, b.y1))
+            and not _tab_gap(gap, list(a.gaps + b.gaps), a.text, b.text))
 
 
 def _join(a: _Line, b: _Line) -> _Line:
@@ -203,7 +251,9 @@ def _join(a: _Line, b: _Line) -> _Line:
     return _Line(spans=spans, x0=min(a.x0, b.x0), y0=min(a.y0, b.y0), x1=max(a.x1, b.x1), y1=max(a.y1, b.y1),
                  baseline=a.baseline, size=max(a.size, b.size), horizontal=True, ink_x0=a.ink_x0,
                  ink_x1=b.ink_x1, first_word=a.first_word, style=style, uniform=uniform,
-                 tabular=a.tabular or b.tabular)
+                 tabular=a.tabular or b.tabular,
+                 gaps=a.gaps + ((b.ink_x0 - a.ink_x1) / max(a.size, b.size),) + b.gaps,
+                 body_x=a.body_x if a.body_x is not None or not ITEM.fullmatch(a.text.strip()) else b.ink_x0)
 
 
 def _spacing(lines: list[_Line]) -> float | None:
@@ -237,12 +287,18 @@ def _restyled(a: _Line, b: _Line) -> bool:
 
 
 def _bulleted(line: _Line) -> bool:
-    return line.text.lstrip()[:1] in BULLETS
+    """`line` starts a list item: a bullet, or a number/letter marker followed by a gap (see ITEM)."""
+    return line.text.lstrip()[:1] in BULLETS or ITEM.match(line.text.lstrip()) is not None
 
 
-def _ends_item(prev: _Line, line: _Line) -> bool:
-    """`line` does not continue the list item `prev` starts: continuation lines hang past the bullet."""
-    return _bulleted(prev) and line.ink_x0 < prev.ink_x0 + HANG_EM * prev.size
+def _ends_item(item: _Line, line: _Line) -> bool:
+    """`line` does not continue the list item `item` starts: continuation lines hang past the marker."""
+    return line.ink_x0 < item.ink_x0 + HANG_EM * item.size
+
+
+def _hangs(item: _Line, line: _Line) -> bool:
+    """`line` starts at the item's text, right of its marker: a continuation line, however wide."""
+    return item.body_x is not None and abs(line.ink_x0 - item.body_x) <= 1.0
 
 
 def _apart(a: _Line, b: _Line) -> bool:
@@ -262,17 +318,18 @@ def _split(lines: list[_Line], rules: Rules, room_end: "RoomEnd | None" = None) 
             groups.append([line])
             continue
         prev = groups[-1][-1]
+        item = groups[-1][0] if _bulleted(groups[-1][0]) else None
         gap = line.baseline - prev.baseline
         new = (
             not line.horizontal or not prev.horizontal
             or gap <= 0
             or (spacing is not None and gap > GAP_FACTOR * spacing)
             or _restyled(prev, line)
-            or _bulleted(line) or _ends_item(prev, line)
+            or _bulleted(line) or (item is not None and _ends_item(item, line))
             or prev.tabular or line.tabular
             or _ruled(prev, line, rules)
             or _apart(prev, line)
-            or (not right_aligned
+            or (not right_aligned and not (item is not None and _hangs(item, line))
                 and line.ink_x0 > left + INDENT_EM * line.size         # indented first line …
                 and line.ink_x0 > prev.ink_x0 + INDENT_EM * line.size  # … more than the line before …
                 and line.x1 >= prev.x1 - INDENT_EM * line.size)        # … whose right edge doesn't move in (not centered)
@@ -281,7 +338,40 @@ def _split(lines: list[_Line], rules: Rules, room_end: "RoomEnd | None" = None) 
             groups.append([line])
         else:
             groups[-1].append(line)
-    return [part for group in groups for part in _hard_breaks(group, room_end)]
+    return _hung([part for group in groups for part in _hard_breaks(group, room_end)])
+
+
+def _hung(groups: list[list[_Line]]) -> list[list[_Line]]:
+    """A list item whose continuation lines hang right of its marker becomes two paragraphs, the marker and the
+    text: each keeps its left edge when edited (a paragraph has one). Hancom hangs the lines a little left of
+    the text; the text's first line then keeps that small indent."""
+    out = []
+    for group in groups:
+        first, rest = group[0], group[1:]
+        if (rest and _bulleted(first) and first.body_x is not None and _spread([line.ink_x0 for line in rest]) <= 1.0
+                and first.ink_x0 + HANG_EM * first.size <= rest[0].ink_x0 <= first.body_x + 1.0):
+            parts = _cut_marker(first)
+            if parts:
+                out += [[parts[0]], [parts[1], *group[1:]]]
+                continue
+        out.append(group)
+    return out
+
+
+def _cut_marker(line: _Line) -> tuple[_Line, _Line] | None:
+    chars = [c for s in line.spans for c in s["chars"]]
+    text = "".join(c["c"] for c in chars)
+    lead = len(text) - len(text.lstrip())
+    marker = ITEM.match(text[lead:])
+    if not marker:
+        return None
+    end = lead + marker.end()
+    start = next((i for i in range(end, len(chars)) if not chars[i]["c"].isspace()), None)
+    if start is None:
+        return None
+    head = _build(_piece(line.spans, 0, end), line.horizontal)
+    body = _build(_piece(line.spans, start, len(chars)), line.horizontal)
+    return (head, body) if head and body else None
 
 
 RoomEnd = Callable[[_Line, float], float]  # (line, its paragraph's left edge) → x where the line's room ends

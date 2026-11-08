@@ -359,6 +359,46 @@ def make_rows_pdf() -> bytes:
     return doc.tobytes(garbage=3, deflate=True)
 
 
+LIST_ITEMS = [  # (marker, wrapped text): the first item is tabbed, the second has a plain space after "2."
+    ("1.", ["Pada saat saya mengajukan bantuan ini, saya masih berstatus aktif dan belum dinyatakan lulus",
+            "pada sidang yudisium dan pelaksanaan kegiatan paling lambat satu bulan setelah dinyatakan lulus",
+            "dalam sidang tersebut."]),
+    ("2.", ["Akan mengikuti kegiatan tersebut dengan sungguh-sungguh sesuai dengan jadwal yang telah",
+            "ditetapkan dan berusaha meraih hasil terbaik."]),
+]
+
+
+def make_lists_pdf() -> bytes:
+    """Numbered items, tab stops and hanging indents (Helvetica 11, 13 pt leading): two numbered items whose
+    continuation lines hang at the item's text, full width (item 1 has a tab after its marker, item 2 one space);
+    a form row "Nama Mahasiswa⇥:⇥……" written as one text run with tab-wide spaces; table-of-contents rows whose
+    number and title are separate runs a tab apart ("Bab I⇥Pendahuluan", "4.2⇥Rumusan Masalah"); a prose line
+    with a colon and ordinary spaces."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    body = 90.0
+    y = 100.0
+    for i, (marker, lines) in enumerate(LIST_ITEMS):
+        if i == 0:
+            page.insert_text((72, y), marker, fontname="helv", fontsize=11)
+            page.insert_text((body, y), lines[0], fontname="helv", fontsize=11)
+        else:
+            page.insert_text((72, y), f"{marker} {lines[0]}", fontname="helv", fontsize=11)
+            body2 = 72 + pymupdf.get_text_length(f"{marker} ", fontname="helv", fontsize=11)
+        for line in lines[1:]:
+            y += 13
+            page.insert_text((body if i == 0 else body2, y), line, fontname="helv", fontsize=11)
+        y += 13
+    row = "Nama Mahasiswa" + " " * 5 + ":" + " " * 4 + "." * 40
+    page.insert_text((72, 200), row, fontname="helv", fontsize=11)
+    for i, (num, title) in enumerate([("Bab I", "Pendahuluan"), ("4.2", "Rumusan Masalah")]):
+        page.insert_text((72, 240 + 14 * i), num, fontname="helv", fontsize=11)
+        page.insert_text((130, 240 + 14 * i), title, fontname="helv", fontsize=11)
+    page.insert_text((72, 300), "Dokumen yang diperlukan adalah sebagai berikut: surat pengantar dan formulir.",
+                     fontname="helv", fontsize=11)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
 CID_TEXT = "신청서 작성 방법 Visa Form"
 
 

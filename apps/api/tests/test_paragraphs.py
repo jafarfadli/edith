@@ -204,6 +204,34 @@ def test_rows_and_cells_never_join_one_paragraph():
     assert got[12:] == ROWS_TOC
 
 
+def test_numbered_items_tabs_and_hanging_indents():
+    """M5b RC5: a numbered item continues on full-width lines at its text (they are not first-line indents); its
+    marker becomes a paragraph of its own, so the text keeps its hanging indent and the tab after the marker when
+    edited. Tab stops after a section number or around a colon split the row; ordinary spaces never do."""
+    from tests.pdfs import LIST_ITEMS, make_lists_pdf
+    ps = paragraphs(make_lists_pdf())
+    (m1, t1), (m2, t2) = LIST_ITEMS
+    assert [text(p) for p in ps] == [
+        m1, " ".join(t1), m2, " ".join(t2),
+        "Nama Mahasiswa", ":", "." * 40,
+        "Bab I", "Pendahuluan", "4.2", "Rumusan Masalah",
+        "Dokumen yang diperlukan adalah sebagai berikut: surat pengantar dan formulir.",
+    ]
+    assert ps[1]["rect"]["x"] == pytest.approx(90, abs=0.01)  # the text's own left edge: its hang survives
+    assert ps[3]["rect"]["x"] == pytest.approx(ps[2]["rect"]["x"] + ps[2]["rect"]["w"] + 3.06, abs=0.05)
+
+
+def test_list_markers():
+    from edith.paragraphs import ITEM, TAB_LEFT
+    for marker in ["1.", "12)", "a.", "(b)", "iv.", "(ii)", "IV.", "B)", "•", "1.2.", "‣"]:
+        assert ITEM.fullmatch(marker), marker
+    for word in ["A.", "e.g.", "2026", "1.1", "Ib."]:  # initials, abbreviations, numbers: not markers
+        assert not ITEM.fullmatch(word), word
+    for left in ["4.1", "Bab IV", "Chapter 3", "1.", "•"]:
+        assert TAB_LEFT.fullmatch(left), left
+    assert not TAB_LEFT.fullmatch("Nama Mahasiswa")
+
+
 def test_first_word_of_cjk_is_one_character():
     from edith.paragraphs import _first_word
 
