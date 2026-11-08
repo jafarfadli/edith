@@ -150,3 +150,10 @@ export function setCrop(doc: EditorDoc, keys: readonly string[], crop: CropBox |
   });
   return changed ? { ...doc, pages } : doc;
 }
+
+/** Where pages inserted in the Manage Pages modal go: after the last selected page, else at the end. */
+export function insertIndex(doc: EditorDoc, selected: ReadonlySet<string>): number {
+  let last = -1;
+  doc.pages.forEach((p, i) => { if (selected.has(p.pageKey)) last = i; });
+  return last < 0 ? doc.pages.length : last + 1;
+}

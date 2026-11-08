@@ -8,6 +8,7 @@ import { fitImage } from "@/lib/image";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore, useEditor, type Tool } from "@/store/editor";
 import { SignatureModal } from "./marks/SignatureModal";
+import { ManagePagesModal } from "./pages/ManagePagesModal";
 import { StampPicker } from "./marks/StampPicker";
 import { currentPage, placeObject } from "./placement";
 import { SplitButton } from "./SplitButton";
@@ -32,6 +33,7 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
   const file = useRef<HTMLInputElement>(null);
   const [stampOpen, setStampOpen] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
+  const [pagesOpen, setPagesOpen] = useState(false);
   const s = editorStore.getState();
   const pick = (x: Tool) => s.setTool(x);
 
@@ -87,6 +89,11 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
       {signatureOpen && <SignatureModal onClose={() => setSignatureOpen(false)} onNotice={onNotice} />}
       <ToolButton tool="note" label={t.annot.note} icon="🗒" active={tool} />
       <ToolButton tool="link" label={t.annot.link} icon="🔗" active={tool} />
+      <div className="flex-1" />
+      <button aria-label={t.pages.manage} title={t.pages.manage} onClick={() => setPagesOpen(true)} className="flex h-9 items-center gap-1 rounded-md px-2 text-sm hover:bg-bg">
+        <span aria-hidden>▦</span><span className="hidden lg:inline">{t.pages.manage}</span>
+      </button>
+      {pagesOpen && <ManagePagesModal onClose={() => setPagesOpen(false)} />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
-import { blankSizeLike, clampCrop, deletePages, duplicatePages, importPages, movePage, rotatePages, setCrop, shiftPages } from "@/lib/pages";
+import { blankSizeLike, clampCrop, deletePages, duplicatePages, importPages, insertIndex, movePage, rotatePages, setCrop, shiftPages } from "@/lib/pages";
 import type { DocInfo, EditorDoc, PageEntry } from "@/store/editor";
 
 const D = "D".repeat(22), I = "I".repeat(22);
@@ -79,5 +79,12 @@ describe("page operations", () => {
     expect(cleared.pages[1].crop).toEqual(crop);
     const same = doc();
     expect(setCrop(same, ["o0"], null, info)).toBe(same);
+  });
+});
+
+describe("insertIndex", () => {
+  it("is after the last selected page, else the end", () => {
+    expect(insertIndex(doc(), new Set(["o0", "o1"]))).toBe(2);
+    expect(insertIndex(doc(), new Set())).toBe(3);
   });
 });
