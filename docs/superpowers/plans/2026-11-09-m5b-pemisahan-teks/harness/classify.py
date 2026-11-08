@@ -90,6 +90,9 @@ def main():
         moving = {k: v for k, v in r["tags"].items() if k != "FONT_SUB"}
         r["primary"] = max(moving, key=moving.get) if moving and (r["max_disp"] or 0) > 0.5 else None
     (OUT / "classified.json").write_text(json.dumps(R, indent=1, ensure_ascii=False))
+    if not R:  # EDIT_MODE=identity: the UI sends nothing for an unchanged paragraph
+        print("no paragraph exported:", sum(1 for r in rows if r.get("skipped")), "skipped as unchanged")
+        return
 
     # Per-PDF summary.
     by = collections.defaultdict(list)
