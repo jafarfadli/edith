@@ -1,5 +1,6 @@
 "use client";
 
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Ban, Bold, Italic, Strikethrough, TriangleAlert, Underline } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import type { TextAdd } from "@edith/ops";
@@ -11,6 +12,8 @@ import { t } from "@/lib/strings";
 import { boxFonts, relayout, withStyle, type BoxPatch } from "@/lib/textbox";
 import { editorStore, useEditor, type ToolStyle } from "@/store/editor";
 import { textStore, useText } from "@/store/text";
+import { ICON, ICON_SM } from "../../ui/icon";
+import { FIELD, toggle } from "../../ui/styles";
 import { ColorField } from "../ColorField";
 import { useOverflow } from "./useOverflow";
 import { session, textEditStore } from "./textEdit";
@@ -62,7 +65,7 @@ function applyToSession(patch: BoxPatch) {
 }
 
 const ALIGNS = ["left", "center", "right", "justify"] as const;
-const ALIGN_ICON = { left: "⇤", center: "↔", right: "⇥", justify: "☰" } as const;
+const ALIGN_ICON = { left: AlignLeft, center: AlignCenter, right: AlignRight, justify: AlignJustify } as const;
 
 function toolAttrs(s: ToolStyle): RunAttrs {
   return { font: { kind: "bundled", family: s.fontFamily, bold: s.bold, italic: s.italic }, size: s.fontSize, color: s.color, bgColor: null, underline: false, strike: false };
@@ -79,7 +82,7 @@ function SizeField({ value, onChange }: { value: number; onChange: (v: number) =
         if (e.target.value !== "" && v >= 4 && v <= 200) onChange(v);
       }}
       onBlur={() => setDraft(null)}
-      className="w-16 rounded border border-line px-1 py-1" />
+      className={`${FIELD} w-16 pr-1 tabular-nums`} />
   );
 }
 
@@ -114,37 +117,40 @@ export function TextProps() {
     else void applyToSelected(patch);
   }
 
-  const toggle = (on: boolean) => `h-8 w-8 rounded-md ${on ? "bg-accent/10 text-accent" : "hover:bg-bg"}`;
   const alignLabel = { left: t.editor.alignLeft, center: t.editor.alignCenter, right: t.editor.alignRight, justify: t.text.alignJustify };
   const original = fs.original ? fonts[fs.original] : undefined;
   return (
     <div
       data-text-props
-      className="flex flex-wrap items-center gap-2"
+      className="flex items-center gap-1.5"
       // Keep focus in the rich editor for buttons (a select/input takes focus; the session stays open).
       onMouseDown={(e) => { const tag = (e.target as HTMLElement).tagName; if (tag !== "SELECT" && tag !== "INPUT") e.preventDefault(); }}
     >
       <select aria-label={t.editor.font} value={original ? `orig:${original.ref}` : fs.family}
         onChange={(e) => { if (!e.target.value.startsWith("orig:")) set({ family: e.target.value }); }}
-        className="max-w-40 rounded border border-line px-1 py-1">
+        className={`${FIELD} max-w-44 pr-1`}>
         {original && <option value={`orig:${original.ref}`}>{t.text.originalFont(original.name)}</option>}
         {families.map((f) => <option key={f} value={f}>{f}</option>)}
       </select>
       <SizeField value={attrs.size} onChange={(v) => set({ size: v })} />
-      <button type="button" aria-label={t.editor.bold} aria-pressed={fs.bold} className={`${toggle(fs.bold)} font-bold`} onClick={() => set({ bold: !fs.bold })}>B</button>
-      <button type="button" aria-label={t.editor.italic} aria-pressed={fs.italic} className={`${toggle(fs.italic)} italic`} onClick={() => set({ italic: !fs.italic })}>I</button>
-      <button type="button" aria-label={t.text.underline} aria-pressed={attrs.underline} className={`${toggle(attrs.underline)} underline`} onClick={() => set({ underline: !attrs.underline })}>U</button>
-      <button type="button" aria-label={t.text.strike} aria-pressed={attrs.strike} className={`${toggle(attrs.strike)} line-through`} onClick={() => set({ strike: !attrs.strike })}>S</button>
-      <ColorField label={t.editor.color} value={attrs.color} onChange={(v) => set({ color: v })} />
-      <ColorField label={t.text.background} value={attrs.bgColor ?? "#ffff00"} onChange={(v) => set({ bgColor: v })} />
+      <button type="button" aria-label={t.editor.bold} aria-pressed={fs.bold} className={toggle(fs.bold)} onClick={() => set({ bold: !fs.bold })}><Bold {...ICON} /></button>
+      <button type="button" aria-label={t.editor.italic} aria-pressed={fs.italic} className={toggle(fs.italic)} onClick={() => set({ italic: !fs.italic })}><Italic {...ICON} /></button>
+      <button type="button" aria-label={t.text.underline} aria-pressed={attrs.underline} className={toggle(attrs.underline)} onClick={() => set({ underline: !attrs.underline })}><Underline {...ICON} /></button>
+      <button type="button" aria-label={t.text.strike} aria-pressed={attrs.strike} className={toggle(attrs.strike)} onClick={() => set({ strike: !attrs.strike })}><Strikethrough {...ICON} /></button>
+      <ColorField textProps label={t.editor.color} value={attrs.color} onChange={(v) => set({ color: v })} />
+      <ColorField textProps label={t.text.background} value={attrs.bgColor ?? "#ffff00"} onChange={(v) => set({ bgColor: v })} />
       <button type="button" aria-label={t.text.noBackground} aria-pressed={attrs.bgColor === null} className={toggle(attrs.bgColor === null)}
-        onClick={() => set({ bgColor: null })}>⌀</button>
-      {ALIGNS.map((a) => (
-        <button key={a} type="button" aria-label={alignLabel[a]} aria-pressed={align === a}
-          className={toggle(align === a)} onClick={() => set({ align: a })}>{ALIGN_ICON[a]}</button>
-      ))}
-      {unsupported && <span role="status" className="text-xs text-danger">⚠ {t.text.unsupported}</span>}
-      {overflow && <span role="status" className="text-xs text-[#ea580c]">⚠ {t.text.overflow}</span>}
+        onClick={() => set({ bgColor: null })}><Ban {...ICON} /></button>
+      <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-line" />
+      {ALIGNS.map((a) => {
+        const Icon = ALIGN_ICON[a];
+        return (
+          <button key={a} type="button" aria-label={alignLabel[a]} aria-pressed={align === a}
+            className={toggle(align === a)} onClick={() => set({ align: a })}><Icon {...ICON} /></button>
+        );
+      })}
+      {unsupported && <span role="status" className="flex items-center gap-1 text-xs text-danger-text"><TriangleAlert {...ICON_SM} />{t.text.unsupported}</span>}
+      {overflow && <span role="status" className="flex items-center gap-1 text-xs text-warn"><TriangleAlert {...ICON_SM} />{t.text.overflow}</span>}
     </div>
   );
 }

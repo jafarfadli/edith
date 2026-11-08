@@ -70,6 +70,7 @@ export const t = {
     dashDashed: "Putus-putus",
     dashDotted: "Titik-titik",
     opacity: "Opasitas",
+    customColor: "Warna lain…",
   },
   text: {
     underline: "Garis bawah",
@@ -122,6 +123,24 @@ export const t = {
     pageN: (n: number) => `Halaman ${n}`,
     cancel: "Batal",
     save: "Simpan",
+  },
+  /** One sentence under the toolbar while a tool is active. */
+  hints: {
+    text: "Klik teks asli untuk mengeditnya, atau klik area kosong untuk menambah teks baru.",
+    whiteout: "Seret untuk menutup bagian halaman dengan kotak putih.",
+    redact: "Seret di atas isi yang ingin dihapus permanen dari PDF.",
+    highlight: "Seret di atas teks untuk menandainya dengan stabilo.",
+    underline: "Seret di atas teks untuk memberinya garis bawah.",
+    strike: "Seret di atas teks untuk mencoretnya.",
+    ink: "Seret untuk menggambar bebas di halaman.",
+    rect: "Seret di halaman untuk menggambar persegi.",
+    ellipse: "Seret di halaman untuk menggambar elips.",
+    line: "Seret di halaman untuk menggambar garis.",
+    arrow: "Seret di halaman untuk menggambar panah.",
+    points: "Klik untuk menaruh titik; klik titik pertama, klik dua kali atau Enter untuk selesai.",
+    check: "Klik di halaman untuk menaruh tanda centang.",
+    cross: "Klik di halaman untuk menaruh tanda silang.",
+    pan: "Seret untuk menggeser halaman.",
   },
   objectKinds: {
     text: "Teks", textEdit: "Teks diedit", image: "Gambar", signature: "Tanda tangan", ink: "Gambar bebas",

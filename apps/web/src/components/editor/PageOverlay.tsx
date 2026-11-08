@@ -19,6 +19,7 @@ import { markupFromDrag, onMarkableText } from "./marks/markupTool";
 import { ObjectShape } from "./ObjectShape";
 import { usePolyTool } from "./shapes/usePolyTool";
 import { textEditStore } from "./text/textEdit";
+import { CANVAS } from "@/lib/theme";
 
 type TextOp = TextAdd | TextEdit;
 
@@ -301,8 +302,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
             enabledAnchors={selection && isTextOp(objects[selection])
               ? ["middle-left", "middle-right"]
               : ["top-left", "top-center", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-center", "bottom-right"]}
-            borderStroke="#0f766e"
-            anchorStroke="#0f766e"
+            borderStroke={CANVAS.accent}
+            anchorStroke={CANVAS.accent}
             anchorSize={8}
           />
         </Layer>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { toolForKey } from "@/lib/toolKeys";
 import { editorStore } from "@/store/editor";
 import { openFind } from "./find/findStore";
 import { copySelection, duplicateSelection, pasteClipboard } from "./objects/clipboard";
@@ -45,6 +46,7 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       else if (mod && k === "d" && !e.shiftKey && !e.altKey) { e.preventDefault(); duplicateSelection(); } // not the bookmark dialog
       else if ((e.key === "Delete" || e.key === "Backspace") && s.selection) { e.preventDefault(); s.deleteObject(s.selection); }
       else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); }
+      else if (!e.repeat && toolForKey(e)) { e.preventDefault(); s.setTool(toolForKey(e)!); } // V, T, R …: see TOOL_KEYS
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

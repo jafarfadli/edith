@@ -3,10 +3,13 @@
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Plus } from "lucide-react";
 import { useState } from "react";
 import { listedCount } from "@/lib/objectLabels";
 import { t } from "@/lib/strings";
 import { editorStore, pageGeom, useEditor, type PageEntry } from "@/store/editor";
+import { ICON_SM } from "../ui/icon";
+import { SEGMENTED, segment } from "../ui/styles";
 import { AnnotationsPanel } from "./AnnotationsPanel";
 import { MenuButton } from "./MenuButton";
 import { PageMenu } from "./PageMenu";
@@ -19,10 +22,10 @@ function InsertButton({ after }: { after: string | null }) {
   const scroll = (k: string | undefined) => { if (k) setTimeout(() => scrollToPage(k), 50); };
   return (
     <div className="group mx-auto my-1 flex h-5 w-full items-center justify-center">
-      <MenuButton label={t.pages.insert} className="grid h-5 w-5 place-items-center rounded-full bg-surface text-xs text-muted opacity-0 ring-1 ring-line transition group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100" items={[
+      <MenuButton label={t.pages.insert} className="grid h-5 w-5 place-items-center rounded-full bg-raised text-muted opacity-0 ring-1 ring-line-strong transition-opacity hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100" items={[
         { label: t.pages.blank, run: () => scroll(editorStore.getState().insertBlankAfter(after)) },
         { label: t.pages.importPdf, run: () => void pickPdf().then(async (f) => { if (f) scroll((await importPdf(f, after))[0]); }) },
-      ]}>+</MenuButton>
+      ]}><Plus {...ICON_SM} /></MenuButton>
     </div>
   );
 }
@@ -38,11 +41,11 @@ function SortableThumb({ entry, index, count, active }: { entry: PageEntry; inde
         {...attributes}
         {...listeners}
         onClick={() => scrollToPage(entry.pageKey)}
-        className={`relative mx-auto w-fit cursor-pointer rounded-md p-1 ${active ? "ring-2 ring-accent" : "hover:ring-1 hover:ring-line"}`}
+        className={`group/thumb relative mx-auto w-fit cursor-pointer rounded-md p-1.5 transition-colors ${active ? "bg-accent/15" : "hover:bg-hover"}`}
       >
         <Thumbnail entry={entry} geom={pageGeom(entry, info)} />
         <PageMenu pageKey={entry.pageKey} index={index} count={count} />
-        <p className="mt-1 text-center text-xs text-muted">{index + 1}</p>
+        <p className={`mt-1.5 text-center text-2xs tabular-nums ${active ? "font-medium text-accent-text" : "text-faint"}`}>{index + 1}</p>
       </div>
     </div>
   );
@@ -52,16 +55,15 @@ export function Sidebar() {
   const [tab, setTab] = useState<"pages" | "annotations">("pages");
   const count = useEditor((s) => listedCount(s.doc));
   const tabBtn = (k: typeof tab, label: string) => (
-    <button role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-      className={`flex-1 rounded-md px-2 py-1 text-xs ${tab === k ? "bg-accent/10 font-medium text-accent" : "text-muted hover:bg-bg"}`}>{label}</button>
+    <button role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`flex-1 ${segment(tab === k)}`}>{label}</button>
   );
   return (
-    <aside className="flex w-48 shrink-0 flex-col border-r border-line bg-surface" aria-label={t.editor.pages}>
-      <div role="tablist" className="flex gap-1 border-b border-line p-1.5">
+    <aside className="flex w-52 shrink-0 flex-col border-r border-line bg-panel" aria-label={t.editor.pages}>
+      <div role="tablist" className={`m-2 ${SEGMENTED}`}>
         {tabBtn("pages", t.panel.pages)}
         {tabBtn("annotations", count ? `${t.panel.annotations} (${count})` : t.panel.annotations)}
       </div>
-      <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+      <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-1">
         {tab === "pages" ? <PageThumbs /> : <AnnotationsPanel />}
       </div>
     </aside>

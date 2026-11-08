@@ -9,8 +9,12 @@ import { MIN_CROP } from "@/lib/pages";
 import { t } from "@/lib/strings";
 import { useEditor } from "@/store/editor";
 import { applyCrop, clearCrop, cropStore, fitRect } from "./cropStore";
+import { Check } from "lucide-react";
+import { CANVAS } from "@/lib/theme";
+import { ICON } from "../../ui/icon";
+import { BTN_PRIMARY, BTN_QUIET, POPOVER } from "../../ui/styles";
 
-const SHADE = "rgba(15,23,42,0.45)";
+const SHADE = CANVAS.cropShade;
 
 /** The crop being edited on this page: the rest of the page is shaded, the crop rect can be moved and resized
  *  (kept inside the page), and a bar applies it to this page or to all pages. `geom` is the uncropped page. */
@@ -58,7 +62,7 @@ export default function CropOverlay({ pageKey, geom, scale }: { pageKey: string;
             <Rect x={0} y={rect.y + rect.h} width={W} height={H - rect.y - rect.h} fill={SHADE} listening={false} />
             <Rect x={0} y={rect.y} width={rect.x} height={rect.h} fill={SHADE} listening={false} />
             <Rect x={rect.x + rect.w} y={rect.y} width={W - rect.x - rect.w} height={rect.h} fill={SHADE} listening={false} />
-            <Rect ref={node} name="crop-rect" x={rect.x} y={rect.y} width={rect.w} height={rect.h} stroke="#0f766e" strokeWidth={1.5}
+            <Rect ref={node} name="crop-rect" x={rect.x} y={rect.y} width={rect.w} height={rect.h} stroke={CANVAS.accent} strokeWidth={1.5}
               strokeScaleEnabled={false} dash={[6, 4]} fill="rgba(0,0,0,0.001)" draggable
               onDragMove={(e) => {
                 const n = e.target;
@@ -75,15 +79,16 @@ export default function CropOverlay({ pageKey, geom, scale }: { pageKey: string;
           </Group>
           <Transformer ref={tr} rotateEnabled={false} flipEnabled={false} keepRatio={false} ignoreStroke
             boundBoxFunc={(old, box) => (box.width < MIN_CROP * scale || box.height < MIN_CROP * scale ? old : box)}
-            borderStroke="#0f766e" anchorStroke="#0f766e" anchorSize={9} />
+            borderStroke={CANVAS.accent} anchorStroke={CANVAS.accent} anchorSize={9} />
         </Layer>
       </Stage>
       <div role="toolbar" aria-label={t.crop.title} data-testid="crop-bar"
-        className="absolute left-1/2 top-2 flex -translate-x-1/2 items-center gap-1 rounded-lg bg-surface p-1 text-sm shadow-lg ring-1 ring-line">
-        <button ref={apply} onClick={() => applyCrop(false)} className="rounded-md bg-accent px-2.5 py-1 text-accent-ink">{t.crop.thisPage}</button>
-        <button onClick={() => applyCrop(true)} className="rounded-md px-2.5 py-1 hover:bg-bg">{t.crop.allPages}</button>
-        {cropped && <button onClick={clearCrop} className="rounded-md px-2.5 py-1 hover:bg-bg">{t.crop.remove}</button>}
-        <button onClick={() => cropStore.getState().close()} className="rounded-md px-2.5 py-1 hover:bg-bg">{t.crop.cancel}</button>
+        className={`absolute left-1/2 top-2 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap p-1 ${POPOVER}`}>
+        <button ref={apply} onClick={() => applyCrop(false)} className={BTN_PRIMARY}><Check {...ICON} />{t.crop.thisPage}</button>
+        <button onClick={() => applyCrop(true)} className={BTN_QUIET}>{t.crop.allPages}</button>
+        {cropped && <button onClick={clearCrop} className={BTN_QUIET}>{t.crop.remove}</button>}
+        <span aria-hidden className="mx-0.5 h-5 w-px bg-line-strong" />
+        <button onClick={() => cropStore.getState().close()} className={BTN_QUIET}>{t.crop.cancel}</button>
       </div>
     </div>
   );

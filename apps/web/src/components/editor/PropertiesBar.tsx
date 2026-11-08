@@ -1,6 +1,8 @@
 "use client";
 
 import type { ContentOp } from "@edith/ops";
+import { Info, Trash2, Undo2 } from "lucide-react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { useStore } from "zustand";
 import type { Dash } from "@/lib/geometry";
 import { hasOpacity, inkWidth, isMarkup, isTextOp, MARKUP_TOOLS, opacityOf, POLY_TOOLS } from "@/lib/objects";
@@ -8,11 +10,24 @@ import { t } from "@/lib/strings";
 import { useChars } from "@/store/chars";
 import { editorStore, sourcePage, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
 import { srcKey } from "@/lib/sources";
+import { toolHint } from "@/lib/toolKeys";
 import { STAMP_COLORS } from "@/lib/stamps";
+import { ICON, ICON_SM } from "../ui/icon";
+import { BTN_DANGER, FIELD, PROP_LABEL, swatch } from "../ui/styles";
+import { Tip } from "../ui/Tooltip";
 import { ColorField } from "./ColorField";
 import { textEditStore } from "./text/textEdit";
 
-export const textPropsSlot: { render?: () => React.ReactNode } = {};
+// Filled by the text tool once its (lazily loaded) module is installed. The bar can already be open by then (the text
+// tool's hint keeps it visible), so installing it re-renders the bar.
+let slotRender: (() => React.ReactNode) | undefined;
+const slotListeners = new Set<() => void>();
+export const textPropsSlot = {
+  get render() { return slotRender; },
+  set render(r: (() => React.ReactNode) | undefined) { slotRender = r; slotListeners.forEach((l) => l()); },
+};
+const subscribeSlot = (l: () => void) => { slotListeners.add(l); return () => { slotListeners.delete(l); }; };
+const getSlot = () => slotRender;
 
 // Sticky notes and links (annot.add note, link.add) have no tool since M5: one restored from an older draft can
 // still be selected, moved and deleted, but has no properties here.
@@ -40,8 +55,45 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
 }
 
 const DRAG_SHAPES: ReadonlySet<string> = new Set(["rect", "ellipse", "line", "arrow"]);
+/** Room the bar loses inside the canvas: its `max-w-[calc(100%-1.5rem)]` margins and its `px-3` padding. */
+const BAR_INSET = 24 + 24;
+/** Hints longer than this (characters) wrap onto two lines; shorter ones stay on one line. */
+const LONG_HINT = 64;
+
+type HintFold = { key: string | null; fold: boolean; width: number };
+
+/** Whether the tool hint folds to its icon (the sentence then shows in a tooltip): only when the bar, sentence included,
+ *  would not fit in the canvas, so no option ever hides behind a horizontal scroll. `observe` goes on the bar's inner
+ *  row (sized to its content); a ResizeObserver on it and on the canvas re-measures whenever either changes. */
+function useHintFold(hint: string | null): [boolean, (row: HTMLDivElement | null) => (() => void) | undefined] {
+  const [state, setState] = useState<HintFold>({ key: null, fold: false, width: 0 });
+  const observe = useCallback((row: HTMLDivElement | null) => {
+    const canvas = row?.parentElement?.parentElement;
+    if (!row || !canvas) return;
+    const measure = () => {
+      const text = row.querySelector<HTMLElement>("[data-hint-text]");
+      const key = text?.textContent ?? null;
+      const room = canvas.clientWidth - BAR_INSET;
+      setState((st) => {
+        if (!key || !text) return st.fold ? { key: null, fold: false, width: 0 } : st;
+        if (!(st.key === key && st.fold)) {
+          if (row.offsetWidth <= room) return st.key === key && !st.fold ? st : { key, fold: false, width: 0 };
+          return { key, fold: true, width: text.offsetWidth };
+        }
+        // Folded: unfold once the sentence fits again (its width was taken when it folded).
+        return row.offsetWidth + st.width <= room ? { key, fold: false, width: 0 } : st;
+      });
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(row);
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, []);
+  return [hint !== null && state.key === hint && state.fold, observe];
+}
 
 export function PropertiesBar() {
+  const renderTextProps = useSyncExternalStore(subscribeSlot, getSlot, getSlot);
   const selection = useEditor((s) => s.selection);
   const op = useEditor((s) => (s.selection ? s.doc.objects[s.selection] : undefined));
   const tool = useEditor((s) => s.tool);
@@ -107,78 +159,102 @@ export function PropertiesBar() {
     }
   }
 
+  // What the active tool does, while nothing is selected (with a selection the bar is about that object).
+  const hint = !selection && !editingText ? toolHint(tool) : null;
+  const [foldHint, observeRow] = useHintFold(hint);
+  // Hidden when it would be empty (Pilih with nothing selected).
+  const empty = !hint && !selection && !showOpacity && !scanned && !noText
+    && (kind === null || (kind === "redact" && !o) || (kind === "stamp" && !o) || (kind === "text" && !editingText && !renderTextProps));
+  if (empty) return null;
+
   return (
-    <div className="flex h-11 shrink-0 items-center gap-4 border-b border-line bg-surface px-3 text-sm" role="group" aria-label={t.editor.properties}>
-      {(kind === "shape" || kind === "line" || kind === "ink") && (
-        <>
-          <ColorField label={t.editor.color} value={stroke} onChange={(v) => set({ stroke: v })} />
-          <label className="flex items-center gap-1.5 text-xs text-muted">
-            {t.editor.strokeWidth}
-            <input type="range" min={kind === "shape" ? 0 : 1} max={20} step={0.5} value={width} aria-label={t.editor.strokeWidth}
-              onChange={(e) => set({ width: Number(e.target.value) })} className="w-24 accent-[var(--accent)]" />
-            <span className="w-8 tabular-nums text-ink">{width}</span>
+    <div role="group" aria-label={t.editor.properties} data-testid="properties-bar"
+      className="absolute left-1/2 top-3 z-30 h-10 max-w-[calc(100%-1.5rem)] -translate-x-1/2 overflow-x-auto rounded-lg bg-panel px-3 text-sm shadow-pop [scrollbar-width:none]">
+      <div ref={observeRow} className="flex h-full w-max items-center gap-4 whitespace-nowrap">
+        {hint && (
+          // A long sentence wraps onto two lines rather than widening the bar; folded, it lives in the icon's tooltip.
+          <span data-testid="tool-hint" className="flex shrink-0 items-center gap-2 text-xs text-muted">
+            {foldHint
+              ? <Tip label={hint} wide><span className="grid h-6 w-6 place-items-center rounded-md text-accent-text hover:bg-hover"><Info {...ICON_SM} /></span></Tip>
+              : <Info {...ICON_SM} className="shrink-0 text-accent-text" />}
+            <span data-hint-text className={foldHint ? "sr-only" : hint.length > LONG_HINT ? "line-clamp-2 max-w-[18rem] whitespace-normal leading-4" : undefined}>{hint}</span>
+          </span>
+        )}
+        {(kind === "shape" || kind === "line" || kind === "ink") && (
+          <>
+            <ColorField label={t.editor.color} value={stroke} onChange={(v) => set({ stroke: v })} />
+            <label className={PROP_LABEL}>
+              {t.editor.strokeWidth}
+              <input type="range" min={kind === "shape" ? 0 : 1} max={20} step={0.5} value={width} aria-label={t.editor.strokeWidth}
+                onChange={(e) => set({ width: Number(e.target.value) })} className="w-20" />
+              <span className="w-7 tabular-nums text-ink">{width}</span>
+            </label>
+          </>
+        )}
+        {(kind === "shape" || kind === "line") && (
+          <label className={PROP_LABEL}>
+            {t.editor.dash}
+            <select value={dash} aria-label={t.editor.dash} onChange={(e) => setDash(e.target.value as Dash)} className={`${FIELD} pr-1`}>
+              <option value="solid">{t.editor.dashSolid}</option>
+              <option value="dashed">{t.editor.dashDashed}</option>
+              <option value="dotted">{t.editor.dashDotted}</option>
+            </select>
           </label>
-        </>
-      )}
-      {(kind === "shape" || kind === "line") && (
-        <label className="flex items-center gap-1.5 text-xs text-muted">
-          {t.editor.dash}
-          <select value={dash} aria-label={t.editor.dash} onChange={(e) => setDash(e.target.value as Dash)} className="rounded border border-line px-1 py-0.5 text-ink">
-            <option value="solid">{t.editor.dashSolid}</option>
-            <option value="dashed">{t.editor.dashDashed}</option>
-            <option value="dotted">{t.editor.dashDotted}</option>
-          </select>
-        </label>
-      )}
-      {kind === "shape" && (
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1 text-xs text-muted">
-            <input type="checkbox" checked={fill === null} onChange={(e) => set({ fill: e.target.checked ? null : "#ffffff" })} />
-            {t.editor.noFill}
+        )}
+        {kind === "shape" && (
+          <div className="flex items-center gap-2">
+            <label className={PROP_LABEL}>
+              <input type="checkbox" checked={fill === null} onChange={(e) => set({ fill: e.target.checked ? null : "#ffffff" })} />
+              {t.editor.noFill}
+            </label>
+            {fill !== null && <ColorField label={t.editor.fill} value={fill} onChange={(v) => set({ fill: v })} />}
+          </div>
+        )}
+        {kind === "redact" && o && (
+          <label className={PROP_LABEL}>
+            {t.editor.fill}
+            <select value={o.fill as string} onChange={(e) => set({ redactFill: e.target.value as "black" | "white" })} className={`${FIELD} pr-1`}>
+              <option value="black">{t.editor.black}</option>
+              <option value="white">{t.editor.white}</option>
+            </select>
           </label>
-          {fill !== null && <ColorField label={t.editor.fill} value={fill} onChange={(v) => set({ fill: v })} />}
-        </div>
-      )}
-      {kind === "redact" && o && (
-        <label className="flex items-center gap-1.5 text-xs text-muted">
-          {t.editor.fill}
-          <select value={o.fill as string} onChange={(e) => set({ redactFill: e.target.value as "black" | "white" })} className="rounded border border-line px-1 py-0.5 text-ink">
-            <option value="black">{t.editor.black}</option>
-            <option value="white">{t.editor.white}</option>
-          </select>
-        </label>
-      )}
-      {kind === "markup" && (
-        <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.markup[tool as MarkupTool] ?? style.markup.highlight}
-          onChange={(v) => setColor(v)} />
-      )}
-      {kind === "markup" && noText && <span className="text-xs text-muted">{t.annot.noText}</span>}
-      {kind === "symbol" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.symbolColor} onChange={setColor} />}
-      {kind === "stamp" && o && (
-        <div role="radiogroup" aria-label={t.editor.color} className="flex items-center gap-1">
-          {STAMP_COLORS.map((c) => (
-            <button key={c} role="radio" aria-checked={o.color === c} aria-label={`${t.editor.color} ${c}`} onClick={() => setColor(c)}
-              className={`h-5 w-5 rounded-full ring-1 ring-line ${o.color === c ? "outline outline-2 outline-accent" : ""}`} style={{ background: c }} />
-          ))}
-        </div>
-      )}
-      {kind === "text" && textPropsSlot.render?.()}
-      {showOpacity && (
-        <label className="flex items-center gap-1.5 text-xs text-muted">
-          {t.editor.opacity}
-          <input type="range" min={0.1} max={1} step={0.05} value={opacity} aria-label={t.editor.opacity}
-            onChange={(e) => setOpacity(Number(e.target.value))} className="w-20 accent-[var(--accent)]" />
-          <span className="w-9 tabular-nums text-ink">{Math.round(opacity * 100)}%</span>
-        </label>
-      )}
-      {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
-      <div className="flex-1" />
-      {selection && (
-        // Deleting a text.edit op brings the original paragraph back.
-        <button onClick={() => s.deleteObject(selection)} aria-label={op?.type === "text.edit" ? t.text.revert : t.editor.delete} className="rounded-md px-2 py-1 text-danger hover:bg-danger/10">
-          🗑 {op?.type === "text.edit" ? t.text.revert : t.editor.delete}
-        </button>
-      )}
+        )}
+        {kind === "markup" && (
+          <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.markup[tool as MarkupTool] ?? style.markup.highlight}
+            onChange={(v) => setColor(v)} />
+        )}
+        {kind === "markup" && noText && <span className="text-xs text-warn">{t.annot.noText}</span>}
+        {kind === "symbol" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.symbolColor} onChange={setColor} />}
+        {kind === "stamp" && o && (
+          <div role="radiogroup" aria-label={t.editor.color} className="flex items-center gap-1.5">
+            {STAMP_COLORS.map((c) => (
+              <button key={c} role="radio" aria-checked={o.color === c} aria-label={`${t.editor.color} ${c}`} onClick={() => setColor(c)}
+                className={swatch(o.color === c)} style={{ background: c }} />
+            ))}
+          </div>
+        )}
+        {kind === "text" && renderTextProps?.()}
+        {showOpacity && (
+          <label className={PROP_LABEL}>
+            {t.editor.opacity}
+            <input type="range" min={0.1} max={1} step={0.05} value={opacity} aria-label={t.editor.opacity}
+              onChange={(e) => setOpacity(Number(e.target.value))} className="w-20" />
+            <span className="w-8 tabular-nums text-ink">{Math.round(opacity * 100)}%</span>
+          </label>
+        )}
+        {kind === "text" && scanned && <span className="text-xs text-warn">{t.text.scanned}</span>}
+        {selection && (
+          // Deleting a text.edit op brings the original paragraph back.
+          <>
+            <span aria-hidden className="h-5 w-px shrink-0 bg-line" />
+            <button onClick={() => s.deleteObject(selection)} aria-label={op?.type === "text.edit" ? t.text.revert : t.editor.delete}
+              className={BTN_DANGER}>
+              {op?.type === "text.edit" ? <Undo2 {...ICON} /> : <Trash2 {...ICON} />}
+              {op?.type === "text.edit" ? t.text.revert : t.editor.delete}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -28,7 +28,7 @@ export function PageList({ overlay }: { overlay?: OverlayRender }) {
   }, []);
 
   return (
-    <div className="flex flex-col items-center gap-6 px-6 py-8">
+    <div className="flex flex-col items-center gap-6 px-6 pb-24 pt-16">
       {pages.map((entry) => (
         <PageView key={entry.pageKey} entry={entry} geom={pageGeom(entry.pageKey === cropping ? { ...entry, crop: null } : entry, info)} scale={zoom} overlay={overlay} onVisible={onVisible} />
       ))}

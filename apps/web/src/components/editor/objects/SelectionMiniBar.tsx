@@ -1,10 +1,13 @@
 "use client";
 
+import { Copy, Ellipsis, Trash2 } from "lucide-react";
 import { useStore } from "zustand";
 import { toScreen, type PageGeom, type Pt } from "@/lib/coords";
 import { isCopyable, visualBounds, type Align } from "@/lib/objects";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
+import { ICON } from "../../ui/icon";
+import { POPOVER } from "../../ui/styles";
 import { MenuButton } from "../MenuButton";
 import { textEditStore } from "../text/textEdit";
 import { alignSelection, copySelection, duplicateSelection, hasClipboard, pasteClipboard } from "./clipboard";
@@ -29,21 +32,21 @@ export function SelectionMiniBar({ pageKey, geom, scale }: { pageKey: string; ge
   const y = top - BAR_H - 8 >= 0 ? top - BAR_H - 8 : bottom + 8; // above the object, below it at the page top
   const copyable = isCopyable(op);
   const s = editorStore.getState();
-  const btn = "grid h-7 min-w-7 place-items-center rounded px-1.5 hover:bg-bg";
+  const btn = "grid h-7 w-7 place-items-center rounded-md text-muted transition-colors hover:bg-hover hover:text-ink";
 
   return (
     <div role="toolbar" aria-label={t.objects.bar} data-testid="mini-bar" onPointerDown={(e) => e.stopPropagation()}
-      className="absolute flex -translate-x-1/2 items-center gap-0.5 rounded-lg bg-surface p-0.5 text-sm shadow-lg ring-1 ring-line"
+      className={`absolute flex -translate-x-1/2 items-center gap-0.5 p-0.5 ${POPOVER}`}
       style={{ left, top: y, height: BAR_H, zIndex: 15 }}>
-      {copyable && <button aria-label={t.objects.duplicate} title={t.objects.duplicate} className={btn} onClick={() => duplicateSelection()}>⧉</button>}
-      <button aria-label={t.editor.delete} title={t.editor.delete} className={`${btn} text-danger`} onClick={() => s.deleteObject(op.id)}>🗑</button>
+      {copyable && <button aria-label={t.objects.duplicate} title={t.objects.duplicate} className={btn} onClick={() => duplicateSelection()}><Copy {...ICON} /></button>}
+      <button aria-label={t.editor.delete} title={t.editor.delete} className="grid h-7 w-7 place-items-center rounded-md text-muted transition-colors hover:bg-danger/15 hover:text-danger-text" onClick={() => s.deleteObject(op.id)}><Trash2 {...ICON} /></button>
       {copyable && (
         <MenuButton label={t.objects.more} className={btn} items={[
           { label: t.objects.copy, run: () => { copySelection(); } },
           { label: t.objects.paste, run: () => { pasteClipboard(); }, disabled: !hasClipboard() },
           { label: t.objects.duplicate, run: () => { duplicateSelection(); } },
           ...ALIGNS.map(([a, label]) => ({ label, run: () => alignSelection(a) })),
-        ]}>⋯</MenuButton>
+        ]}><Ellipsis {...ICON} /></MenuButton>
       )}
     </div>
   );
