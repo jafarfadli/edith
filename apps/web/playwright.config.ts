@@ -12,6 +12,8 @@ const API_URL = `http://localhost:${API_PORT}`;
 export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
+  // The first visit of a route compiles it in `next dev`: on a slow runner that alone can exceed the default 5 s.
+  expect: { timeout: 20_000 },
   use: { baseURL: WEB_URL, trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1400, height: 900 } } }],
   webServer: [
