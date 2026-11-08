@@ -145,10 +145,12 @@ def compare_one(orig_page, out_page, para, op, null_page=None) -> dict:
     width_delta = []
     starts_diff = 0
     per_line: dict[int, list[tuple[float, float, int]]] = {}
+    word_disp = []  # per matched word: [original line, export line, displacement] (summary.py)
     for i, j in pairs:
         o, n = p_orig[i], p_new[j]
         dx, dy = n["x"] - o["x"], n["y"] - o["y"]
         disp.append(math.hypot(dx, dy))
+        word_disp.append([la[i], lb[j], round(disp[-1], 2)])
         dxs.append(dx)
         dys.append(dy)
         if not (o["fonts"] & n["fonts"]):
@@ -237,7 +239,9 @@ def compare_one(orig_page, out_page, para, op, null_page=None) -> dict:
         "damaged_words": [{"text": w["text"], "x": round(w["x"], 1), "y": round(w["y"], 1)} for w in damaged][:12],
         "n_damaged": len(damaged),
         "px_inside": inside, "px_ink": ink, "px_outside": outside,
-        "lines": lines, "api_lines": api_lines,
+        "lines": lines, "api_lines": api_lines, "word_disp": word_disp,
+        "orig_line_words": [[p_orig[i]["text"] for i in range(len(p_orig)) if la[i] == k] for k in range(la[-1] + 1)] if la else [],
+        "new_line_words": [[p_new[j]["text"] for j in range(len(p_new)) if lb[j] == k] for k in range(lb[-1] + 1)] if lb else [],
         "char_delta": round(sum(width_delta) / nchars, 3) if nchars else 0,
         "overflow": any(w["x1"] > page_w + 0.5 for w in p_new),
         "orig_fonts": sorted({f for w in p_orig for f in w["fonts"]}),

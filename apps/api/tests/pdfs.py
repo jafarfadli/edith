@@ -437,3 +437,32 @@ def make_korean_form_pdf() -> bytes:
     for xref, *_rest in page.get_fonts(full=True):
         doc.xref_set_key(xref, "BaseFont", "/EDITHB+Dotum")
     return doc.tobytes(garbage=3, deflate=True, no_new_id=True)  # no random trailer /ID: byte-reproducible
+
+
+# A wrapped Korean + Latin note, 10 pt at a 14 pt leading from baseline 120, condensed with Tz as Hancom does.
+KEEP_LINES = ("신청인은 아래 사항을 정확하게 기재하여야 하며 사실과 다른 내용을",
+              "기재한 경우에는 사증 발급이 거부될 수 있습니다. Applicants must fill in",
+              "every item correctly; a visa may be refused when the form is false.")
+KEEP_TZ = 94.7
+
+
+def make_keep_lines_pdf() -> bytes:
+    """apps/web/e2e/fixtures/keep-lines.pdf: KEEP_LINES as one paragraph in a cmap-less CID subset named "Dotum",
+    every line set with horizontal scaling Tz KEEP_TZ (the Hancom export of the owner's visa form condenses its text
+    so): Edith's own layout of a line (font advances) puts its words elsewhere, the original glyphs stay exact."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    droid = pymupdf.Font("korea")
+    page.insert_font(fontname="DO", fontbuffer=_renamed(droid.buffer, "Dotum"))
+    page.insert_text((56, 80), "사증발급 신청서 작성 안내", fontname="DO", fontsize=12)
+    for i, text in enumerate(KEEP_LINES):
+        page.insert_text((56, 120 + 14 * i), text, fontname="DO", fontsize=10)
+    page.insert_text((56, 200), "다음 쪽으로 계속 Continued overleaf", fontname="DO", fontsize=10)
+    page.clean_contents()
+    xref = page.get_contents()[0]
+    stream = doc.xref_stream(xref).decode("latin-1")
+    doc.update_stream(xref, stream.replace(" Tf", f" Tf {KEEP_TZ} Tz").encode("latin-1"))
+    doc.subset_fonts()
+    for xref, *_rest in page.get_fonts(full=True):
+        doc.xref_set_key(xref, "BaseFont", "/EDITHC+Dotum")
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)

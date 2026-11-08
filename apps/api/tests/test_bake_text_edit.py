@@ -7,6 +7,7 @@ from edith.doc_fonts import collect_fonts
 from edith.errors import BakeFailed, InvalidOp
 from edith.fonts import FontRegistry
 from edith.ops import ExportRequest
+from edith.paragraphs import extract_paragraphs
 from edith.settings import Settings
 from tests.pdfs import CID_TEXT, SUBSET_TTF, make_cid_subset_pdf, make_edit_pdf, make_fonts_pdf
 
@@ -231,3 +232,26 @@ def test_a_kept_line_must_name_the_original_font_when_it_uses_one(ctx):
     assert [(s["font"], s["origin"]) for s in line_spans(kept[0], 100)] == [(s["font"], s["origin"]) for s in before]
     other = reload(bake(data, ops(op("Batang")), ctx))  # the Batang line's font is not this line's: redrawn in it
     assert all("Batang" in s["font"] for s in line_spans(other[0], 100))
+
+
+def test_kept_lines_of_a_condensed_paragraph_keep_their_scaling(ctx):
+    """Hancom condenses text with Tz: a redrawn line comes out wider, a kept one exactly as it was."""
+    from tests.pdfs import KEEP_LINES, make_keep_lines_pdf
+    data = make_keep_lines_pdf()
+    src = pymupdf.open(stream=data, filetype="pdf")
+    p = next(p for p in extract_paragraphs(src[0]) if len(p["lines"]) == 3)
+    font = cid_font_ref(data, "Dotum")
+    texts = [KEEP_LINES[0], KEEP_LINES[1].replace("Applicants", "Applicant"), KEEP_LINES[2]]
+    layout = [{"baseline": 10.0 + 14 * k, "segments": [{"x": 0, "text": t, "runIndex": 0}], **({"source": k} if k != 1 else {})}
+              for k, t in enumerate(texts)]
+    op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": p["id"],
+          "box": {"rect": {"x": 56, "y": 110, "w": 330, "h": 42}, "align": "left", "lineHeight": 14,
+                  # MuPDF reports a Tz-scaled span's size scaled too (9.73): GET /text and so the client send that.
+                  "paragraphs": [[{"text": " ".join(texts), "font": font, "size": p["runs"][0]["size"], "color": "#000000"}]],
+                  "layout": layout}}
+    out = reload(bake(data, ops(op), ctx))
+    for baseline in (120, 148):
+        assert [(s["text"], s["bbox"]) for s in line_spans(out[0], baseline)] == [(s["text"], s["bbox"]) for s in line_spans(src[0], baseline)]
+    redrawn, original = line_spans(out[0], 134), line_spans(src[0], 134)
+    assert "".join(s["text"] for s in redrawn).strip() == texts[1]
+    assert redrawn[-1]["bbox"][2] > original[-1]["bbox"][2] + 2  # font advances, not Tz 94.7: wider, one letter less

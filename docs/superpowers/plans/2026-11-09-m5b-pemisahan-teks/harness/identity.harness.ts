@@ -16,9 +16,10 @@ import path from "node:path";
 import type { Run, TextBox } from "@edith/ops";
 import type { Paragraph, TextData } from "@/lib/api";
 import { FontStore } from "@/lib/fonts";
-import { documentScript, prepareRuns, resolveLoadedRuns, type FontTable } from "@/lib/fallback";
+import { documentScript, prepareRuns, type FontTable } from "@/lib/fallback";
+import { editedBox } from "@/lib/keepLines";
 import { paragraphBox, paragraphWidth, hardBreaks } from "@/lib/paragraphs";
-import { normalizeRuns } from "@/lib/runs";
+import { normalizeRuns, paragraphsEqual } from "@/lib/runs";
 import { relayout } from "@/lib/textbox";
 
 const API = (process.env.EDITH_API || "http://127.0.0.1:19400").replace(/\/+$/, "");
@@ -26,8 +27,11 @@ const REFS = process.env.REFS || path.resolve(process.cwd(), "../../references")
 const OUT = process.env.OUT || "/private/tmp/claude-501/audit3/out";
 const ONLY = process.env.ONLY || "";
 const PARA = process.env.PARA || "";
-/** identity (default): commit unchanged. typo: insert one "x" at the end of the paragraph's first word (a real edit). */
+/** identity (default): commit unchanged, as the UI does (it sends nothing: recorded as `skipped`). identity-force: send
+ *  the unchanged op anyway (what the audit measured). typo: insert one "x" at the end of the paragraph's first word. */
 const MODE = process.env.EDIT_MODE || "identity";
+/** KEEP=0: the pre-F1 commit (relayout every line); default: editedBox (unchanged lines keep their original glyphs). */
+const KEEP = process.env.KEEP !== "0";
 // vitest runs from apps/web (see run.sh): bundled fonts are its public/fonts (npm run sync-fonts).
 const WEB_FONTS = process.env.WEB_FONTS || path.resolve(process.cwd(), "public/fonts");
 
@@ -101,9 +105,14 @@ test("identity edits", async () => {
             }
           }
           const normalized = edited.map(normalizeRuns);
-          const ready = resolveLoadedRuns(normalized, fonts, (f) => store.peek(f), store);
-          if (!ready) throw new Error("fallback not loaded");
-          const box = keepBaseline(start, relayout({ ...start, paragraphs: ready }, metricsFor));
+          if (MODE === "identity" && paragraphsEqual(normalized, start.paragraphs.map(normalizeRuns))) { rec.skipped = true; continue; } // the UI sends nothing
+          // commitEditing: the fonts the new text needs (a typed "x" may need a fallback the original subset lacks).
+          const ready = await prepareRuns(normalized, fonts, store, store);
+          const box = KEEP
+            ? editedBox(start, ready, { ...p, runs }, metricsFor) // F1: unchanged lines keep their original glyphs
+            : keepBaseline(start, relayout({ ...start, paragraphs: ready }, metricsFor));
+          rec.kept = box.layout.filter((l) => l.source !== undefined && l.source !== null).length;
+          rec.lines = box.layout.length;
           const width = paragraphWidth({ ...p, runs }, metricsFor);
           rec.width = width;
           rec.breaks = hardBreaks({ ...p, runs }, Math.max(width, p.lines.length === 1 && p.align === "left" && p.maxWidth ? p.maxWidth + 0.01 : 0), metricsFor);

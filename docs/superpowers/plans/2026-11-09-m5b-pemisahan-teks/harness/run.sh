@@ -3,12 +3,14 @@
 #   docs/superpowers/plans/2026-11-09-m5b-pemisahan-teks/harness/run.sh [OUT_DIR]
 # Starts a private API on 127.0.0.1:19400 if none answers there (data in $OUT/.data), runs the web code path
 # (vitest from apps/web, no Next server, no `next build`), bakes every editable paragraph of references/*.pdf
-# unchanged, compares, classifies. Env: EDIT_MODE=typo for the one-character-edit variant; ONLY=<pdf substring>.
+# unchanged, compares, classifies. Env: EDIT_MODE=identity (default: unchanged paragraphs are skipped, as the UI sends
+# nothing) | identity-force (send the unchanged op anyway) | typo (one-character edit); KEEP=0 for the pre-F1 commit
+# (every line redrawn); PORT (default 19400); ONLY=<pdf substring>. summary.py prints the per-PDF word table.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="${EDITH_REPO:-$(cd "$HERE/../../../../.." && pwd)}"
 OUT="${1:-/private/tmp/claude-501/audit3/out}"
-PORT=19400
+PORT="${PORT:-19400}"
 export EDITH_API="http://127.0.0.1:$PORT" OUT REFS="${REFS:-$REPO/references}"
 mkdir -p "$OUT"
 PY="$REPO/apps/api/.venv/bin/python"
@@ -22,4 +24,5 @@ fi
 "$PY" "$HERE/compare.py" "$OUT" "$REFS"
 "$PY" "$HERE/classify.py" "$OUT"
 "$PY" "$HERE/decor.py" "$OUT" "$REFS"
+"$PY" "$HERE/summary.py" "$OUT"
 echo "results: $OUT/classified.json (per paragraph), $OUT/<pdf>/p<page>_<gid>.pdf|.op.json (exports)"
