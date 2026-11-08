@@ -95,6 +95,14 @@ export function noteMarkupRemoved(removed: string[]): void {
 /** The commit that is waiting for its fonts (the text is not in the document yet). */
 let pendingCommit: Promise<void> | null = null;
 
+/** Paragraph edits waiting for their fonts before the session opens. */
+let startingEdits = 0;
+
+/** True while a rich-text session is open, starting (fonts loading) or landing: one-letter tool keys stay off then. */
+export function textSessionBusy(): boolean {
+  return !!textEditStore.getState().editing || !!pendingCommit || startingEdits > 0;
+}
+
 /** Resolves once no text commit is in flight; immediately when none is. */
 export async function whenTextCommitted(): Promise<void> {
   while (pendingCommit) await pendingCommit;
@@ -132,11 +140,14 @@ export async function startParagraphEdit(pageKey: string, p: Paragraph): Promise
     return;
   }
   let box: TextBox;
+  startingEdits++;
   try {
     box = await paragraphStartBox(p);
   } catch (err) {
     console.warn("paragraph edit: font load failed", err);
     return;
+  } finally {
+    startingEdits--;
   }
   // Something else started (or landed an op for this paragraph) while the fonts loaded.
   if (textEditStore.getState().editing || pendingCommit || textEditFor(editorStore.getState().doc, pageKey, p.id)) return;

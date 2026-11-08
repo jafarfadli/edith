@@ -8,8 +8,13 @@ export const TOOL_KEYS = {
 
 const BY_KEY = new Map<string, Tool>(Object.entries(TOOL_KEYS).map(([tool, k]) => [k, tool as Tool]));
 
-export function toolForKey(e: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean }): Tool | null {
-  if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return null;
+/** The tool of a key press, or null. Never while an input method composes (Korean/Japanese/Chinese: `isComposing`,
+ *  key "Process", keyCode 229), and only for Latin letters: a Korean layout's "ㅅ" on the T key does nothing (mapping
+ *  by `e.code` would switch tools while someone types Korean outside a text field). */
+export function toolForKey(e: {
+  key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; isComposing?: boolean; keyCode?: number; /** deliberately unused */ code?: string;
+}): Tool | null {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.keyCode === 229 || !/^[a-z]$/i.test(e.key)) return null;
   return BY_KEY.get(e.key.toUpperCase()) ?? null;
 }
 

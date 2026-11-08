@@ -21,6 +21,18 @@ describe("tool keys", () => {
     expect(toolForKey(key("Enter"))).toBeNull();
   });
 
+  it("not while an input method composes (Korean, Japanese …)", () => {
+    expect(toolForKey({ ...key("r"), isComposing: true })).toBeNull();
+    expect(toolForKey({ ...key("Process") })).toBeNull();
+    expect(toolForKey({ ...key("t"), keyCode: 229 })).toBeNull();
+  });
+
+  it("a non-Latin character does nothing, even on a tool letter's physical key", () => {
+    expect(toolForKey({ ...key("ㅅ"), code: "KeyT" })).toBeNull(); // Korean layout, T key
+    expect(toolForKey({ ...key("ㄱ"), code: "KeyR" })).toBeNull();
+    expect(toolForKey({ ...key("é") })).toBeNull();
+  });
+
   it("every key is one letter and used once", () => {
     const keys = Object.values(TOOL_KEYS);
     expect(new Set(keys).size).toBe(keys.length);

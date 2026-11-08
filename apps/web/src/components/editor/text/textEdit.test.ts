@@ -9,7 +9,7 @@ import { t } from "@/lib/strings";
 import { boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
-import { afterTextCommitted, commitEditing, materializeParagraph, startParagraphEdit, startTextAt, textEditStore, whenTextCommitted } from "./textEdit";
+import { afterTextCommitted, commitEditing, materializeParagraph, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, whenTextCommitted } from "./textEdit";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
@@ -269,6 +269,35 @@ describe("original paragraphs", () => {
     expect(e).toMatchObject({ kind: "text.edit", paragraphId: "g2", pageKey: "o0", isNew: true });
     expect(e.box.rect.y + e.box.layout[0].baseline).toBeCloseTo(100);
     expect(e.initial).toEqual(e.box.paragraphs);
+  });
+
+  it("textSessionBusy: while a paragraph edit starts, is open, and while its commit waits for fonts", async () => {
+    expect(textSessionBusy()).toBe(false);
+    fontsLoaded = false;
+    gate = deferred();
+    const starting = startParagraphEdit("o0", para);
+    expect(textSessionBusy()).toBe(true); // fonts loading, no session yet
+    gate.resolve();
+    await starting;
+    expect(textEditStore.getState().editing).not.toBeNull();
+    expect(textSessionBusy()).toBe(true);
+    fontsLoaded = false;
+    gate = deferred();
+    const commit = commitEditing(runs("Halo baru"));
+    expect(textEditStore.getState().editing).toBeNull();
+    expect(textSessionBusy()).toBe(true); // committing
+    gate.resolve();
+    await commit;
+    expect(textSessionBusy()).toBe(false);
+  });
+
+  it("textSessionBusy clears when the paragraph's fonts fail to load", async () => {
+    fontsLoaded = false;
+    vi.spyOn(fontStore, "load").mockRejectedValue(new Error("offline"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await startParagraphEdit("o0", para);
+    expect(textEditStore.getState().editing).toBeNull();
+    expect(textSessionBusy()).toBe(false);
   });
 
   it("startParagraphEdit reopens the paragraph's existing op", async () => {

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { formatKeys, isMac } from "@/lib/keys";
+import { formatKeys } from "@/lib/keys";
+import { useIsMac } from "./useIsMac";
 
 /** Hover shows the tip after this delay; keyboard focus shows it at once. */
 const HOVER_DELAY_MS = 500;
@@ -12,7 +13,7 @@ const WIDE = 288;
 /** Key caps of a shortcut (hidden from assistive tech: the control carries `aria-keyshortcuts`). Set in Geist,
  *  12 px medium: Geist Mono's narrow "O" (Elips) read as a zero at 11 px. */
 export function Kbd({ keys }: { keys: string }) {
-  const mac = isMac();
+  const mac = useIsMac();
   return (
     <span aria-hidden className="flex gap-0.5">
       {formatKeys(keys, mac).map((k, i) => (

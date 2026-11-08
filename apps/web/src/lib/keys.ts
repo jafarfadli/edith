@@ -8,6 +8,12 @@ export function formatKeys(spec: string, mac: boolean): string[] {
   return spec.split("+").map((k) => names[k] ?? k);
 }
 
+/** A shortcut as `aria-keyshortcuts` spells it: Mod is Meta on the Mac and Control elsewhere. */
+const ARIA: Record<string, string> = { Ctrl: "Control" };
+export function ariaKeys(spec: string, mac: boolean): string {
+  return spec.split("+").map((k) => (k === "Mod" ? (mac ? "Meta" : "Control") : ARIA[k] ?? k)).join("+");
+}
+
 export function isMac(): boolean {
   return typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 }
