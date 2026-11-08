@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { MENU_ITEM, POPOVER } from "../ui/styles";
+import { returnFocus, usePopupFocus } from "../ui/usePopupFocus";
 
 export interface MenuItem { label: string; run: () => void; disabled?: boolean; danger?: boolean }
 
-const MENU_WIDTH = 176; // w-44
-const ITEM_HEIGHT = 32; // py-1.5 + text-sm line
+const MENU_WIDTH = 192;
+const ITEM_HEIGHT = 32; // h-8
 
 /** A button that opens a menu. The menu renders in a portal with fixed positioning so a narrow, scrolling
  *  parent (the sidebar) cannot clip it; it closes on an outside press, Escape, scroll or resize. */
@@ -24,18 +26,18 @@ export function MenuButton({ label, items, children, className }: { label: strin
       if (!menu.current?.contains(target) && !button.current?.contains(target)) setAt(null);
     };
     const dismiss = () => setAt(null);
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setAt(null); };
     window.addEventListener("pointerdown", close, true);
     window.addEventListener("resize", dismiss);
     window.addEventListener("scroll", dismiss, true); // the anchor moved
-    window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("pointerdown", close, true);
       window.removeEventListener("resize", dismiss);
       window.removeEventListener("scroll", dismiss, true);
-      window.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  // Focus moves to the first item on open; arrows, Home/End, Escape (back to the button) and Tab: usePopupFocus.
+  const onMenuKey = usePopupFocus({ open, popup: menu, trigger: button, items: "[role=menuitem]:not(:disabled)", orientation: "vertical", close: () => setAt(null) });
 
   function toggle() {
     if (open) { setAt(null); return; }
@@ -65,12 +67,13 @@ export function MenuButton({ label, items, children, className }: { label: strin
           style={{ top: at.top, left: at.left, width: MENU_WIDTH }}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line"
+          onKeyDown={onMenuKey}
+          className={`fixed z-50 p-1 ${POPOVER}`}
         >
           {items.map((it) => (
             <button key={it.label} role="menuitem" disabled={it.disabled}
-              onClick={() => { setAt(null); it.run(); }}
-              className={`block w-full px-3 py-1.5 text-left hover:bg-bg disabled:opacity-40 ${it.danger ? "text-danger" : ""}`}>
+              onClick={() => { returnFocus(menu, button); setAt(null); it.run(); }}
+              className={`${MENU_ITEM} ${it.danger ? "text-danger-text" : "text-ink"}`}>
               {it.label}
             </button>
           ))}

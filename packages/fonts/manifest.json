@@ -122,5 +122,13 @@
       "files": {"regular": "Sacramento-Regular.ttf"},
       "aliases": ["sacramento"]
     }
+  },
+  "cjk": {
+    "Noto Sans KR": {"category": "sans", "script": "kr", "files": {"regular": "cjk/NotoSansKR-Regular.ttf", "bold": "cjk/NotoSansKR-Bold.ttf"}},
+    "Noto Serif KR": {"category": "serif", "script": "kr", "files": {"regular": "cjk/NotoSerifKR-Regular.ttf", "bold": "cjk/NotoSerifKR-Bold.ttf"}},
+    "Noto Sans JP": {"category": "sans", "script": "jp", "files": {"regular": "cjk/NotoSansJP-Regular.ttf", "bold": "cjk/NotoSansJP-Bold.ttf"}},
+    "Noto Serif JP": {"category": "serif", "script": "jp", "files": {"regular": "cjk/NotoSerifJP-Regular.ttf", "bold": "cjk/NotoSerifJP-Bold.ttf"}},
+    "Noto Sans SC": {"category": "sans", "script": "sc", "files": {"regular": "cjk/NotoSansSC-Regular.ttf", "bold": "cjk/NotoSansSC-Bold.ttf"}},
+    "Noto Serif SC": {"category": "serif", "script": "sc", "files": {"regular": "cjk/NotoSerifSC-Regular.ttf", "bold": "cjk/NotoSerifSC-Bold.ttf"}}
   }
 }

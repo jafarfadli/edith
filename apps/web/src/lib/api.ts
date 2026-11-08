@@ -3,6 +3,9 @@ import type { CharLine } from "@/lib/markup";
 import type { StructurePage } from "@/store/editor";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+/** Paragraph segmentation the client's paragraph ids (g0, g1, …) come from: shared contract with PARAGRAPHS_VERSION in
+ *  apps/api/edith/paragraphs.py. Exports send it (the API refuses text.edit ops of another version) and drafts store it. */
+export const PARAGRAPHS_VERSION = 2;
 
 export class ApiError extends Error {
   constructor(public code: string, public status: number, public extra: Record<string, unknown> = {}) {
@@ -13,9 +16,11 @@ export class ApiError extends Error {
 
 /** One original line of a paragraph; `start`/`end` index the paragraph's joined run text (end excludes trailing spaces). */
 export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number }
+/** `maxWidth` (single-line paragraphs, M5): how wide the paragraph may grow when edited, from its left edge — up to
+ *  the next cell border or text on its line. */
 export interface Paragraph {
   id: string; rect: Rect; lines: ParagraphLine[]; runs: Run[];
-  align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean;
+  align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean; maxWidth?: number;
 }
 /** `doc`: set by the client on fonts of an imported PDF (see `fontId`). */
 export interface DocFont {
@@ -23,7 +28,11 @@ export interface DocFont {
   ref: string; name: string; embedded: boolean; format: string | null; reusable: boolean;
   family: string; bold: boolean; italic: boolean; substitute: BundledFont;
 }
-export interface TextData { doc_id: string; pages: { index: number; paragraphs: Paragraph[] }[]; fonts: DocFont[] }
+export interface TextData {
+  doc_id: string; pages: { index: number; paragraphs: Paragraph[] }[]; fonts: DocFont[];
+  /** Segmentation version (2 since M5); absent in fixtures built from extract_text directly. */
+  paragraphsVersion?: number;
+}
 
 /** One AcroForm widget (GET /documents/{id}/structure). Radio buttons of a group share `name`. */
 export interface FormField {
@@ -45,8 +54,8 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, init);
-  } catch {
-    throw new ApiError("network", 0);
+  } catch (e) {
+    throw new ApiError(e instanceof DOMException && e.name === "TimeoutError" ? "timeout" : "network", 0);
   }
   if (!res.ok) {
     let err: Record<string, unknown> = {};
@@ -94,10 +103,18 @@ export function assetUrl(docId: string, assetId: string): string {
   return `${API_URL}/documents/${docId}/assets/${assetId}`;
 }
 
+/** A bake of a large document takes seconds; past this the server or the connection is stuck. */
+export const EXPORT_TIMEOUT_MS = 120_000;
+
 export async function exportPdf(docId: string, body: ExportRequest): Promise<Blob> {
-  return (await request(`/documents/${docId}/export`, json(body))).blob();
+  const res = await request(`/documents/${docId}/export`, { ...json({ paragraphs_version: PARAGRAPHS_VERSION, ...body }), signal: AbortSignal.timeout(EXPORT_TIMEOUT_MS) });
+  try {
+    return await res.blob();
+  } catch (e) {
+    throw new ApiError(e instanceof DOMException && e.name === "TimeoutError" ? "timeout" : "network", 0);
+  }
 }
 
 export async function renderPage(docId: string, body: RenderPageRequest): Promise<Blob> {
-  return (await request(`/documents/${docId}/render-page`, json(body))).blob();
+  return (await request(`/documents/${docId}/render-page`, json({ paragraphs_version: PARAGRAPHS_VERSION, ...body }))).blob();
 }

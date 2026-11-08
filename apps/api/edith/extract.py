@@ -1,6 +1,6 @@
 import pymupdf
 
-from edith.doc_fonts import collect_fonts, fill_substitutes, name_key, span_fonts
+from edith.doc_fonts import collect_fonts, fill_substitutes, is_symbolic, name_key, span_fonts
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
 from edith.fonts import FontRegistry
 from edith.forms import extract_fields
@@ -46,7 +46,8 @@ def extract_structure(doc: pymupdf.Document) -> dict:
 
 def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
     """Paragraphs of every page plus the fonts they use. A run whose font is reusable gets
-    `{"kind": "original", "ref"}`; any other run gets its bundled substitute."""
+    `{"kind": "original", "ref"}`; any other run gets its bundled substitute. A paragraph with text in a
+    symbol font that can't be reused is not editable: no other font draws its characters."""
     fonts = collect_fonts(doc)
     pages = []
     for page in doc:
@@ -60,6 +61,17 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
                 font.substitute = registry.substitute(font.name, span["flags"])
             return {"kind": "original", "ref": font.ref} if font.reusable else dict(font.substitute)
 
-        pages.append({"index": page.number, "paragraphs": extract_paragraphs(page, resolve)})
+        page_fonts = list({e[0]: fonts[e[0]] for e in page.get_fonts(full=True) if e[0] in fonts}.values())
+
+        def locked(span: dict, page_fonts=page_fonts) -> bool:
+            key = name_key(span["font"])
+            candidates = [f for f in page_fonts if key in f.keys]  # several when the name is ambiguous
+            if not candidates:
+                return is_symbolic(span["font"])
+            if len(candidates) == 1:
+                return candidates[0].symbolic and not candidates[0].reusable
+            return is_symbolic(span["font"]) and not any(f.reusable for f in candidates)
+
+        pages.append({"index": page.number, "paragraphs": extract_paragraphs(page, resolve, locked)})
     fill_substitutes(fonts, registry)
     return {"pages": pages, "fonts": [f.to_json() for f in fonts.values()]}

@@ -6,10 +6,10 @@ import type { Paragraph } from "@/lib/api";
 import { fontStore, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
 import { noticeStore } from "@/lib/notices";
 import { t } from "@/lib/strings";
-import { boxLineHeight, newBox } from "@/lib/textbox";
+import { boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
-import { afterTextCommitted, commitEditing, materializeParagraph, startParagraphEdit, startTextAt, textEditStore, whenTextCommitted } from "./textEdit";
+import { afterTextCommitted, commitEditing, materializeParagraph, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, whenTextCommitted } from "./textEdit";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
@@ -149,15 +149,15 @@ describe("editing an original paragraph", () => {
     expect((editorStore.getState().doc.objects.e1 as TextEdit).box.layout).toEqual([{ baseline: expect.any(Number), segments: [] }]);
   });
 
-  it("swaps an original font for its substitute when a new character has no glyph", async () => {
+  it("keeps the original font for the characters it has and uses the substitute for a new one", async () => {
     const orig = { kind: "original" as const, ref: "f7" };
     openParagraph("Halo", orig);
     await commitEditing(runs("Halo", orig));
     expect(editorStore.getState().doc.order).toEqual([]); // unchanged
     openParagraph("Halo", orig);
     await commitEditing(runs("Halo!", orig));
-    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0][0].font)
-      .toEqual({ kind: "bundled", family: "Carlito", bold: false, italic: false });
+    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0].map((r) => [r.text, r.font])).toEqual([
+      ["Halo", orig], ["!", { kind: "bundled", family: "Carlito", bold: false, italic: false }]]);
   });
 });
 
@@ -190,11 +190,27 @@ describe("font fallback on commit", () => {
   const orig = { kind: "original" as const, ref: "f7" };
   const noto = { kind: "bundled", family: "Noto Sans", bold: false, italic: false };
 
-  it("goes original → substitute → Arimo → Noto Sans when the fonts are loaded (fast path)", async () => {
+  const committed = () => (editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0].map((r) => [r.text, r.font]);
+
+  it("goes original → substitute → Arimo → Noto Sans per character when the fonts are loaded (fast path)", async () => {
     gate.resolve(); fontsLoaded = true; notoOnly = "ꙮ";
     openParagraph("Halo", orig);
     await commitEditing(runs("Halo ꙮ", orig));
-    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0][0].font).toEqual(noto);
+    expect(committed()).toEqual([["Halo ", orig], ["ꙮ", noto]]);
+  });
+
+  it("keeps an edited paragraph's first baseline when a fallback font is taller", async () => {
+    gate.resolve(); fontsLoaded = true; notoOnly = "ꙮ";
+    const tall: FontMetrics = { ...notoSans, ascent: notoSans.ascent * 2 };
+    const pick = (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? tall : metricsOf(f));
+    vi.spyOn(fontStore, "peek").mockImplementation(pick);
+    vi.spyOn(fontStore, "get").mockImplementation(pick);
+    const before = relayout({ ...newBox([72, 90], style), paragraphs: runs("Halo", orig) }, pick);
+    textEditStore.getState().start({ id: "e1", pageKey: "o0", box: before, isNew: true, kind: "text.edit", paragraphId: "g3", initial: before.paragraphs });
+    await commitEditing(runs("Halo ꙮ", orig));
+    const after = (editorStore.getState().doc.objects.e1 as TextEdit).box;
+    expect(after.layout[0].baseline).toBeGreaterThan(before.layout[0].baseline); // the taller line …
+    expect(after.rect.y + after.layout[0].baseline).toBeCloseTo(before.rect.y + before.layout[0].baseline); // … stays put
   });
 
   it("does the same while fonts load (slow path)", async () => {
@@ -203,7 +219,32 @@ describe("font fallback on commit", () => {
     const commit = commitEditing(runs("Halo ꙮ", orig));
     gate.resolve();
     await commit;
-    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0][0].font).toEqual(noto);
+    expect(committed()).toEqual([["Halo ", orig], ["ꙮ", noto]]);
+  });
+
+  it("commits when a CJK pack font the fallback chose cannot load (the next fallback draws), not when the user's font can't", async () => {
+    gate.resolve();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(fontStore, "cjkFamily").mockReturnValue("Noto Serif KR"); // a family no other test uses: failures are remembered
+    const failing = (f: FontRef) => !isOriginal(f) && (f.family === "Noto Serif KR" || f.family === "Lato");
+    const load = vi.mocked(fontStore.load).getMockImplementation()!;
+    const peek = vi.mocked(fontStore.peek).getMockImplementation()!;
+    const tried: string[] = [];
+    vi.mocked(fontStore.load).mockImplementation(async (f) => {
+      if (failing(f)) { tried.push(f.kind === "bundled" ? f.family : ""); throw new Error("404"); }
+      return load(f);
+    });
+    vi.mocked(fontStore.peek).mockImplementation((f) => (failing(f) ? null : peek(f)));
+    openParagraph("Halo", orig);
+    await commitEditing(runs("Halo 변", orig));
+    expect(committed()).toEqual([["Halo ", orig], ["변", noto]]);
+    expect(textEditStore.getState().editing).toBeNull();
+    expect(tried).toEqual(["Noto Serif KR"]);
+    const lato = { kind: "bundled" as const, family: "Lato", bold: false, italic: false };
+    openSession();
+    await commitEditing(runs("Halo", lato));
+    expect(editorStore.getState().doc.objects.t1).toBeUndefined();
+    expect(textEditStore.getState().editing).not.toBeNull(); // kept editable
   });
 });
 
@@ -228,6 +269,35 @@ describe("original paragraphs", () => {
     expect(e).toMatchObject({ kind: "text.edit", paragraphId: "g2", pageKey: "o0", isNew: true });
     expect(e.box.rect.y + e.box.layout[0].baseline).toBeCloseTo(100);
     expect(e.initial).toEqual(e.box.paragraphs);
+  });
+
+  it("textSessionBusy: while a paragraph edit starts, is open, and while its commit waits for fonts", async () => {
+    expect(textSessionBusy()).toBe(false);
+    fontsLoaded = false;
+    gate = deferred();
+    const starting = startParagraphEdit("o0", para);
+    expect(textSessionBusy()).toBe(true); // fonts loading, no session yet
+    gate.resolve();
+    await starting;
+    expect(textEditStore.getState().editing).not.toBeNull();
+    expect(textSessionBusy()).toBe(true);
+    fontsLoaded = false;
+    gate = deferred();
+    const commit = commitEditing(runs("Halo baru"));
+    expect(textEditStore.getState().editing).toBeNull();
+    expect(textSessionBusy()).toBe(true); // committing
+    gate.resolve();
+    await commit;
+    expect(textSessionBusy()).toBe(false);
+  });
+
+  it("textSessionBusy clears when the paragraph's fonts fail to load", async () => {
+    fontsLoaded = false;
+    vi.spyOn(fontStore, "load").mockRejectedValue(new Error("offline"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await startParagraphEdit("o0", para);
+    expect(textEditStore.getState().editing).toBeNull();
+    expect(textSessionBusy()).toBe(false);
   });
 
   it("startParagraphEdit reopens the paragraph's existing op", async () => {

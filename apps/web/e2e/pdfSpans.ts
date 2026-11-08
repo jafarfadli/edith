@@ -1,12 +1,12 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
-export interface Span { text: string; font: string; origin: [number, number]; size: number }
+export interface Span { text: string; font: string; origin: [number, number]; size: number; bbox: [number, number, number, number] }
 
 const SCRIPT = `
 import json, sys, pymupdf
 doc = pymupdf.open(sys.argv[1])
-print(json.dumps([[{"text": s["text"].replace("\\xa0", " ") if sys.argv[2] == "clean" else s["text"], "font": s["font"], "origin": s["origin"], "size": s["size"]}
+print(json.dumps([[{"text": s["text"].replace("\\xa0", " ") if sys.argv[2] == "clean" else s["text"], "font": s["font"], "origin": s["origin"], "size": s["size"], "bbox": s["bbox"]}
                    for b in page.get_text("dict")["blocks"] for l in b.get("lines", []) for s in l["spans"]]
                   for page in doc]))
 `;

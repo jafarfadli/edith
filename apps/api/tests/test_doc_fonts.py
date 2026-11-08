@@ -3,7 +3,7 @@ import pymupdf
 from edith.doc_fonts import collect_fonts, fill_substitutes, load_font, name_key, span_fonts
 from edith.fonts import FontRegistry
 from edith.settings import Settings
-from tests.pdfs import make_fonts_pdf, make_pymupdf_subset_pdf, rename_font
+from tests.pdfs import make_cid_subset_pdf, make_fonts_pdf, make_pymupdf_subset_pdf, rename_font
 
 
 def fonts_of(data: bytes):
@@ -33,10 +33,18 @@ def test_font_table_per_kind():
     assert f["Courier"].family == "courier"
 
 
-def test_pymupdf_subset_has_no_cmap():
-    _, fonts = fonts_of(make_pymupdf_subset_pdf())
+def test_pymupdf_subset_gets_a_rebuilt_cmap():
+    doc, fonts = fonts_of(make_pymupdf_subset_pdf())
     (font,) = fonts.values()
-    assert (font.name, font.format, font.reusable) == ("Cousine Regular", "ttf", False)
+    assert (font.name, font.format, font.reusable) == ("Cousine Regular", "ttf", True)
+    rebuilt = load_font(doc, font.xref)
+    assert all(rebuilt.has_glyph(ord(c)) for c in "Cousine subset")
+    assert not rebuilt.has_glyph(ord("X"))  # only what the subset kept
+
+
+def test_symbol_fonts_are_flagged():
+    _, fonts = fonts_of(make_cid_subset_pdf())
+    assert {f.name: f.symbolic for f in fonts.values()} == {"Dotum": False, "Batang": False, "Wingdings": True}
 
 
 def test_every_span_maps_to_its_font():
@@ -56,7 +64,7 @@ def test_load_font_only_for_reusable_programs():
     assert load_font(doc, f["Courier"].xref) is None
     assert load_font(doc, f["Helvetica"].xref) is None
     doc, fonts = fonts_of(make_pymupdf_subset_pdf())
-    assert load_font(doc, next(iter(fonts))) is None
+    assert load_font(doc, next(iter(fonts))).has_glyph(ord("C"))  # cmap rebuilt from ToUnicode
 
 
 def test_ambiguous_names_map_to_none():

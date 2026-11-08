@@ -37,7 +37,7 @@ export function FormLayer({ pageKey, geom, scale }: { pageKey: string; geom: Pag
           pointerEvents: tool === "select" ? "auto" : "none",
           fontSize: fieldFontSize(f) * scale, background: FIELD_BG, boxSizing: "border-box",
         };
-        const common = { "aria-label": f.name, "data-field": f.name, style, className: "border border-accent/40 px-1 text-ink outline-none focus:border-accent" };
+        const common = { "aria-label": f.name, "data-field": f.name, style, className: "border border-accent/40 px-1 text-paper-ink outline-none focus:border-accent focus:ring-1 focus:ring-accent" };
         switch (f.type) {
           case "text":
             return f.multiline

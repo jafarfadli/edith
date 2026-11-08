@@ -36,7 +36,7 @@ export function PageView({ entry, geom, scale, overlay, onVisible }: {
       ref={wrap}
       data-testid="page"
       data-page-key={entry.pageKey}
-      className="relative mx-auto overflow-hidden bg-white shadow-sm ring-1 ring-line"
+      className="relative mx-auto overflow-hidden bg-paper shadow-page"
       style={{ width: size.width, height: size.height }}
     >
       {near && <PageCanvas entry={entry} geom={geom} scale={scale} label="page" />}

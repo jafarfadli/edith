@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from edith.errors import install_error_handlers
+from edith.errors import UnhandledErrors, install_error_handlers
 from edith.fonts import FontRegistry
 from edith.routes import assets, documents, export, text
 from edith.settings import Settings
@@ -40,6 +40,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.storage = storage
     app.state.fonts = FontRegistry(settings.fonts_dir)
+    # Added first = inside CORSMiddleware (the last added is outermost): its 500s carry the CORS headers.
+    app.add_middleware(UnhandledErrors)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

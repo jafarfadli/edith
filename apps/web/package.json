@@ -12,7 +12,8 @@
     "predev": "npm run sync-fonts",
     "prebuild": "npm run sync-fonts",
     "pretest": "npm run sync-fonts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "ui-shots": "node scripts/ui-shots.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -28,6 +29,7 @@
     "@tiptap/react": "^3.32.3",
     "fontkit": "^2.0.4",
     "konva": "^10.9.1",
+    "lucide-react": "1.61.0",
     "next": "16.4.5",
     "pdfjs-dist": "^6.5.438",
     "react": "19.3.0",

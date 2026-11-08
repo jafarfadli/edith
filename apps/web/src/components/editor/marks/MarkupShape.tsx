@@ -3,6 +3,7 @@
 import { Rect } from "react-konva";
 import type { AnnotAdd } from "@edith/ops";
 import { markupLine } from "@/lib/markup";
+import { CANVAS } from "@/lib/theme";
 
 /** Text markup as MuPDF draws it: a highlight fills each quad (its layer multiplies it over the page),
  *  underline/strike draw a line per quad (the whole quad stays clickable). */
@@ -19,7 +20,7 @@ export function MarkupShape({ op, selected = false }: { op: AnnotAdd; selected?:
         return <Rect key={`l${i}`} x={l.x} y={l.y} width={l.w} height={l.h} fill={op.color} listening={false} />;
       })}
       {selected && quads.map((q, i) => (
-        <Rect key={`s${i}`} x={q.x - 1} y={q.y - 1} width={q.w + 2} height={q.h + 2} stroke="#0f766e" strokeWidth={1}
+        <Rect key={`s${i}`} x={q.x - 1} y={q.y - 1} width={q.w + 2} height={q.h + 2} stroke={CANVAS.accent} strokeWidth={1}
           strokeScaleEnabled={false} dash={[4, 3]} listening={false} />
       ))}
     </>

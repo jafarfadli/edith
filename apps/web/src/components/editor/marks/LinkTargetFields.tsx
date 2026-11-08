@@ -29,7 +29,7 @@ export function LinkTargetFields({ target, onChange, autoFocus = false }: {
         {(["url", "page"] as const).map((m) => (
           <button key={m} type="button" role="radio" aria-checked={mode === m}
             onClick={() => { setMode(m); onChange(m === "url" ? (normalizeUrl(url) ? { url: normalizeUrl(url)! } : null) : pageKey ? { pageKey } : null); }}
-            className={`px-2 py-1 ${mode === m ? "bg-accent/10 text-accent" : "hover:bg-bg"}`}>
+            className={`px-2 py-1 ${mode === m ? "bg-accent/10 text-accent" : "hover:bg-hover"}`}>
             {m === "url" ? t.link.toUrl : t.link.toPage}
           </button>
         ))}
@@ -40,7 +40,7 @@ export function LinkTargetFields({ target, onChange, autoFocus = false }: {
             onChange={(e) => typeUrl(e.target.value)}
             onBlur={() => setInvalid(url.trim() !== "" && normalizeUrl(url) === null)}
             className="w-56 rounded border border-line px-1.5 py-1 text-ink" />
-          {invalid && <span role="alert" className="text-danger">{t.link.invalidUrl}</span>}
+          {invalid && <span role="alert" className="text-danger-text">{t.link.invalidUrl}</span>}
         </>
       ) : (
         <select aria-label={t.link.page} value={pageKey} onChange={(e) => { if (e.target.value) onChange({ pageKey: e.target.value }); }}

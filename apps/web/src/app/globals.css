@@ -1,26 +1,96 @@
+/* Hallmark · genre: modern-minimal (dark tool) · theme: custom "dark design app" · accent hue: 262 (electric blue)
+ * paper band: dark · type: Geist (single sans family) + Geist Mono for numbers and shortcut keys
+ */
 @import "tailwindcss";
 
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --ink: #16181d;
-  --muted: #5b6270;
-  --line: #e3e6eb;
-  --accent: #0f766e;
-  --accent-ink: #ffffff;
-  --danger: #c2410c;
+  color-scheme: dark;
+
+  /* Surfaces: neutral greys with a trace of the accent hue; a higher surface is lighter. */
+  --base: oklch(19% 0.005 260);          /* behind everything (landing page) */
+  --panel: oklch(22.5% 0.006 260);       /* top bar, sidebar, context bar */
+  --raised: oklch(27% 0.007 260);        /* menus, popovers, dialogs, tooltips */
+  --canvas: oklch(32% 0.004 260);        /* the grey area the pages sit on */
+  --hover: oklch(98% 0.003 260 / 0.07);  /* hover overlay on any surface */
+  --line: oklch(31% 0.007 260);          /* hairlines between panels */
+  --line-strong: oklch(40% 0.008 260);   /* control borders */
+
+  /* Text. */
+  --ink: oklch(95% 0.004 260);
+  --muted: oklch(72% 0.01 260);
+  --faint: oklch(65% 0.01 260);          /* ≥ 4.5:1 on panel and raised (secondary text, page numbers) */
+
+  /* The one accent: fills (white text on it ≥ 4.5:1), text and icons on dark, selection on the white page. */
+  --accent: oklch(57% 0.22 262);
+  --accent-hover: oklch(51% 0.2 262);    /* darker on hover: white on it 5.8:1 (on --accent 4.5:1) */
+  --accent-text: oklch(76% 0.13 258);
+  --accent-ink: oklch(99% 0.003 260);
+
+  /* Status. */
+  --danger: oklch(65% 0.2 22);
+  --danger-text: oklch(74% 0.15 22);
+  --warn: oklch(80% 0.15 75);
+
+  /* The PDF page and what the editor draws on it (always light). */
+  --paper: oklch(100% 0 0);
+  --paper-ink: oklch(20% 0.005 260);
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
+  --color-base: var(--base);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-canvas: var(--canvas);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
   --color-muted: var(--muted);
-  --color-line: var(--line);
+  --color-faint: var(--faint);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
   --color-accent-ink: var(--accent-ink);
   --color-danger: var(--danger);
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --color-danger-text: var(--danger-text);
+  --color-warn: var(--warn);
+  --color-paper: var(--paper);
+  --color-paper-ink: var(--paper-ink);
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Type scale for a dense tool UI: 11 · 12 · 13 (base) · 15 · 20 · display. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.5rem;
+
+  /* Elevation on dark: a hairline ring plus a soft, deep shadow. */
+  --shadow-pop: 0 0 0 1px var(--line-strong), 0 8px 24px oklch(0% 0 0 / 0.45);
+  --shadow-modal: 0 0 0 1px var(--line-strong), 0 24px 64px oklch(0% 0 0 / 0.6);
+  --shadow-page: 0 1px 2px oklch(0% 0 0 / 0.35), 0 4px 16px oklch(0% 0 0 / 0.25);
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
 }
 
-body { background: var(--bg); color: var(--ink); }
+html, body { overflow-x: clip; }
+body { background: var(--panel); color: var(--ink); }
+
+@layer base {
+  /* One focus ring everywhere, shown instantly. In the base layer so a control that draws its own focus state
+   * (fields: accent border + ring, `focus:outline-none`) is not ringed twice. */
+  :focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+
+  /* Native controls on dark surfaces. */
+  select option { background: var(--raised); color: var(--ink); }
+  input[type="range"], input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

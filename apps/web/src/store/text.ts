@@ -2,6 +2,7 @@ import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
 import type { FontRef, Run } from "@edith/ops";
 import { fontFileUrl, getText, type DocFont, type Paragraph, type TextData } from "@/lib/api";
+import { documentScript } from "@/lib/fallback";
 import { fontId, fontStore, isOriginal } from "@/lib/fonts";
 import type { FontTable } from "@/lib/richtext";
 import { srcKey, type ParagraphPages } from "@/lib/sources";
@@ -44,6 +45,8 @@ export const textStore = createStore<TextState>()((set, get) => ({
       const data = await getText(docId);
       if (get().docId !== docId) return;
       const t = tagged({ ...data, doc_id: docId }, null);
+      // Han characters typed into this document fall back to the CJK font of its own script (Korean, Japanese …).
+      fontStore.setHanScript(documentScript(data.pages.flatMap((p) => p.paragraphs.flatMap((g) => g.runs.map((r) => r.text)))));
       set({ status: "ready", pages: { ...get().pages, ...t.pages }, fonts: { ...get().fonts, ...t.fonts } });
     } catch (e) {
       console.warn("text extraction failed; original text cannot be edited", e);

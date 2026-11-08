@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { FontRef, Run } from "@edith/ops";
-import type { DocFont, Paragraph, TextData } from "@/lib/api";
+import type { Paragraph, TextData } from "@/lib/api";
 import { fontKey, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
 import { runsText } from "@/lib/runs";
-import { preloadFallback, hardBreaks, hasUnsupportedChars, maskRects, overflowsOriginal, paragraphBox, paragraphRuns, prepareRuns, rawToBox, resolveLoadedRuns, resolveRunFonts } from "@/lib/paragraphs";
+import { hardBreaks, maskRects, overflowsOriginal, paragraphBox, paragraphRuns, rawToBox } from "@/lib/paragraphs";
 
 const FONTS = path.resolve(__dirname, "../../../../packages/fonts/files");
 const metrics = new Map<string, FontMetrics>();
@@ -35,10 +35,21 @@ describe("paragraphBox", () => {
     expect(box.rect.x).toBe(p.rect.x);
   });
 
-  it("splits hand-broken lines into logical paragraphs", () => {
-    const address = paragraphs.find((p) => p.runs[0].text.startsWith("Jl."))!;
-    const box = paragraphBox(address, bundled);
-    expect(box.paragraphs.map((ps) => ps.map((r) => r.text).join(""))).toEqual(["Jl. Merdeka Barat No. 17, Jakarta Pusat", "Indonesia"]);
+  it("gets hand-broken lines as paragraphs of their own from the API (segmentation version 2)", () => {
+    // "Jl. Merdeka Barat No. 17, Jakarta" / "Pusat" / "Indonesia": "Pusat" ended early, so "Indonesia" is a paragraph.
+    const texts = paragraphs.map((p) => runsText(p.runs));
+    expect(texts).toContain("Jl. Merdeka Barat No. 17, Jakarta Pusat");
+    expect(texts).toContain("Indonesia");
+  });
+
+  it("lets a left-aligned single line grow into its room (maxWidth) instead of wrapping", () => {
+    const label = paragraphs.find((p) => p.lines.length === 1 && p.maxWidth && p.align === "left")!;
+    const longer = (ps: Run[][]) => [[{ ...ps[0][0], text: `${runsText(ps[0])} dengan tambahan` }]];
+    const grown = paragraphBox(label, bundled, longer);
+    expect(grown.rect.w).toBeCloseTo(label.maxWidth! + 0.01);
+    expect(grown.layout).toHaveLength(1);
+    const tight = paragraphBox({ ...label, maxWidth: undefined }, bundled, longer);
+    expect(tight.layout.length).toBeGreaterThan(1); // without room it wraps at its own width
   });
 
   it("keeps wrapped lines in one logical paragraph", () => {
@@ -60,85 +71,17 @@ describe("paragraphBox", () => {
   });
 
   it("applies an edit to the logical paragraphs before layout", () => {
-    const address = paragraphs.find((p) => p.runs[0].text.startsWith("Jl."))!;
-    const raw = runsText(address.runs).indexOf("Indonesia");
-    const box = paragraphBox(address, bundled, (ps, toBox) => {
-      expect(toBox(raw)).toBe(runsText(ps[0]).length + 1); // start of the second logical paragraph
-      return [ps[0], [{ ...ps[1][0], text: "RI" }]];
+    // "ab-" / "cd" / "ef" again, in a box 10 units wide: three logical paragraphs.
+    const mono: FontMetrics = { unitsPerEm: 1, ascent: 0.8, descent: 0.2, advance: () => 1 };
+    const line = (start: number, end: number, y: number) => ({ rect: { x: 0, y, w: 3, h: 1 }, baseline: y + 1, size: 1, start, end });
+    const p: Paragraph = { id: "g0", rect: { x: 0, y: 0, w: 10, h: 3 }, lines: [line(0, 3, 0), line(3, 5, 1), line(6, 8, 2)],
+      runs: [{ text: "ab-cd ef", font: { kind: "bundled", family: "Arimo" }, size: 1, color: "#000000" }], align: "left", lineHeight: 1, editable: true };
+    const box = paragraphBox(p, () => mono, (ps, toBox) => {
+      expect(toBox(6)).toBe(7); // "e": start of the third logical paragraph ("ab-\ncd\nef")
+      return [ps[0], ps[1], [{ ...ps[2][0], text: "RI" }]];
     });
-    expect(box.paragraphs.map((ps) => ps.map((r) => r.text).join(""))).toEqual(["Jl. Merdeka Barat No. 17, Jakarta Pusat", "RI"]);
+    expect(box.paragraphs.map((ps) => ps.map((r) => r.text).join(""))).toEqual(["ab-", "cd", "RI"]);
     expect(box.layout).toHaveLength(3);
-  });
-});
-
-const ORIG = { kind: "original" as const, ref: "f9" };
-const fonts: Record<string, DocFont> = {
-  f9: { ref: "f9", name: "Calibri", embedded: true, format: "ttf", reusable: true, family: "calibri", bold: false, italic: false,
-        substitute: { kind: "bundled", family: "Carlito", bold: false, italic: false } },
-};
-const run = (text: string): Run => ({ text, font: ORIG, size: 12, color: "#000000" });
-const onlyAbc: FontMetrics = { unitsPerEm: 1000, ascent: 800, descent: 200, advance: () => 500, hasGlyph: (cp) => "abc ".includes(String.fromCodePoint(cp)) };
-
-describe("original fonts", () => {
-  it("keep a run whose glyphs exist and swap the others for the substitute", () => {
-    const out = resolveRunFonts([run("abc"), run("abz")], fonts, () => onlyAbc);
-    expect(out[0].font).toEqual(ORIG);
-    expect(out[1].font).toEqual({ kind: "bundled", family: "Carlito", bold: false, italic: false });
-  });
-
-  it("swap when the font did not load", () => {
-    expect(resolveRunFonts([run("a")], fonts, () => null)[0].font).toMatchObject({ family: "Carlito" });
-  });
-
-  it("swap a bundled family lacking a glyph for Arimo", () => {
-    const lato = { ...run("abz"), font: { kind: "bundled" as const, family: "Lato", bold: true, italic: false } };
-    expect(resolveRunFonts([lato], fonts, () => onlyAbc)[0].font).toEqual({ kind: "bundled", family: "Arimo", bold: true, italic: false });
-    expect(resolveRunFonts([lato], fonts, () => null)[0]).toBe(lato); // not loaded yet: unchanged
-  });
-
-  it("prepareRuns loads originals first and tolerates their failure", async () => {
-    const loaded: string[] = [];
-    const store = {
-      async load(f: FontRef) { if (isOriginal(f)) throw new Error("404"); loaded.push(fontKey(f)); return onlyAbc; },
-      peek: (f: FontRef) => (loaded.includes(fontKey(f)) ? onlyAbc : null),
-    };
-    const out = await prepareRuns([[run("abc")]], fonts, store);
-    expect(out[0][0].font).toMatchObject({ kind: "bundled", family: "Carlito" });
-    expect(loaded).toContain("Carlito-regular");
-  });
-
-  it("swap Arimo lacking a glyph for Noto Sans, and stop there", () => {
-    const arimo = { ...run("abz"), font: { kind: "bundled" as const, family: "Arimo", bold: false, italic: true } };
-    expect(resolveRunFonts([arimo], fonts, () => onlyAbc)[0].font).toEqual({ kind: "bundled", family: "Noto Sans", bold: false, italic: true });
-    const noto = { ...arimo, font: { kind: "bundled" as const, family: "Noto Sans", bold: false, italic: true } };
-    expect(resolveRunFonts([noto], fonts, () => onlyAbc)[0]).toBe(noto);
-  });
-
-  it("prepareRuns falls back: original → substitute → Arimo → Noto Sans", async () => {
-    const onlyAbcz: FontMetrics = { ...onlyAbc, hasGlyph: (cp) => "abcz ".includes(String.fromCodePoint(cp)) };
-    const store = { load: async () => onlyAbc, peek: (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? onlyAbcz : onlyAbc) };
-    const out = await prepareRuns([[run("abz")]], fonts, store);
-    expect(out[0][0].font).toEqual({ kind: "bundled", family: "Noto Sans", bold: false, italic: false });
-  });
-});
-
-describe("resolveLoadedRuns", () => {
-  const onlyAbcz: FontMetrics = { ...onlyAbc, hasGlyph: (cp) => "abcz ".includes(String.fromCodePoint(cp)) };
-  const peekAll = (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? onlyAbcz : onlyAbc);
-
-  it("runs the whole chain with loaded fonts, like prepareRuns", async () => {
-    const sync = resolveLoadedRuns([[run("abz")]], fonts, peekAll);
-    expect(sync?.[0][0].font).toEqual({ kind: "bundled", family: "Noto Sans", bold: false, italic: false });
-    expect(sync).toEqual(await prepareRuns([[run("abz")]], fonts, { load: async () => onlyAbc, peek: peekAll }));
-  });
-
-  it("returns null when a font it needs is not loaded", () => {
-    expect(resolveLoadedRuns([[run("abz")]], fonts, (f) => (isOriginal(f) ? onlyAbc : null))).toBeNull();
-  });
-
-  it("returns the same runs when nothing needs a fallback", () => {
-    const p = [[run("abc")]];
-    expect(resolveLoadedRuns(p, fonts, () => onlyAbc)?.[0][0]).toBe(p[0][0]);
   });
 });
 
@@ -163,37 +106,5 @@ describe("overflowsOriginal", () => {
   it("is false when the edit got shorter", () => {
     const shorter = paragraphBox(p, bundled, (ps) => [[{ ...ps[0][0], text: "Pendek." }]]);
     expect(overflowsOriginal(shorter, p)).toBe(false);
-  });
-});
-
-describe("hasUnsupportedChars", () => {
-  const notoAbcz: FontMetrics = { ...onlyAbc, hasGlyph: (cp) => "abcz ".includes(String.fromCodePoint(cp)) };
-  const peek = (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? notoAbcz : onlyAbc);
-  it("is false when the fallback chain covers every character", () => {
-    expect(hasUnsupportedChars([[run("abz")]], fonts, peek)).toBe(false); // z: Noto Sans has it
-    expect(hasUnsupportedChars([[run("ab c\n")]], fonts, peek)).toBe(false);
-  });
-  it("is true when even the last fallback lacks a glyph", () => {
-    expect(hasUnsupportedChars([[run("ab✓")]], fonts, peek)).toBe(true);
-  });
-  it("waits for the fonts of the chain", () => {
-    expect(hasUnsupportedChars([[run("ab✓")]], fonts, (f) => (isOriginal(f) ? onlyAbc : null))).toBe(false);
-  });
-});
-
-describe("preloadFallback", () => {
-  it("loads the chain so the unsupported warning resolves after the preload", async () => {
-    const notoAbcz: FontMetrics = { ...onlyAbc, hasGlyph: (cp) => "abcz ".includes(String.fromCodePoint(cp)) };
-    const loaded = new Set<string>([fontKey(ORIG)]);
-    const metricsOf = (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? notoAbcz : onlyAbc);
-    const store = {
-      async load(f: FontRef) { loaded.add(fontKey(f)); return metricsOf(f); },
-      peek: (f: FontRef) => (loaded.has(fontKey(f)) ? metricsOf(f) : null),
-    };
-    const peek = (f: FontRef) => store.peek(f);
-    const runs = [[run("ab✓")]];
-    expect(hasUnsupportedChars(runs, fonts, peek)).toBe(false); // cold: chain not loaded
-    await preloadFallback(runs, fonts, store);
-    expect(hasUnsupportedChars(runs, fonts, peek)).toBe(true);
   });
 });

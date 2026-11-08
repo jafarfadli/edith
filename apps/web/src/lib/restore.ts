@@ -1,4 +1,4 @@
-import { ApiError, type FormField } from "@/lib/api";
+import { ApiError, PARAGRAPHS_VERSION, type FormField } from "@/lib/api";
 import type { EditorDoc, StructurePage } from "@/store/editor";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -67,4 +67,18 @@ export async function resolveImports(
   const pages = doc.pages.filter((p) => !("doc" in p.src) || !doc.imports?.includes(p.src.doc) || p.src.index < (imports[p.src.doc]?.length ?? 0));
   const missing = pages.length !== doc.pages.length;
   return { doc: !pages.length ? null : missing ? { ...doc, pages } : doc, imports, fields, missing };
+}
+
+/** A restored draft without the text.edit ops of another paragraph segmentation (drafts from before M5 have none
+ *  stamped: version 1): their ids now name other paragraphs, so they would replace the wrong text. `dropped`
+ *  counts them (the editor tells the user). */
+export function dropStaleTextEdits(doc: EditorDoc): { doc: EditorDoc; dropped: number } {
+  const version = doc.paragraphsVersion ?? 1;
+  const stale = version === PARAGRAPHS_VERSION ? [] : doc.order.filter((id) => doc.objects[id]?.type === "text.edit");
+  const rest = { ...doc };
+  delete rest.paragraphsVersion; // a stamp of the stored draft, not part of the document
+  if (!stale.length) return { doc: rest, dropped: 0 };
+  const objects = { ...doc.objects };
+  for (const id of stale) delete objects[id];
+  return { doc: { ...rest, objects, order: doc.order.filter((id) => !stale.includes(id)) }, dropped: stale.length };
 }

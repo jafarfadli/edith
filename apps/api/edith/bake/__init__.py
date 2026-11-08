@@ -5,11 +5,13 @@ from dataclasses import replace
 import pymupdf
 
 from edith.bake.context import BakeContext
+from edith.bake.formfonts import protect as form_font_programs, restore as restore_form_fonts
 from edith.bake.pages import build_pages
 from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
 from edith.bake.scrub import scrub_outside, scrub_page, under_redaction
 from edith.bake.source import SourcePages
 from edith.bake.text import links_under_redactions, restore_links
+from edith.bake.tounicode import trim_to_unicode
 from edith.bake.transform import draw_transformed
 from edith.bake.util import to_rect
 from edith.errors import BakeFailed, EdithError, InvalidOp
@@ -101,7 +103,14 @@ def _fill(doc: pymupdf.Document, forms: list, flatten: bool, stale_xfa: bool) ->
             raise BakeFailed(f"cannot flatten the form: {exc}") from exc
 
 
-def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False) -> pymupdf.Document:
+def _font_xrefs(doc: pymupdf.Document) -> set[int]:
+    return {entry[0] for page in doc for entry in page.get_fonts(full=True)}
+
+
+def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False,
+         subset_fonts: bool = False) -> pymupdf.Document:
+    """The edited document. `subset_fonts`: when the bake embedded fonts (TextWriter embeds whole font files:
+    a CJK fallback is 6–15 MB), keep only the glyphs the document uses — MuPDF subsets every embedded font."""
     doc = pymupdf.open(stream=source, filetype="pdf")
     pages_src = None
     try:
@@ -151,6 +160,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                 raise InvalidOp(f"link to unknown pageKey {op.target.pageKey}", op_index=i)
 
         key_to_index, base_rotation = build_pages(doc, layout, layout_index, ctx, import_forms)
+        fonts_before = _font_xrefs(doc) if subset_fonts else set()
         ctx = replace(ctx, page_index=key_to_index)
         crops = [_crop_rect(doc[i], entry.crop, layout_index) if entry.crop else None for i, entry in enumerate(layout.pages)]
 
@@ -195,6 +205,16 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             doc[i].set_rotation((base_rotation[i] + entry.rotate) % 360)
         if cropped_widgets:
             drop_xfa(doc)
+        added = _font_xrefs(doc) - fonts_before if subset_fonts else set()
+        if added:
+            try:
+                form_fonts = form_font_programs(doc)  # a viewer filling a field later needs these whole
+                doc.subset_fonts()
+                restore_form_fonts(doc, form_fonts)
+                for xref in added:
+                    trim_to_unicode(doc, xref)
+            except Exception as exc:  # noqa: BLE001
+                raise BakeFailed(f"cannot subset the fonts: {exc}") from exc
         return doc
     except BaseException:
         doc.close()

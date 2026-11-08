@@ -141,16 +141,17 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   await page.getByTestId("mini-bar").getByRole("button", { name: "Lainnya" }).click();
   await page.getByRole("menuitem", { name: "Ratakan ke kiri halaman" }).click();
 
-  // Two sticky notes on page 2: one entirely inside the coming crop, one entirely in the 5 % margin the crop hides.
+  // A highlight on page 2 ("Halaman" of "Halaman satu", baseline 72), inside the coming crop: it stays in the export.
+  // (Sticky notes have no tool since M5, so annotations entirely outside a crop are covered by the API tests only.)
   box = await pageBox(page, 1);
-  await page.getByRole("button", { name: "Catatan", exact: true }).click();
-  await page.mouse.click(box.x + 300, box.y + 500);
-  await page.getByRole("textbox", { name: "Isi catatan" }).fill("dalam crop");
-  await page.getByRole("button", { name: "Catatan", exact: true }).click();
-  await page.mouse.click(box.x + 8, box.y + 8);
-  await page.getByRole("textbox", { name: "Isi catatan" }).fill("luar crop");
+  await page.getByRole("button", { name: "Penanda", exact: true }).click();
+  await page.mouse.move(box.x + 73, box.y + 67);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 100, box.y + 67, { steps: 3 });
+  await page.mouse.move(box.x + 125, box.y + 67, { steps: 3 });
+  await page.mouse.up();
   await page.getByRole("button", { name: "Pilih", exact: true }).click();
-  await expect(items).toHaveCount(9);
+  await expect(items).toHaveCount(8);
 
   // Crop page 2 (the default crop: 5 % in from every edge).
   await page.getByRole("button", { name: "Crop", exact: true }).click();
@@ -178,7 +179,7 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   await expect(items.filter({ hasText: "Centang" })).toHaveCount(1);
   expect(pdfShapes(await download("before.pdf"))[0].drawings.filter(isBlue).length).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Hapus Centang" }).click();
-  await expect(items).toHaveCount(8);
+  await expect(items).toHaveCount(7);
   await expect(items.filter({ hasText: "Centang" })).toHaveCount(0);
 
   const file = await download("pages.pdf");
@@ -221,8 +222,8 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   expect(hy1).toBeLessThanOrEqual(wb[3] + 1);
   expect(hy0).toBeLessThan(200); // above the baseline (y = 200) ...
   expect(hy1).toBeGreaterThan(200); // ... and below it
-  // Crop scrub: the note entirely outside the crop is gone from the export, the one inside stays.
-  expect(report.pages[1].annots.map((a) => [a.type, a.content])).toEqual([["Text", "dalam crop"]]);
+  // The highlight inside the crop stays.
+  expect(report.pages[1].annots.map((a) => a.type)).toEqual(["Highlight"]);
   expect(report.pages[0].widgets).toEqual([{ name: "nama", value: "Utama Budi" }]);
   expect(report.pages[1].widgets).toEqual([{ name: "nama", value: "Utama Budi" }]);
   expect(report.pages[3].widgets).toHaveLength(1);

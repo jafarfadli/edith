@@ -6,6 +6,7 @@ from edith.chars import page_chars
 from edith.doc_fonts import font_bytes
 from edith.errors import DocExpired, FontNotFound, PageNotFound
 from edith.extract import extract_text, open_pdf
+from edith.paragraphs import PARAGRAPHS_VERSION
 
 router = APIRouter()
 
@@ -24,7 +25,7 @@ def _open_source(request: Request, doc_id: str):
 def get_text(request: Request, doc_id: str) -> dict:
     doc = _open_source(request, doc_id)
     try:
-        return {"doc_id": doc_id, **extract_text(doc, request.app.state.fonts)}
+        return {"doc_id": doc_id, "paragraphsVersion": PARAGRAPHS_VERSION, **extract_text(doc, request.app.state.fonts)}
     finally:
         doc.close()
 

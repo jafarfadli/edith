@@ -1,5 +1,8 @@
 "use client";
 
+// Not mounted since M5: the Link tool is hidden (owner decision). Kept with LinkTargetFields and linkStore so the
+// tool can come back; link.add objects from older drafts still render, export and can be deleted.
+
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import type { LinkAdd } from "@edith/ops";
@@ -50,11 +53,11 @@ function PopoverBody({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom
         const el = e.target as HTMLElement;
         if (e.key === "Enter" && (el.tagName === "INPUT" || el.tagName === "SELECT")) { e.preventDefault(); save(); }
       }}
-      className="absolute z-20 flex flex-col gap-2 rounded-lg bg-surface p-3 shadow-lg ring-1 ring-line" style={{ left, top }}>
+      className="absolute z-20 flex flex-col gap-2 rounded-lg bg-raised p-3 shadow-pop" style={{ left, top }}>
       <span className="text-sm font-medium">{t.link.title}</span>
       <LinkTargetFields target={target} onChange={setTarget} autoFocus />
       <div className="flex justify-end gap-2 text-sm">
-        <button type="button" onClick={close} className="rounded-md px-3 py-1 hover:bg-bg">{t.link.cancel}</button>
+        <button type="button" onClick={close} className="rounded-md px-3 py-1 hover:bg-hover">{t.link.cancel}</button>
         <button type="button" onClick={save} disabled={!target} className="rounded-md bg-accent px-3 py-1 text-accent-ink disabled:opacity-50">{t.link.save}</button>
       </div>
     </div>

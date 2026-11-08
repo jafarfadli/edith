@@ -10,8 +10,9 @@ import { maskRects } from "@/lib/paragraphs";
 import { editorStore, useEditor } from "@/store/editor";
 import { paragraphsOf, useText } from "@/store/text";
 import { materializeParagraph, startParagraphEdit, textEditStore } from "./textEdit";
+import { CANVAS } from "@/lib/theme";
 
-const OUTLINE = "#0f766e";
+const OUTLINE = CANVAS.accent;
 /** Screen pixels the pointer must move before a press on the selected paragraph becomes a drag. */
 const DRAG_DISTANCE = 3;
 

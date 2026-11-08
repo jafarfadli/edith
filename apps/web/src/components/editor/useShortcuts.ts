@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import { toolForKey } from "@/lib/toolKeys";
 import { editorStore } from "@/store/editor";
 import { openFind } from "./find/findStore";
-import { linkStore } from "./marks/linkStore";
 import { copySelection, duplicateSelection, pasteClipboard } from "./objects/clipboard";
-import { afterTextCommitted, textEditStore } from "./text/textEdit";
+import { afterTextCommitted, textEditStore, textSessionBusy } from "./text/textEdit";
 
 export function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -41,12 +41,12 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       const k = e.key.toLowerCase();
       if (mod && k === "z" && !e.shiftKey) { e.preventDefault(); afterTextCommitted(() => editorStore.getState().undo()); }
       else if ((mod && k === "z" && e.shiftKey) || (e.ctrlKey && k === "y")) { e.preventDefault(); afterTextCommitted(() => editorStore.getState().redo()); }
-      else if (mod && k === "k" && !e.shiftKey && !e.altKey) { e.preventDefault(); s.setTool("link"); }
       else if (mod && k === "c" && !e.shiftKey && !e.altKey) { if (copySelection()) e.preventDefault(); } // else: the browser's copy
       else if (mod && k === "v" && !e.shiftKey && !e.altKey) { if (pasteClipboard()) e.preventDefault(); }
       else if (mod && k === "d" && !e.shiftKey && !e.altKey) { e.preventDefault(); duplicateSelection(); } // not the bookmark dialog
       else if ((e.key === "Delete" || e.key === "Backspace") && s.selection) { e.preventDefault(); s.deleteObject(s.selection); }
-      else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); linkStore.getState().close(); }
+      else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); }
+      else if (!e.repeat && !textSessionBusy() && toolForKey(e)) { e.preventDefault(); s.setTool(toolForKey(e)!); } // V, T, R …: see TOOL_KEYS
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

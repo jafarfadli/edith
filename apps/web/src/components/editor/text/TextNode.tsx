@@ -8,8 +8,9 @@ import { decorBands } from "@/lib/textDecor";
 import { boxFonts } from "@/lib/textbox";
 import { fontsReady } from "./textEdit";
 import { useOverflow } from "./useOverflow";
+import { CANVAS } from "@/lib/theme";
 
-const OVERFLOW = "#ea580c";
+const OVERFLOW = CANVAS.overflow;
 
 /** Draws a text box glyph-by-glyph at the PDF-quantized offsets — the same positions the API bakes —
  *  with backgrounds under and underline/strike over the glyphs, as the bake does. */

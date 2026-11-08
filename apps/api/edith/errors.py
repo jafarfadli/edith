@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger("edith")
 
@@ -58,6 +59,11 @@ class InvalidOp(EdithError):
     status, code = 422, "invalid_op"
 
 
+class TextOutdated(EdithError):
+    """text.edit ops name paragraphs of another segmentation version (a draft or tab from before an update)."""
+    status, code = 409, "text_outdated"
+
+
 class BakeFailed(EdithError):
     status, code = 500, "bake_failed"
 
@@ -94,7 +100,32 @@ def install_error_handlers(app: FastAPI) -> None:
         code = "invalid_op" if in_ops else "invalid_request"
         return JSONResponse(_body(code, msg, **extra), status_code=422)
 
-    @app.exception_handler(Exception)
-    async def _unhandled(_: Request, exc: Exception):
-        logger.exception("unhandled error", exc_info=exc)
-        return JSONResponse(_body("internal", "internal error"), status_code=500)
+
+
+class UnhandledErrors:
+    """Any other exception → 500 `internal` JSON. A middleware, not `exception_handler(Exception)`: that handler
+    runs in ServerErrorMiddleware, outside CORSMiddleware, so its response has no Access-Control-Allow-Origin and
+    a cross-origin browser sees a network error. Add it before CORSMiddleware so CORS wraps it."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        started = False
+
+        async def _send(message: Message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, _send)
+        except Exception:
+            logger.exception("unhandled error")
+            if started:  # too late for a JSON body: ServerErrorMiddleware closes the connection
+                raise
+            await JSONResponse(_body("internal", "internal error"), status_code=500)(scope, receive, send)

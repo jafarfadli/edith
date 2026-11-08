@@ -8,10 +8,10 @@ import { ApiError, fileUrl, getStructure } from "@/lib/api";
 import { toPage } from "@/lib/coords";
 import { fontStore } from "@/lib/fonts";
 import { loadDraft, saveDraft } from "@/lib/draft";
-import { noticeStore } from "@/lib/notices";
+import { noticeLifetime, noticeStore, type NoticeMsg } from "@/lib/notices";
 import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
-import { resolveImports, restoreDraft } from "@/lib/restore";
+import { dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
@@ -19,6 +19,7 @@ import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor
 import { pdfStore } from "@/store/pdfs";
 import { charsStore } from "@/store/chars";
 import { textStore } from "@/store/text";
+import { BTN_PRIMARY } from "../ui/styles";
 import { FormLayer } from "./forms/FormLayer";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
@@ -36,16 +37,14 @@ const PageOverlay = dynamic(async () => {
   return import("./PageOverlay");
 }, { ssr: false });
 const TextEditor = dynamic(() => import("./text/TextEditor").then((m) => m.TextEditor), { ssr: false });
-const LinkPopover = dynamic(() => import("./marks/LinkPopover").then((m) => m.LinkPopover), { ssr: false });
 const CropOverlay = dynamic(() => import("./pages/CropOverlay"), { ssr: false });
 const FindBar = dynamic(() => import("./find/FindBar").then((m) => m.FindBar), { ssr: false });
 
-const INFO_NOTICE_MS = 5000;
 
 export function Editor({ docId, initialName }: { docId: string; initialName: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ kind: "error" | "info"; text: string } | null>(null);
+  const [notice, setNotice] = useState<NoticeMsg | null>(null);
   const info = useEditor((s) => s.info);
   const tool = useEditor((s) => s.tool);
   const initialDoc = useRef<EditorDoc | null>(null);
@@ -64,6 +63,9 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       }
       if (cancelled) return;
       let draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
+      // Text edits from before a segmentation change name other paragraphs now: drop them (with a notice below).
+      const stale = draft ? dropStaleTextEdits(draft) : null;
+      if (stale) draft = stale.doc;
       // Pages of imported PDFs need those documents' page sizes; imports that expired lose their pages.
       let resolved;
       try {
@@ -78,6 +80,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages, fields: st.fields, imports: resolved?.imports, importFields: resolved?.fields }, draft);
       initialDoc.current = editorStore.getState().doc;
       if (resolved?.missing) setNotice({ kind: "error", text: t.pages.importGone });
+      else if (stale?.dropped) setNotice({ kind: "error", text: t.editor.textEditsDropped });
       else if (draft) setNotice({ kind: "info", text: t.editor.restored });
       void textStore.getState().load(docId); // original paragraphs + fonts, in the background
       for (const id of Object.keys(resolved?.imports ?? {})) void textStore.getState().loadImport(id);
@@ -120,10 +123,11 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
   // Notices raised by store actions (e.g. a text commit that deleted marks).
   useEffect(() => noticeStore.subscribe((s, prev) => { if (s.notice && s.notice !== prev.notice) setNotice(s.notice); }), []);
 
-  // Info notices go away by themselves; errors stay until closed.
+  // Info notices go away by themselves (later when they carry a button); errors stay until closed.
   useEffect(() => {
-    if (notice?.kind !== "info") return;
-    const timer = setTimeout(() => setNotice((n) => (n === notice ? null : n)), INFO_NOTICE_MS);
+    const ms = notice ? noticeLifetime(notice) : null;
+    if (ms === null) return;
+    const timer = setTimeout(() => setNotice((n) => (n === notice ? null : n)), ms);
     return () => clearTimeout(timer);
   }, [notice]);
 
@@ -147,43 +151,45 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
 
   if (fatal) {
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4 text-center">
-        <p role="alert" className="max-w-md text-lg">{errorMessage(fatal)}</p>
-        <Link href="/" className="rounded-lg bg-accent px-4 py-2 text-accent-ink">{t.upload.choose}</Link>
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-5 bg-canvas px-4 text-center">
+        <p role="alert" className="max-w-md text-base text-ink">{errorMessage(fatal)}</p>
+        <Link href="/" className={BTN_PRIMARY}>{t.upload.choose}</Link>
       </main>
     );
   }
 
   return (
-    <div className="flex h-dvh flex-col">
-      <Header onNotice={setNotice} />
-      <Toolbar onNotice={setNotice} />
-      <PropertiesBar />
+    <div className="flex h-dvh flex-col bg-panel">
+      <Header onNotice={setNotice}><Toolbar onNotice={setNotice} /></Header>
       <div className="flex min-h-0 flex-1">
-        {pdf ? <Sidebar /> : <aside className="w-48 shrink-0 border-r border-line bg-surface" />}
-        <main
-          className="relative min-w-0 flex-1 overflow-auto bg-bg"
-          id="page-scroller"
-          style={{ cursor: tool === "pan" ? "grab" : undefined }}
-          onPointerDown={(e) => {
-            if (tool !== "pan") return;
-            const el = e.currentTarget;
-            drag.current = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop };
-          }}
-          onPointerMove={(e) => {
-            if (!drag.current || e.buttons !== 1) return;
-            const el = e.currentTarget;
-            el.scrollLeft = drag.current.l - (e.clientX - drag.current.x);
-            el.scrollTop = drag.current.t - (e.clientY - drag.current.y);
-          }}
-          onPointerUp={() => { drag.current = null; }}
-        >
-          {info && pdf ? <PageList overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><LinkPopover {...a} /><SelectionMiniBar {...a} /><CropOverlay {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
-        </main>
+        {pdf ? <Sidebar /> : <aside className="w-52 shrink-0 border-r border-line bg-panel" />}
+        <div className="relative min-w-0 flex-1">
+          <PropertiesBar />
+          <main
+            className="absolute inset-0 overflow-auto bg-canvas"
+            id="page-scroller"
+            style={{ cursor: tool === "pan" ? "grab" : undefined }}
+            onPointerDown={(e) => {
+              if (tool !== "pan") return;
+              const el = e.currentTarget;
+              drag.current = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop };
+            }}
+            onPointerMove={(e) => {
+              if (!drag.current || e.buttons !== 1) return;
+              const el = e.currentTarget;
+              el.scrollLeft = drag.current.l - (e.clientX - drag.current.x);
+              el.scrollTop = drag.current.t - (e.clientY - drag.current.y);
+            }}
+            onPointerUp={() => { drag.current = null; }}
+          >
+            {info && pdf ? <PageList overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><SelectionMiniBar {...a} /><CropOverlay {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
+          </main>
+          <ZoomPill />
+          {/* Over the canvas (centred on it, above the zoom pill), not on the window. */}
+          {notice && <Notice kind={notice.kind} action={notice.action} onClose={() => setNotice(null)}>{notice.text}</Notice>}
+        </div>
       </div>
       <FindBar />
-      <ZoomPill />
-      {notice && <Notice kind={notice.kind} onClose={() => setNotice(null)}>{notice.text}</Notice>}
     </div>
   );
 }

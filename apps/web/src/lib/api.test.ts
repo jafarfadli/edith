@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, exportPdf, getStructure, uploadDocument } from "@/lib/api";
+import { ApiError, exportPdf, getStructure, PARAGRAPHS_VERSION, renderPage, uploadDocument } from "@/lib/api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -41,9 +41,28 @@ describe("api client", () => {
     await expect(getStructure("x")).rejects.toMatchObject({ code: "network", status: 0 });
   });
 
+  it("gives the export a time limit and maps it to a timeout error", async () => {
+    const fn = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      throw new DOMException("The operation timed out.", "TimeoutError");
+    });
+    vi.stubGlobal("fetch", fn);
+    await expect(exportPdf("x", { ops: [], flatten_forms: false, filename: "a.pdf" })).rejects.toMatchObject({ code: "timeout", status: 0 });
+    expect(fn).toHaveBeenCalledOnce();
+  });
+
   it("returns blob for export", async () => {
     mockFetch(200, "%PDF-1.7", "application/pdf");
     const blob = await exportPdf("x", { ops: [], flatten_forms: false, filename: "a.pdf" });
     expect(await blob.text()).toBe("%PDF-1.7");
+  });
+
+  it("sends the paragraph segmentation version with exports and page renders", async () => {
+    expect(PARAGRAPHS_VERSION).toBe(2); // shared with apps/api/edith/paragraphs.py
+    const fn = mockFetch(200, "%PDF-1.7", "application/pdf");
+    await exportPdf("x", { ops: [] });
+    await renderPage("x", { pageKey: "o0", ops: [] });
+    const bodies = (fn.mock.calls as unknown as [string, RequestInit][]).map(([, init]) => JSON.parse(init.body as string));
+    expect(bodies).toEqual([{ paragraphs_version: 2, ops: [] }, { paragraphs_version: 2, pageKey: "o0", ops: [] }]);
   });
 });

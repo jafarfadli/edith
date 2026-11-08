@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft, ArrowRight, CopyPlus, FilePlus2, FileUp, RotateCcw, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
@@ -10,6 +11,8 @@ import { errorMessage, t } from "@/lib/strings";
 import { editorStore, pageGeom, useEditor, type EditorDoc, type PageEntry } from "@/store/editor";
 import { textStore } from "@/store/text";
 import { Thumbnail } from "../Thumbnail";
+import { ICON } from "../../ui/icon";
+import { BACKDROP, BTN_DANGER, BTN_PRIMARY, BTN_QUIET, DIALOG, DIALOG_TITLE } from "../../ui/styles";
 import { pickPdf } from "./importPdf";
 
 const THUMB = 104;
@@ -22,13 +25,13 @@ function Tile({ entry, index, checked, onToggle }: { entry: PageEntry; index: nu
       {...attributes} {...listeners} data-testid="manage-page" data-page-key={entry.pageKey} aria-pressed={checked}
       onClick={(e) => onToggle(e.shiftKey)}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(e.shiftKey); } }}
-      className={`relative flex cursor-pointer flex-col items-center gap-1 rounded-lg p-2 ${checked ? "bg-accent/10 ring-2 ring-accent" : "hover:bg-bg"}`}>
+      className={`relative flex cursor-pointer flex-col items-center gap-1.5 rounded-lg p-2 transition-colors ${checked ? "bg-accent/15 ring-2 ring-inset ring-accent" : "hover:bg-hover"}`}>
       <div className="grid place-items-center" style={{ width: THUMB, height: THUMB * 1.42 }}>
         <Thumbnail entry={entry} geom={pageGeom(entry, info)} width={THUMB} />
       </div>
       <input type="checkbox" readOnly checked={checked} aria-label={t.pages.pageN(index + 1)} tabIndex={-1}
-        className="pointer-events-none absolute left-3 top-3 h-4 w-4 accent-[var(--accent)]" />
-      <span className="text-xs text-muted">{index + 1}</span>
+        className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4" />
+      <span className={`text-2xs tabular-nums ${checked ? "font-medium text-accent-text" : "text-faint"}`}>{index + 1}</span>
     </div>
   );
 }
@@ -108,34 +111,33 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
-  const btn = "rounded-md px-2.5 py-1.5 hover:bg-bg disabled:opacity-40";
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30" onPointerDown={close}>
+    <div className={`${BACKDROP} items-center`} onPointerDown={close}>
       <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t.pages.manage} data-testid="manage-pages"
         onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") close(); }}
-        className="flex max-h-[85vh] w-[56rem] max-w-[95vw] flex-col gap-3 rounded-xl bg-surface p-4 text-sm shadow-xl outline-none ring-1 ring-line">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{t.pages.manage}</span>
-          <span className="text-xs text-muted">{t.pages.selected(keys.length, draft.pages.length)}</span>
+        className={`${DIALOG} max-h-[85vh] w-[56rem] max-w-[95vw]`}>
+        <div className="flex items-center gap-3 px-4 pb-3 pt-4">
+          <span className={DIALOG_TITLE}>{t.pages.manage}</span>
+          <span className="text-xs tabular-nums text-faint">{t.pages.selected(keys.length, draft.pages.length)}</span>
           <div className="flex-1" />
-          <button className={btn} onClick={() => setSel(new Set(draft.pages.map((p) => p.pageKey)))}>{t.pages.selectAll}</button>
-          <button className={btn} disabled={none} onClick={() => setSel(new Set())}>{t.pages.selectNone}</button>
+          <button className={BTN_QUIET} onClick={() => setSel(new Set(draft.pages.map((p) => p.pageKey)))}>{t.pages.selectAll}</button>
+          <button className={BTN_QUIET} disabled={none} onClick={() => setSel(new Set())}>{t.pages.selectNone}</button>
         </div>
-        <div role="toolbar" aria-label={t.pages.actions} className="flex flex-wrap items-center gap-1 border-y border-line py-2">
-          <button className={btn} disabled={none} onClick={() => setDraft((d) => P.rotatePages(d, keys, -90))}>⟲ {t.editor.rotateLeft}</button>
-          <button className={btn} disabled={none} onClick={() => setDraft((d) => P.rotatePages(d, keys, 90))}>⟳ {t.editor.rotateRight}</button>
-          <button className={btn} disabled={none} onClick={() => setDraft((d) => P.duplicatePages(d, keys))}>⧉ {t.pages.duplicateShort}</button>
-          <button className={btn} disabled={none} onClick={() => setDraft((d) => P.shiftPages(d, keys, -1))}>◀ {t.pages.moveLeft}</button>
-          <button className={btn} disabled={none} onClick={() => setDraft((d) => P.shiftPages(d, keys, 1))}>{t.pages.moveRight} ▶</button>
-          <button className={`${btn} text-danger`} disabled={none || keys.length >= draft.pages.length}
-            onClick={() => { setDraft((d) => P.deletePages(d, keys)); setSel(new Set()); }}>🗑 {t.editor.delete}</button>
-          <span className="mx-1 h-5 w-px bg-line" />
-          <button className={btn} onClick={insertBlank}>＋ {t.pages.blank}</button>
-          <button className={btn} disabled={busy} onClick={() => void importFile()}>⇪ {busy ? t.pages.importing : t.pages.importPdf}</button>
+        <div role="toolbar" aria-label={t.pages.actions} className="flex flex-wrap items-center gap-0.5 border-y border-line bg-panel px-3 py-1.5">
+          <button className={BTN_QUIET} disabled={none} onClick={() => setDraft((d) => P.rotatePages(d, keys, -90))}><RotateCcw {...ICON} />{t.editor.rotateLeft}</button>
+          <button className={BTN_QUIET} disabled={none} onClick={() => setDraft((d) => P.rotatePages(d, keys, 90))}><RotateCw {...ICON} />{t.editor.rotateRight}</button>
+          <button className={BTN_QUIET} disabled={none} onClick={() => setDraft((d) => P.duplicatePages(d, keys))}><CopyPlus {...ICON} />{t.pages.duplicateShort}</button>
+          <button className={BTN_QUIET} disabled={none} onClick={() => setDraft((d) => P.shiftPages(d, keys, -1))}><ArrowLeft {...ICON} />{t.pages.moveLeft}</button>
+          <button className={BTN_QUIET} disabled={none} onClick={() => setDraft((d) => P.shiftPages(d, keys, 1))}>{t.pages.moveRight}<ArrowRight {...ICON} /></button>
+          <button className={BTN_DANGER} disabled={none || keys.length >= draft.pages.length}
+            onClick={() => { setDraft((d) => P.deletePages(d, keys)); setSel(new Set()); }}><Trash2 {...ICON} />{t.editor.delete}</button>
+          <span aria-hidden className="mx-1.5 h-5 w-px bg-line-strong" />
+          <button className={BTN_QUIET} onClick={insertBlank}><FilePlus2 {...ICON} />{t.pages.blank}</button>
+          <button className={BTN_QUIET} disabled={busy} onClick={() => void importFile()}><FileUp {...ICON} />{busy ? t.pages.importing : t.pages.importPdf}</button>
         </div>
-        {error && <p role="alert" className="text-danger">{error}</p>}
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        {error && <p role="alert" className="px-4 pt-3 text-danger-text">{error}</p>}
+        <div className="min-h-0 flex-1 overflow-y-auto bg-canvas/40 p-3">
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={draft.pages.map((p) => p.pageKey)} strategy={rectSortingStrategy}>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-2">
@@ -146,9 +148,9 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
             </SortableContext>
           </DndContext>
         </div>
-        <div className="flex justify-end gap-2">
-          <button disabled={busy} onClick={close} className="rounded-lg px-4 py-2 hover:bg-bg disabled:opacity-40">{t.pages.cancel}</button>
-          <button disabled={busy} onClick={save} className="rounded-lg bg-accent px-4 py-2 text-accent-ink disabled:opacity-40">{t.pages.save}</button>
+        <div className="flex justify-end gap-2 border-t border-line px-4 py-3">
+          <button disabled={busy} onClick={close} className={BTN_QUIET}>{t.pages.cancel}</button>
+          <button disabled={busy} onClick={save} className={BTN_PRIMARY}>{t.pages.save}</button>
         </div>
       </div>
     </div>

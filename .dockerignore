@@ -6,3 +6,10 @@ apps/api/.data
 test-results
 playwright-report
 .git
+# The optional CJK pack is fetched inside the image (CJK_FONTS=1) or left out (CJK_FONTS=0), never copied from a checkout
+packages/fonts/files/cjk
+apps/web/public/fonts
+# Owner reference PDFs and local agent/tooling state
+references
+.claude
+.superpowers

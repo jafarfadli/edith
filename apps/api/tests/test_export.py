@@ -1,5 +1,8 @@
+import io
+
 import pymupdf
 import pytest
+from fontTools.ttLib import TTFont
 
 from tests.pdfs import make_pdf
 
@@ -126,11 +129,11 @@ def test_export_text_edit(client):
     edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
         "rect": R(72, 88, 300, 16), "lineHeight": 12, "paragraphs": [[run]],
         "layout": [{"baseline": 12, "segments": [{"x": 0, "text": "Diganti", "runIndex": 0}]}]}}
-    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit]})
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": 2})
     assert r.status_code == 200, r.text
     text = pymupdf.open(stream=r.content, filetype="pdf")[0].get_text()
     assert "Diganti" in text and "diedit" not in text and "tetangga" in text
-    r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}]})
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}], "paragraphs_version": 2})
     assert r.status_code == 422 and r.json()["error"] == {"code": "invalid_op", "message": "no paragraph g9 on o0", "op_index": 0}
 
 
@@ -160,3 +163,107 @@ def test_export_with_expired_import(client):
     r = client.post(f"/documents/{doc_id}/export", json={"ops": [layout]})
     assert r.status_code == 410
     assert r.json()["error"]["code"] == "doc_expired" and r.json()["error"]["doc_id"] == imported
+
+
+def text_add(text: str, family: str) -> dict:
+    run = {"text": text, "font": {"kind": "bundled", "family": family, "bold": False, "italic": False}, "size": 12,
+           "color": "#000000"}
+    return {"id": "t", "type": "text.add", "pageKey": "o0", "box": {
+        "rect": R(100, 200, 300, 20), "align": "left", "lineHeight": 14.4, "paragraphs": [[run]],
+        "layout": [{"baseline": 12, "segments": [{"x": 0, "text": text, "runIndex": 0}]}]}}
+
+
+def embedded(out: pymupdf.Document, name: str) -> bytes:
+    return next(out.extract_font(e[0])[3] for e in out[0].get_fonts(full=True) if name in e[3])
+
+
+def test_export_embeds_only_the_glyphs_it_uses(client):
+    doc_id = new_doc(client, pages=1)
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [text_add("Halo dunia", "Arimo")]})
+    out = pymupdf.open(stream=r.content, filetype="pdf")
+    assert "Halo dunia" in out[0].get_text()
+    assert len(embedded(out, "Arimo")) < 50_000  # Arimo-Regular.ttf is 316 KB
+
+
+def test_export_with_a_cjk_fallback_font_stays_small(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from edith.main import create_app
+    from edith.settings import Settings
+    from tests.pdfs import fake_cjk_pack
+    settings = Settings(data_dir=tmp_path / "data", fonts_dir=fake_cjk_pack(tmp_path / "fonts"))
+    with TestClient(create_app(settings)) as c:
+        doc_id = new_doc(c, pages=1)
+        r = c.post(f"/documents/{doc_id}/export", json={"ops": [text_add("한국어 텍스트", "Noto Sans KR")]})
+    assert r.status_code == 200, r.text
+    out = pymupdf.open(stream=r.content, filetype="pdf")
+    assert "한국어 텍스트" in out[0].get_text()
+    assert len(r.content) < 100_000  # the fallback file is 4 MB
+
+
+def _export_with_korean(tmp_path, data: bytes) -> pymupdf.Document:
+    from fastapi.testclient import TestClient
+
+    from edith.main import create_app
+    from edith.settings import Settings
+    from tests.pdfs import fake_cjk_pack
+    settings = Settings(data_dir=tmp_path / "data", fonts_dir=fake_cjk_pack(tmp_path / "fonts"))
+    with TestClient(create_app(settings)) as c:
+        doc_id = c.post("/documents", files={"file": ("a.pdf", data, "application/pdf")}).json()["doc_id"]
+        r = c.post(f"/documents/{doc_id}/export", json={"ops": [text_add("한국어 텍스트", "Noto Sans KR")]})
+    assert r.status_code == 200, r.text
+    return pymupdf.open(stream=r.content, filetype="pdf")
+
+
+def _tinos_program(doc: pymupdf.Document) -> TTFont:
+    xref = next(x for x in range(1, doc.xref_length())
+                if doc.xref_get_key(x, "Type")[1] == "/Font" and "Tinos" in doc.xref_get_key(x, "BaseFont")[1])
+    return TTFont(io.BytesIO(doc.extract_font(xref)[3]))
+
+
+def test_subsetting_keeps_form_fonts_whole(tmp_path):
+    from tests.pdfs import make_dr_font_form_pdf
+    data = make_dr_font_form_pdf()
+    original = _tinos_program(pymupdf.open(stream=data, filetype="pdf"))
+    out = _export_with_korean(tmp_path, data)
+    kept = _tinos_program(out)
+    assert kept["maxp"].numGlyphs == original["maxp"].numGlyphs
+    assert "cmap" in kept and len(kept.getBestCmap()) == len(original.getBestCmap())
+    # Tinos stays whole (270 KB deflated); the 4 MB Korean fallback is subset to a few KB
+    assert len(out.tobytes(garbage=3, deflate=True)) < 400_000
+    assert "한국어 텍스트" in out[0].get_text() and "Nama:Budi" in out[0].get_text()
+
+
+def test_subsetting_still_shrinks_fonts_of_documents_without_a_form(tmp_path):
+    from tests.pdfs import make_dr_font_form_pdf
+    data = make_dr_font_form_pdf(form=False)
+    out = _export_with_korean(tmp_path, data)
+    assert len(_tinos_program(pymupdf.open(stream=data, filetype="pdf")).getGlyphOrder()) > 500
+    assert len(out.tobytes(garbage=3, deflate=True)) < 100_000
+    assert "Nama:Budi" in out[0].get_text()
+
+
+def test_export_keeps_the_unicode_of_invisible_characters(client):
+    text = "a\u200bb\u2060c"  # zero-width space and word joiner: glyphs without outlines
+    doc_id = new_doc(client, pages=1)
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [text_add(text, "Tinos")]})
+    out = pymupdf.open(stream=r.content, filetype="pdf")
+    assert text in out[0].get_text()
+
+
+@pytest.mark.parametrize("version", [None, 1, 3])
+def test_text_edits_of_another_segmentation_version_are_refused(client, version):
+    """Ids g0, g1, … are positions in one segmentation: a draft or tab from before an update would edit
+    the wrong paragraph."""
+    from tests.pdfs import make_edit_pdf
+    doc_id = client.post("/documents", files={"file": ("e.pdf", make_edit_pdf(), "application/pdf")}).json()["doc_id"]
+    run = {"text": "Diganti", "font": {"kind": "bundled", "family": "Arimo"}, "size": 12, "color": "#000000"}
+    edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
+        "rect": R(72, 88, 300, 16), "lineHeight": 12, "paragraphs": [[run]],
+        "layout": [{"baseline": 12, "segments": [{"x": 0, "text": "Diganti", "runIndex": 0}]}]}}
+    body = {"ops": [edit]} if version is None else {"ops": [edit], "paragraphs_version": version}
+    for path in ("export", "render-page"):
+        r = client.post(f"/documents/{doc_id}/{path}", json={**body, **({"pageKey": "o0"} if path == "render-page" else {})})
+        assert r.status_code == 409 and r.json()["error"]["code"] == "text_outdated"
+        assert r.json()["error"]["op_index"] == 0
+    assert client.post(f"/documents/{doc_id}/export", json={"ops": []}).status_code == 200  # no text.edit: any version

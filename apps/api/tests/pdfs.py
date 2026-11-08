@@ -1,3 +1,6 @@
+import io
+import struct
+from collections.abc import Callable
 from pathlib import Path
 
 import pymupdf
@@ -53,7 +56,8 @@ def make_fonts_pdf() -> bytes:
 
 
 def make_pymupdf_subset_pdf() -> bytes:
-    """An embedded TTF subset by PyMuPDF: it has no cmap, so it can't be reused."""
+    """An embedded TTF subset by PyMuPDF: it has no cmap, so it is reused through one rebuilt from its
+    ToUnicode (edith.cid_fonts)."""
     doc = pymupdf.open()
     page = doc.new_page(width=595, height=842)
     page.insert_font(fontname="FC", fontfile=str(FONT_FILES / "Cousine-Regular.ttf"))
@@ -81,7 +85,7 @@ def make_paragraphs_pdf() -> bytes:
     D heading 18 pt + body 12 pt · E centered · F rotated 90°."""
     doc = pymupdf.open()
     page = doc.new_page(width=595, height=842)
-    for i, text in enumerate(["Paragraf A baris satu yang cukup panjang", "baris dua lanjutan paragraf A", "baris tiga akhir A."]):
+    for i, text in enumerate(["Paragraf A baris satu yang cukup panjang", "baris dua lanjutan paragraf A yang", "berakhir di baris tiga A."]):
         page.insert_text((72, 100 + i * 14.4), text, fontname="helv", fontsize=12)
     page.insert_textbox(pymupdf.Rect(72, 180, 372, 260), LOREM, fontname="tiro", fontsize=11,
                         align=pymupdf.TEXT_ALIGN_JUSTIFY)
@@ -91,7 +95,7 @@ def make_paragraphs_pdf() -> bytes:
         page.insert_text((x, 320 + i * 14.4), text, fontname="helv", fontsize=12)
     page.insert_text((72, 420), "Judul Besar", fontname="hebo", fontsize=18)
     page.insert_text((72, 440), "Isi di bawah judul.", fontname="helv", fontsize=12)
-    for i, text in enumerate(["Baris tengah pertama yang lebar", "lebih pendek", "tengah"]):
+    for i, text in enumerate(["Baris tengah pertama yang lebar", "lebih pendek namun tetap", "seimbang"]):
         w = pymupdf.get_text_length(text, fontname="helv", fontsize=12)
         page.insert_text((297.5 - w / 2, 500 + i * 14.4), text, fontname="helv", fontsize=12)
     page.insert_text((500, 700), "Teks diputar", fontname="helv", fontsize=12, rotate=90)
@@ -269,3 +273,167 @@ def make_xfa_form_pdf() -> bytes:
     doc.xref_set_key(acro, "XFA", f"[(datasets) {xfa} 0 R]")
     doc.xref_set_key(cat, "AcroForm", f"{acro} 0 R")
     return doc.tobytes()
+
+
+def _wrap(text: str, font: pymupdf.Font, size: float, width: float, by_char: bool) -> list[str]:
+    """Greedy line breaks of `text` at `width`: at spaces, or after any character (`by_char`, CJK)."""
+    lines, line = [], ""
+    for piece in (list(text) if by_char else text.split(" ")):
+        candidate = line + piece if by_char or not line else f"{line} {piece}"
+        if line and font.text_length(candidate, size) > width:
+            lines.append(line)
+            line = piece
+        else:
+            line = candidate
+    return lines + [line]
+
+
+FORM_EN = "The applicant must write in block letters either in English or Korean and sign the form at the end."
+FORM_JA = "これは日本語の段落です。行は文字単位で折り返され、単語の間に空白はありません。最後の行は短い。"
+FORM_KO = "신청서상의 모든 질문에 대한 답변은 한글 또는 영문으로 기재해야 하며 사실에 근거하여 빠짐없이 작성해야 합니다."
+
+
+def make_form_table_pdf() -> bytes:
+    """A form page like Korean visa applications: an instruction list, a bordered table (labels on one baseline in
+    two cells, a label above a field rule in one text block, checkbox rows, wrapped text in a cell), a bold heading,
+    and paragraphs wrapped at 200 pt in Japanese (by character) and Korean (by word), each followed by a short line."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    cjk = pymupdf.Font("korea")
+    page.insert_font(fontname="AR", fontfile=str(FONT_FILES / "Arimo-Regular.ttf"))
+    for i, text in enumerate(["<How to fill out this form>", "• Fill out this form completely and correctly.",
+                              "• Write in block letters either in English or Korean.", "• Check all that apply."]):
+        page.insert_text((56, 80 + 12.5 * i), text, fontname="AR", fontsize=9)
+    page.draw_rect(pymupdf.Rect(50, 200, 545, 330), color=(0, 0, 0), width=0.5)
+    page.draw_line((300, 200), (300, 330), color=(0, 0, 0), width=0.5)
+    page.draw_line((50, 220), (545, 220), color=(0, 0, 0), width=0.5)
+    page.insert_text((103, 215), "1.1 Full name in English (as shown in passport)", fontname="helv", fontsize=9)
+    page.insert_text((306, 215), "1.2 Sex", fontname="helv", fontsize=9)
+    page.insert_text((56, 230), "Family Name", fontname="helv", fontsize=9)
+    page.insert_text((306, 245), "Long-term stay over 90 days      [   ]", fontname="cour", fontsize=9)
+    page.insert_text((306, 257), "Short-term stay below 90 days    [   ]", fontname="cour", fontsize=9)
+    assert page.insert_textbox(pymupdf.Rect(56, 250, 294, 328), FORM_EN, fontname="helv", fontsize=9) >= 0
+    page.insert_text((56, 360), "SECTION TWO: GENERAL CONDITIONS OF THE APPLICATION", fontname="hebo", fontsize=10)
+    page.insert_text((56, 372), "Body text right below the heading.", fontname="helv", fontsize=10)
+    for x, (text, by_char, font_name) in [(56, (FORM_JA, True, "japan")), (300, (FORM_KO, False, "korea"))]:
+        lines = _wrap(text, cjk, 10, 200, by_char) + ["短い行。" if by_char else "짧은 줄.", text[:12]]
+        for i, line in enumerate(lines):
+            page.insert_text((x, 420 + 14 * i), line, fontname=font_name, fontsize=10)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+CID_TEXT = "신청서 작성 방법 Visa Form"
+
+
+def _renamed(buf: bytes, family: str) -> bytes:
+    """A copy of TrueType `buf` whose name table says `family` (two copies of one program stay two fonts)."""
+    from fontTools.ttLib import TTFont
+    font = TTFont(io.BytesIO(buf))
+    for rec in font["name"].names:
+        if rec.nameID in (1, 3, 4, 6, 16):
+            rec.string = family.replace(" ", "") if rec.nameID in (3, 6) else family
+    out = io.BytesIO()
+    font.save(out)
+    return out.getvalue()
+
+
+def make_cid_subset_pdf() -> bytes:
+    """Text in cmap-less CID TrueType subsets, as MS Word and Hancom export them: Korean + Latin in a gothic font
+    named "Dotum" (line 1), the same in "Batang" (line 2) and two characters in "Wingdings" (line 3). All three
+    are Droid Sans Fallback (built into MuPDF) embedded by insert_font, then subset by PyMuPDF, which drops the
+    cmap and keeps ToUnicode and CIDToGIDMap; the BaseFont names are set afterwards."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    droid = pymupdf.Font("korea").buffer
+    for i, (tag, name, text) in enumerate([("DO", "Dotum", CID_TEXT), ("BA", "Batang", CID_TEXT), ("WI", "Wingdings", "èô")]):
+        page.insert_font(fontname=tag, fontbuffer=_renamed(droid, name))  # short: MuPDF cuts span font names
+        page.insert_text((72, 100 + 30 * i), text, fontname=tag, fontsize=12)
+    doc.subset_fonts()
+    for xref, _ext, _type, basefont, *_rest in page.get_fonts(full=True):
+        name = next(n for n in ("Dotum", "Batang", "Wingdings") if n in basefont)
+        doc.xref_set_key(xref, "BaseFont", f"/EDITHA+{name}")
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+def fake_cjk_pack(root: Path, files: tuple[str, ...] = ("NotoSansKR-Regular.ttf", "NotoSerifKR-Regular.ttf")) -> Path:
+    """A fonts dir at `root`: the real manifest and bundled files (symlinked) plus a fake CJK pack — the given pack
+    files, each a copy of Droid Sans Fallback (built into MuPDF: Hangul, kana, Han). Tests don't need the real pack."""
+    (root / "files" / "cjk").mkdir(parents=True)
+    (root / "manifest.json").write_bytes((FONT_FILES.parent / "manifest.json").read_bytes())
+    for f in FONT_FILES.glob("*.ttf"):
+        (root / "files" / f.name).symlink_to(f)
+    droid = pymupdf.Font("korea").buffer
+    for name in files:
+        (root / "files" / "cjk" / name).write_bytes(droid)
+    return root
+
+
+def make_dr_font_form_pdf(form: bool = True) -> bytes:
+    """One page with "Nama:Budi" in an embedded Tinos (the font keeps all its glyphs and its cmap in the file). With
+    `form`: a text widget `nama` whose appearance stream uses that same font and an AcroForm /DR listing it, as
+    Word/Acrobat forms do, so a viewer re-filling the field needs the whole program."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_font(fontname="FT", fontfile=str(FONT_FILES / "Tinos-Regular.ttf"))
+    page.insert_text((72, 90), "Nama:Budi", fontname="FT", fontsize=12)
+    if form:
+        _widget(page, pymupdf.PDF_WIDGET_TYPE_TEXT, "nama", (72, 100, 272, 120), field_value="Budi", text_fontsize=11)
+        font = page.get_fonts(full=True)[0][0]
+        widget = next(page.widgets())
+        ap = int(doc.xref_get_key(widget.xref, "AP/N")[1].split()[0])
+        doc.xref_set_key(ap, "Resources", f"<</Font<</FT {font} 0 R>>>>")
+        doc.xref_set_key(doc.pdf_catalog(), "AcroForm/DR", f"<</Font<</FT {font} 0 R>>>>")
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+# Damage FreeType accepts but fontTools can't read (the rebuild must fall back to "not reusable").
+BROKEN_TABLES: dict[str, tuple[bytes, Callable[[bytes], bytes]]] = {
+    "glyf garbage": (b"glyf", lambda t: b"\xff" * len(t)),
+    "hhea garbage": (b"hhea", lambda t: b"\xff" * len(t)),
+    "maxp numGlyphs 0xFFFF": (b"maxp", lambda t: t[:4] + b"\xff\xff" + t[6:]),
+}
+
+
+def break_font_table(data: bytes, name: str, damage: str) -> bytes:
+    """`data` with one table of the embedded program of Type0 font `name` damaged as BROKEN_TABLES[damage] says."""
+    tag, fn = BROKEN_TABLES[damage]
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    xref = next(e[0] for e in doc[0].get_fonts(full=True) if e[3].endswith(name))
+    cid_font = int(doc.xref_get_key(xref, "DescendantFonts")[1].strip("[]").split()[0])
+    descriptor = int(doc.xref_get_key(cid_font, "FontDescriptor")[1].split()[0])
+    stream = int(doc.xref_get_key(descriptor, "FontFile2")[1].split()[0])
+    buf = bytearray(doc.xref_stream(stream))
+    for i in range(struct.unpack(">H", buf[4:6])[0]):
+        rec = 12 + 16 * i
+        if buf[rec:rec + 4] == tag:
+            offset, length = struct.unpack(">II", buf[rec + 8:rec + 16])
+            buf[offset:offset + length] = fn(bytes(buf[offset:offset + length]))
+    doc.update_stream(stream, bytes(buf))
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+KO_LABEL = "1.1 성명 Full name in English"
+
+
+def make_korean_form_pdf() -> bytes:
+    """A stand-in for the owner's Korean visa form (apps/web/e2e/fixtures/form-ko.pdf): Korean and Latin text in a
+    cmap-less CID subset named "Dotum" (as Hancom exports it), an instruction list, and a bordered table whose two
+    labels share one baseline 12 pt apart across a cell border, a field label under a rule and two checkbox rows."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    droid = pymupdf.Font("korea")
+    page.insert_font(fontname="DO", fontbuffer=_renamed(droid.buffer, "Dotum"))
+    for i, text in enumerate(["<신청서 작성방법>", "※ 신청서는 한글 또는 영문으로 작성합니다.", "※ 해당 칸에 표시를 하시기 바랍니다."]):
+        page.insert_text((56, 80 + 13 * i), text, fontname="DO", fontsize=10)
+    page.draw_rect(pymupdf.Rect(50, 150, 545, 240), color=(0, 0, 0), width=0.5)
+    page.draw_line((300, 150), (300, 240), color=(0, 0, 0), width=0.5)
+    page.draw_line((50, 175), (545, 175), color=(0, 0, 0), width=0.5)
+    page.insert_text((294 - droid.text_length(KO_LABEL, 10), 167), KO_LABEL, fontname="DO", fontsize=10)
+    page.insert_text((306, 167), "1.2 성별 Sex", fontname="DO", fontsize=10)
+    page.insert_text((56, 195), "성 Family Name", fontname="DO", fontsize=10)
+    page.insert_text((306, 195), "남성 Male      [   ]", fontname="DO", fontsize=10)
+    page.insert_text((306, 210), "여성 Female    [   ]", fontname="DO", fontsize=10)
+    doc.subset_fonts()
+    for xref, *_rest in page.get_fonts(full=True):
+        doc.xref_set_key(xref, "BaseFont", "/EDITHB+Dotum")
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)  # no random trailer /ID: byte-reproducible

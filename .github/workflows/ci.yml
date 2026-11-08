@@ -9,6 +9,11 @@ jobs:
         with: { node-version: 22, cache: npm }
       - uses: astral-sh/setup-uv@v5
       - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: packages/fonts/files/cjk
+          key: cjk-fonts-${{ hashFiles('packages/fonts/manifest.json', 'packages/fonts/scripts/fetch-cjk.mjs') }}
+      - run: node packages/fonts/scripts/fetch-cjk.mjs
       - run: cd apps/api && uv sync && uv run pytest -q
       - run: npm run check -w packages/ops
       - run: npm test -w apps/web

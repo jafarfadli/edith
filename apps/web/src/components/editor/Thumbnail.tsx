@@ -10,7 +10,7 @@ export function Thumbnail({ entry, geom, width = THUMB_W }: { entry: PageEntry; 
   const scale = width / screenSize(geom, 1).width;
   const size = screenSize(geom, scale);
   return (
-    <div className="relative overflow-hidden bg-white ring-1 ring-line" style={{ width: size.width, height: size.height }}>
+    <div className="relative overflow-hidden bg-paper shadow-page" style={{ width: size.width, height: size.height }}>
       <PageCanvas entry={entry} geom={geom} scale={scale} label="thumbnail" />
     </div>
   );

@@ -19,10 +19,11 @@ export interface PageEntry { pageKey: string; src: PageSrc; rotate: Rotation; cr
 export type FormValue = string | boolean;
 /** `forms`: AcroForm values the user set, by field name (sent as form.set ops); absent in M1/M2 drafts.
  *  `imports`: doc ids of imported PDFs whose pages the document has (had); absent before M4.
- *  `importForms`: values of imported PDFs' fields, by doc id then field name (form.set with `doc`). */
+ *  `importForms`: values of imported PDFs' fields, by doc id then field name (form.set with `doc`).
+ *  `paragraphsVersion`: only in stored drafts — the segmentation their text.edit paragraph ids come from (absent = 1). */
 export interface EditorDoc {
   pages: PageEntry[]; objects: Record<string, ContentOp>; order: string[]; forms?: Record<string, FormValue>;
-  imports?: string[]; importForms?: Record<string, Record<string, FormValue>>;
+  imports?: string[]; importForms?: Record<string, Record<string, FormValue>>; paragraphsVersion?: number;
 }
 export type MarkupTool = "highlight" | "underline" | "strike";
 export type Tool = "select" | "text" | "whiteout" | "redact" | "ink" | "image" | "rect" | "ellipse" | "line" | "arrow" | "pan"

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { prepareRuns } from "@/lib/fallback";
 import { FontStore, charOffsets, covers, cssFamily, fontKey, metricsFromBuffer, pickFile, textWidth } from "@/lib/fonts";
 
 const ttf = (name: string) => readFileSync(path.resolve(__dirname, "../../../../packages/fonts/files", name));
@@ -56,6 +57,61 @@ describe("FontStore", () => {
     const m = await store.load(font);
     expect(m.unitsPerEm).toBe(2048);
     expect(store.get(font)).toBe(m);
+  });
+
+  it("knows the fetched CJK pack: fallback families by script and design, not offered in the picker", async () => {
+    const withCjk = { ...manifest, cjk: {
+      "Noto Sans KR": { category: "sans", script: "kr", files: { regular: "cjk/NotoSansKR-Regular.ttf", bold: "cjk/NotoSansKR-Bold.ttf" } },
+      "Noto Serif KR": { category: "serif", script: "kr", files: { regular: "cjk/NotoSerifKR-Regular.ttf" } },
+      "Noto Sans JP": { category: "sans", script: "jp", files: { regular: "cjk/NotoSansJP-Regular.ttf" } },
+    } };
+    const fetchMock = vi.fn(async (url: string) => (url.endsWith("manifest.json") ? json(withCjk) : new Response(bytes(), { status: 200 })));
+    vi.stubGlobal("fetch", fetchMock);
+    const store = new FontStore("/fonts");
+    expect(store.cjkFamily("kr", "sans")).toBeNull(); // manifest not loaded yet
+    expect(await store.families()).toEqual(["Arimo"]);
+    expect([store.cjkFamily("kr", "sans"), store.cjkFamily("kr", "serif"), store.cjkFamily("jp", "serif"), store.cjkFamily("sc", "sans")])
+      .toEqual(["Noto Sans KR", "Noto Serif KR", "Noto Sans JP", null]);
+    expect([store.categoryOf("Arimo"), store.categoryOf("Noto Serif KR"), store.categoryOf("Lato")]).toEqual(["sans", "serif", null]);
+    await store.load({ kind: "bundled", family: "Noto Sans KR", bold: true, italic: true });
+    expect(fetchMock).toHaveBeenLastCalledWith("/fonts/cjk/NotoSansKR-Bold.ttf"); // no italic: bold
+    expect(store.hanScript()).toBe("sc");
+    store.setHanScript("kr");
+    expect(store.hanScript()).toBe("kr");
+  });
+
+  it("loads a CJK pack family the API names as an original font's substitute (only when the pack is there)", async () => {
+    // GET /text substitutes Korean fonts (Dotum, Batang …) with "Noto Sans KR" / "Noto Serif KR" when the API has the pack.
+    const sub = { kind: "bundled" as const, family: "Noto Sans KR", bold: false, italic: false };
+    const docFonts = { f1: { ref: "f1", name: "Dotum", embedded: false, format: null, reusable: false, family: "dotum", bold: false,
+      italic: false, substitute: sub } };
+    const cjk = { "Noto Sans KR": { category: "sans", script: "kr", files: { regular: "cjk/NotoSansKR-Regular.ttf" } } };
+    const serve = (m: unknown) => vi.fn(async (url: string) => (url.endsWith("manifest.json") ? json(m) : new Response(bytes(), { status: 200 })));
+    const withPack = serve({ ...manifest, cjk });
+    vi.stubGlobal("fetch", withPack);
+    const store = new FontStore("/fonts");
+    const runs = [[{ text: "ab", font: { kind: "original" as const, ref: "f1" }, size: 12, color: "#000000" }]];
+    const out = await prepareRuns(runs, docFonts, store, store); // the original has no source: counts as glyph-less
+    expect(out[0].map((r) => r.font)).toEqual([sub]);
+    expect(withPack).toHaveBeenCalledWith("/fonts/cjk/NotoSansKR-Regular.ttf");
+    vi.stubGlobal("fetch", serve({ ...manifest, cjk: {} })); // web without the pack: the family is unknown
+    await expect(new FontStore("/fonts").load(sub)).rejects.toThrow("unknown font family Noto Sans KR");
+  });
+
+  it("fetches and parses a font file once for every style that resolves to it", async () => {
+    // The CJK pack has no italics: italic uses the regular file, bold italic the bold one (6–15 MB each).
+    const cjk = { "Noto Sans KR": { category: "sans", script: "kr", files: { regular: "cjk/NotoSansKR-Regular.ttf", bold: "cjk/NotoSansKR-Bold.ttf" } } };
+    const fetchMock = vi.fn(async (url: string) => (url.endsWith("manifest.json") ? json({ ...manifest, cjk }) : new Response(bytes(), { status: 200 })));
+    vi.stubGlobal("fetch", fetchMock);
+    const store = new FontStore("/fonts");
+    const kr = (bold: boolean, italic: boolean) => ({ kind: "bundled" as const, family: "Noto Sans KR", bold, italic });
+    const [regular, italic] = await Promise.all([store.load(kr(false, false)), store.load(kr(false, true))]);
+    const [bold, boldItalic] = [await store.load(kr(true, false)), await store.load(kr(true, true))];
+    const files = fetchMock.mock.calls.map(([u]) => u).filter((u) => !u.endsWith("manifest.json"));
+    expect(files).toEqual(["/fonts/cjk/NotoSansKR-Regular.ttf", "/fonts/cjk/NotoSansKR-Bold.ttf"]);
+    expect(italic).toBe(regular); // one parse
+    expect(boldItalic).toBe(bold);
+    expect(store.peek(kr(false, true))).toBe(regular);
   });
 
   it("rejects a failed TTF fetch and retries later", async () => {

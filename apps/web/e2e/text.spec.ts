@@ -82,7 +82,7 @@ test("edit an original paragraph, find & replace, download", async ({ page }) =>
   expect(bold.font).toMatch(/Arimo.*Bold/);
   expect(bold.text.trim()).toBe("penting");
   expect(spans.find((s) => s.text.includes("Paragraf pertama"))!.font).toMatch(/Arimo/);
-  expect(spans.find((s) => s.text.includes("Paragraf kedua"))!.font).toBe("EdithDoc-Regular");
+  expect(spans.find((s) => s.text.includes("Paragraf kedua"))!.font).toContain("EdithDoc"); // subset at export: MuPDF names it after the family
 
   // Unchanged text keeps its lines: every original line still starts at the same place with the same word.
   for (const s of pdfSpans(TEXT_PDF)[0]) {
@@ -91,12 +91,14 @@ test("edit an original paragraph, find & replace, download", async ({ page }) =>
   }
 
   // The baked baselines are where the editor laid the lines out (±0.5 pt).
-  const draft = await page.evaluate(() => {
-    const key = Object.keys(localStorage).find((k) => k.startsWith("edith:draft:"))!;
-    return JSON.parse(localStorage.getItem(key)!) as { objects: Record<string, { type: string; box: { rect: { y: number }; layout: { baseline: number }[] } }> };
+  type Draft = { objects: Record<string, { type: string; box: { rect: { y: number }; layout: { baseline: number }[] } }> };
+  const readDraft = () => page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => k.startsWith("edith:draft:"));
+    return key ? (JSON.parse(localStorage.getItem(key)!) as Draft) : null;
   });
-  const edits = Object.values(draft.objects).filter((o) => o.type === "text.edit");
-  expect(edits).toHaveLength(2);
+  const editsOf = (d: Draft | null) => Object.values(d?.objects ?? {}).filter((o) => o.type === "text.edit");
+  await expect.poll(async () => editsOf(await readDraft()).length).toBe(2); // the autosave is debounced
+  const edits = editsOf(await readDraft());
   for (const op of edits) {
     for (const line of op.box.layout) {
       const y = op.box.rect.y + line.baseline;
@@ -118,6 +120,6 @@ test("warns about unsupported characters while typing, before commit", async ({ 
     await expect(editor).toBeVisible({ timeout: 1000 });
   }).toPass();
   await expect(page.getByText("beberapa karakter tidak didukung font ini")).toHaveCount(0);
-  await editor.pressSequentially("漢字");
+  await editor.pressSequentially("𓀀"); // a hieroglyph: no bundled font, CJK pack included, has it
   await expect(page.getByText("beberapa karakter tidak didukung font ini")).toBeVisible();
 });
