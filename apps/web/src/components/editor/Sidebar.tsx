@@ -3,8 +3,10 @@
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useState } from "react";
 import { t } from "@/lib/strings";
 import { editorStore, pageGeom, useEditor, type PageEntry } from "@/store/editor";
+import { AnnotationsPanel } from "./AnnotationsPanel";
 import { MenuButton } from "./MenuButton";
 import { PageMenu } from "./PageMenu";
 import { importPdf, pickPdf } from "./pages/importPdf";
@@ -46,6 +48,26 @@ function SortableThumb({ entry, index, count, active }: { entry: PageEntry; inde
 }
 
 export function Sidebar() {
+  const [tab, setTab] = useState<"pages" | "annotations">("pages");
+  const count = useEditor((s) => s.doc.order.length);
+  const tabBtn = (k: typeof tab, label: string) => (
+    <button role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+      className={`flex-1 rounded-md px-2 py-1 text-xs ${tab === k ? "bg-accent/10 font-medium text-accent" : "text-muted hover:bg-bg"}`}>{label}</button>
+  );
+  return (
+    <aside className="flex w-48 shrink-0 flex-col border-r border-line bg-surface" aria-label={t.editor.pages}>
+      <div role="tablist" className="flex gap-1 border-b border-line p-1.5">
+        {tabBtn("pages", t.panel.pages)}
+        {tabBtn("annotations", count ? `${t.panel.annotations} (${count})` : t.panel.annotations)}
+      </div>
+      <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+        {tab === "pages" ? <PageThumbs /> : <AnnotationsPanel />}
+      </div>
+    </aside>
+  );
+}
+
+function PageThumbs() {
   const pages = useEditor((s) => s.doc.pages);
   const current = useEditor((s) => s.currentPage);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -57,7 +79,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-48 shrink-0 overflow-y-auto border-r border-line bg-surface px-2 py-3" aria-label={t.editor.pages}>
+    <>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={pages.map((p) => p.pageKey)} strategy={verticalListSortingStrategy}>
           <InsertButton after={null} />
@@ -69,6 +91,6 @@ export function Sidebar() {
           ))}
         </SortableContext>
       </DndContext>
-    </aside>
+    </>
   );
 }

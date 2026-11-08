@@ -122,6 +122,18 @@ export const t = {
     cancel: "Batal",
     save: "Simpan",
   },
+  objectKinds: {
+    text: "Teks", textEdit: "Teks diedit", image: "Gambar", signature: "Tanda tangan", ink: "Gambar bebas",
+    whiteout: "Whiteout", redact: "Redaksi", stamp: "Stamp", check: "Centang", cross: "Silang", link: "Link", note: "Catatan",
+    shape: { rect: "Persegi", ellipse: "Elips", line: "Garis", arrow: "Panah", polygon: "Poligon", polyline: "Garis bersambung", cloud: "Awan" },
+    markup: { highlight: "Stabilo", underline: "Garis bawah", strike: "Coret" },
+  },
+  panel: {
+    pages: "Halaman",
+    annotations: "Anotasi",
+    empty: "Belum ada anotasi. Objek yang Anda tambahkan muncul di sini.",
+    deleteItem: (label: string) => `Hapus ${label}`,
+  },
   objects: {
     bar: "Aksi objek",
     duplicate: "Duplikat",
