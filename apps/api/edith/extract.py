@@ -1,6 +1,6 @@
 import pymupdf
 
-from edith.doc_fonts import collect_fonts, fill_substitutes, is_symbolic, name_key, span_fonts
+from edith.doc_fonts import collect_fonts, fill_substitutes, font_candidates, is_symbolic, name_key, pick_font, span_fonts
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
 from edith.fonts import FontRegistry
 from edith.forms import extract_fields
@@ -52,9 +52,13 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
     pages = []
     for page in doc:
         by_name = span_fonts(page, fonts)
+        by_key = font_candidates(page, fonts)
 
-        def resolve(span: dict, by_name=by_name) -> dict:
-            font = by_name.get(name_key(span["font"]))
+        def resolve(span: dict, by_name=by_name, by_key=by_key) -> dict:
+            key = name_key(span["font"])
+            font = by_name.get(key)
+            if font is None and len(by_key.get(key, ())) > 1:  # two subsets share the name: the one that draws it
+                font = pick_font(doc, by_key[key], key, span)
             if font is None:
                 return registry.substitute(span["font"], span["flags"])
             if font.substitute is None:  # BaseFont names map better than program names

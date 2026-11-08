@@ -61,6 +61,7 @@ class _Line:
     tabular: bool = False    # spaced out with runs of spaces (see TAB_GAP): never part of a wrapped paragraph
     gaps: tuple = ()         # word gaps (ink to ink between words), in ems
     body_x: float | None = None  # a list item's text: x of its first character after the marker
+    stretch: tuple = ()      # per word gap: how much wider it is than its space characters, in ems (justified text)
 
     @property
     def text(self) -> str:
@@ -137,7 +138,10 @@ def _build(spans: list[dict], horizontal: bool, bbox: tuple | None = None) -> _L
     style, uniform = _style(spans)
     text = "".join(c["c"] for c in chars).strip()
     sizes = [s["size"] for s in spans for _ in s["chars"]]
-    gaps = tuple(g / sizes[a] for a, b, g in _word_gaps(chars))
+    word_gaps = _word_gaps(chars)
+    gaps = tuple(g / sizes[a] for a, b, g in word_gaps)
+    stretch = tuple((g - sum(chars[k]["bbox"][2] - chars[k]["bbox"][0] for k in range(a + 1, b))) / sizes[a]
+                    for a, b, g in word_gaps)
     body_x = None
     marker = ITEM.match(text)
     if marker:
@@ -147,7 +151,8 @@ def _build(spans: list[dict], horizontal: bool, bbox: tuple | None = None) -> _L
     return _Line(spans=spans, x0=x0, y0=y0, x1=x1, y1=y1, baseline=main["origin"][1], size=main["size"],
                  horizontal=horizontal, ink_x0=ink[0]["bbox"][0], ink_x1=ink[-1]["bbox"][2],
                  first_word=_first_word(chars), style=style, uniform=uniform,
-                 tabular=TAB_GAP in text or LEADER.search(text) is not None, gaps=gaps, body_x=body_x)
+                 tabular=TAB_GAP in text or LEADER.search(text) is not None, gaps=gaps, body_x=body_x,
+                 stretch=stretch)
 
 
 def _word_gaps(chars: list[dict]) -> list[tuple[int, int, float]]:
@@ -253,6 +258,7 @@ def _join(a: _Line, b: _Line) -> _Line:
                  ink_x1=b.ink_x1, first_word=a.first_word, style=style, uniform=uniform,
                  tabular=a.tabular or b.tabular,
                  gaps=a.gaps + ((b.ink_x0 - a.ink_x1) / max(a.size, b.size),) + b.gaps,
+                 stretch=a.stretch + ((b.ink_x0 - a.ink_x1) / max(a.size, b.size) - SPACE_EM,) + b.stretch,
                  body_x=a.body_x if a.body_x is not None or not ITEM.fullmatch(a.text.strip()) else b.ink_x0)
 
 
@@ -274,7 +280,7 @@ def _continues(block: list[_Line], line: _Line, rules: Rules) -> bool:
     spacing = _spacing(block) or 1.2 * prev.size
     return (prev.horizontal and line.horizontal and 0 < gap <= GAP_FACTOR * spacing
             and abs(line.size - prev.size) <= SIZE_CHANGE * prev.size
-            and line.x0 < prev.x1 and line.x1 > prev.x0 and not _ruled(prev, line, rules))
+            and line.ink_x0 < prev.ink_x1 and line.ink_x1 > prev.ink_x0 and not _ruled(prev, line, rules))
 
 
 def _restyled(a: _Line, b: _Line) -> bool:
@@ -311,7 +317,7 @@ def _split(lines: list[_Line], rules: Rules, room_end: "RoomEnd | None" = None) 
     left = min(line.ink_x0 for line in lines)
     tol = max(1.0, 0.1 * max(line.size for line in lines))
     # In right-aligned text every line moves its left edge: that is not a first-line indent.
-    right_aligned = len(lines) >= 2 and _spread([ln.x1 for ln in lines]) <= tol < _spread([ln.x0 for ln in lines])
+    right_aligned = len(lines) >= 2 and _spread([ln.ink_x1 for ln in lines]) <= tol < _spread([ln.ink_x0 for ln in lines])
     groups: list[list[_Line]] = []
     for line in lines:
         if not groups:
@@ -332,7 +338,7 @@ def _split(lines: list[_Line], rules: Rules, room_end: "RoomEnd | None" = None) 
             or (not right_aligned and not (item is not None and _hangs(item, line))
                 and line.ink_x0 > left + INDENT_EM * line.size         # indented first line …
                 and line.ink_x0 > prev.ink_x0 + INDENT_EM * line.size  # … more than the line before …
-                and line.x1 >= prev.x1 - INDENT_EM * line.size)        # … whose right edge doesn't move in (not centered)
+                and line.ink_x1 >= prev.ink_x1 - INDENT_EM * line.size)        # … whose right edge doesn't move in (not centered)
         )
         if new:
             groups.append([line])
@@ -402,20 +408,34 @@ def _hard_breaks(lines: list[_Line], room_end: RoomEnd | None = None) -> list[li
     return out
 
 
+STRETCH_EM = 0.06     # justified: the word gaps of every line but the last are this much wider than the last line's
+STRETCH_ALONE = 0.15  # … or than their space characters, when the last line has no word gap
+
+
+def _stretched(lines: list[_Line]) -> bool:
+    """Every line but the last has stretched word gaps: justified text (two lines are enough to tell)."""
+    last = lines[-1].stretch
+    base, least = (median(last), STRETCH_EM) if last else (0.0, STRETCH_ALONE)
+    return all(line.stretch and median(line.stretch) - base > least for line in lines[:-1])
+
+
 def _align(lines: list[_Line]) -> str:
+    """Alignment of a multi-line paragraph from its lines' ink edges (single lines: see _single)."""
     if len(lines) < 2:
         return "left"
     tol = max(1.0, 0.1 * max(line.size for line in lines))
-    rest = lines[1:]
-    if _spread([line.x0 for line in rest]) <= tol and lines[0].x0 >= rest[0].x0 - tol:
-        body = lines[:-1]
-        if len(lines) >= 3 and _spread([line.x1 for line in body]) <= tol and lines[-1].x1 < body[0].x1 - tol:
+    x0, x1 = [line.ink_x0 for line in lines], [line.ink_x1 for line in lines]
+    # Centred before left: in a 2-line centred paragraph whose first line is shorter, "the rest" is one line.
+    if _spread(x0) > tol and _spread(x1) > tol and _spread([(a + b) / 2 for a, b in zip(x0, x1)]) <= tol:
+        return "center"
+    if _spread(x0[1:]) <= tol and x0[0] >= x0[1] - tol:
+        body = x1[:-1]
+        if _spread(body) <= tol and x1[-1] < body[0] + tol and (
+                (len(lines) >= 3 and x1[-1] < body[0] - tol) or _stretched(lines)):
             return "justify"
         return "left"
-    if _spread([line.x1 for line in lines]) <= tol:
+    if _spread(x1) <= tol:
         return "right"
-    if _spread([(line.x0 + line.x1) / 2 for line in lines]) <= tol:
-        return "center"
     return "left"
 
 
@@ -441,20 +461,19 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
 
     for i, line in enumerate(lines):
         if i > 0:
-            prev_text = lines[i - 1].text
-            if not (prev_text.endswith((" ", "-")) or line.text.startswith(" ")
-                    or _wide(prev_text[-1:]) or _wide(line.text[:1])):  # CJK wraps between characters
+            prev, cur = lines[i - 1].text, line.text
+            spaced = prev[-1:].isspace() or cur[:1].isspace()
+            # CJK wraps between characters; a hyphenated word continues on the next line.
+            if spaced or not (prev.endswith("-") or _wide(prev[-1:]) or _wide(cur[:1])):
                 runs[-1]["text"] += " "  # the soft line break becomes a space in the previous run
                 offset += 1
         start = offset
-        for span in line.spans:
-            add(span["text"], span)
-        end, joined = offset, _flat(runs)
-        while end > start and joined[end - 1] == " ":
-            end -= 1
+        for text, span in _trimmed(line.spans):  # leading spaces are geometry (the line's x), not text
+            add(text, span)
+        x0, x1 = _xs(line)
         out_lines.append({
-            "rect": _rect(line.x0, line.y0, line.x1, line.y1),
-            "baseline": _num(line.baseline), "size": _num(line.size), "start": start, "end": end,
+            "rect": _rect(x0, line.y0, x1, line.y1),
+            "baseline": _num(line.baseline), "size": _num(line.size), "start": start, "end": offset,
         })
 
     baselines = [line.baseline for line in lines]
@@ -462,8 +481,8 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
     line_height = _num(median(deltas)) if deltas else _num(1.2 * max(line.size for line in lines))
     return {
         "id": pid,
-        "rect": _rect(min(ln.x0 for ln in lines), min(ln.y0 for ln in lines),
-                      max(ln.x1 for ln in lines), max(ln.y1 for ln in lines)),
+        "rect": _rect(min(_xs(ln)[0] for ln in lines), min(ln.y0 for ln in lines),
+                      max(_xs(ln)[1] for ln in lines), max(ln.y1 for ln in lines)),
         "lines": out_lines,
         "runs": runs,
         "align": _align(lines),
@@ -473,8 +492,23 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
     }
 
 
-def _flat(runs: list[dict]) -> str:
-    return "".join(r["text"] for r in runs)
+def _xs(line: _Line) -> tuple[float, float]:
+    """Left and right edge of a line's ink (spaces before and after it excluded); rotated lines: their box."""
+    return (line.ink_x0, line.ink_x1) if line.horizontal else (line.x0, line.x1)
+
+
+def _trimmed(spans: list[dict]) -> list[tuple[str, dict]]:
+    """(text, span) of a line without its leading and trailing whitespace."""
+    full = "".join(s["text"] for s in spans)
+    lo, hi = len(full) - len(full.lstrip()), len(full.rstrip())
+    out, k = [], 0
+    for s in spans:
+        n = len(s["text"])
+        a, b = max(lo - k, 0), min(hi - k, n)
+        if a < b:
+            out.append((s["text"][a:b], s))
+        k += n
+    return out
 
 
 def _rect(x0: float, y0: float, x1: float, y1: float) -> dict:
@@ -486,8 +520,10 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
     """Paragraphs of `page` in content order, ids `g0`, `g1`, … (stable for a given file and extraction
     version). Coordinates are unrotated-CropBox points. `resolve` maps a span to its run FontRef (None →
     runs get font None); a paragraph with a span `locked` accepts is not editable. Text is never merged
-    across a drawn rule (table borders, separators). A single-line paragraph also gets `maxWidth`: how wide
-    it may grow when edited (see _room)."""
+    across a drawn rule (table borders, separators). Rects and line rects are the ink (no leading or trailing
+    spaces). A single-line paragraph gets its alignment from where it sits (see _single) and `maxWidth`: how
+    wide it may grow when edited, from its left edge (left), around its centre (center) or from its right
+    edge (right)."""
     rules = page_rules(page)
     blocks: list[list[_Line]] = []
     for block in page.get_text("rawdict", flags=FLAGS)["blocks"]:
@@ -505,7 +541,8 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
                 starts_block = False
     every = [line for lines in blocks for line in lines]
     # The left margin, mirrored; the cropbox is unrotated like the lines (page.rect swaps width and height at 90/270).
-    right_margin = page.cropbox.width - min((line.ink_x0 for line in every), default=0.0)
+    left_margin = min((line.ink_x0 for line in every), default=0.0)
+    right_margin = page.cropbox.width - left_margin
     flat = [line for line in every if line.horizontal]
 
     def room_end(line: _Line, left: float) -> float:
@@ -520,15 +557,58 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
         for group in _split(lines, rules, room_end):
             paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked)
             if len(group) == 1 and group[0].horizontal:
-                paragraph["maxWidth"] = _room(group[0], every, rules, right_margin)
+                paragraph["align"], paragraph["maxWidth"] = _single(group[0], every, rules, left_margin, right_margin,
+                                                                    page.cropbox.width)
             paragraphs.append(paragraph)
     return paragraphs
+
+
+CELL_PAD = 3.0      # a line centred in its cell keeps at least this much room on both sides …
+CELL_CENTRE = 3.0   # … and the two differ by at most this much (or 5 % of their sum in a wide cell)
+PAGE_CENTRE = 3.0   # a line without a cell is centred when its centre is this close to the page's …
+AWAY = 0.08         # … and it starts this share of the text width away from the left margin
+RIGHT_EDGE = 1.5    # right-aligned: ends this close to the right margin, the page's rightmost text or a neighbour's end
+
+
+def _single(line: _Line, every: list[_Line], rules: Rules, left_margin: float, right_margin: float,
+            page_width: float) -> tuple[str, float]:
+    """(align, maxWidth) of a single-line paragraph. Centred: in its cell (the vertical rules around it, nothing
+    else between them) or, with no rule and no text beside it, on the page well away from the left margin; the
+    box may grow symmetrically. Right-aligned: alone on its height, far from the left margin and ending at the
+    right margin (the mirrored left one), at the page's rightmost text, or where a line just above or below that
+    starts elsewhere ends too ("FRM/…" over "Tanggal …"); the box may grow to the left. Else left-aligned, growing
+    to the right (_room)."""
+    x0, x1 = line.ink_x0, line.ink_x1
+    mid = (line.y0 + line.y1) / 2
+    beside = [o for o in every if o is not line and o.horizontal
+              and min(o.y1, line.y1) - max(o.y0, line.y0) > 0.5 * min(o.y1 - o.y0, line.y1 - line.y0)]
+    lrule = max((s.at for s in rules.vertical if s.at < x0 + 0.5 and s.lo <= mid <= s.hi), default=None)
+    rrule = min((s.at for s in rules.vertical if s.at > x1 - 0.5 and s.lo <= mid <= s.hi), default=None)
+    ltext = max((o.ink_x1 for o in beside if o.ink_x1 < x0 + 0.5), default=None)
+    rtext = min((o.ink_x0 for o in beside if o.ink_x0 > x1 - 0.5), default=None)
+    width = x1 - x0
+    if lrule is not None and rrule is not None:
+        gl, gr = x0 - lrule, rrule - x1
+        alone = (ltext is None or ltext <= lrule) and (rtext is None or rtext >= rrule)
+        if alone and min(gl, gr) >= CELL_PAD and abs(gl - gr) <= max(CELL_CENTRE, 0.05 * (gl + gr)):
+            return "center", _num(max(width, rrule - lrule - 2 * ROOM_PAD))
+    elif lrule is None and rrule is None and ltext is None and rtext is None:
+        c, span = (x0 + x1) / 2, right_margin - left_margin
+        if abs(c - page_width / 2) <= PAGE_CENTRE and x0 > left_margin + max(2 * line.size, AWAY * span):
+            return "center", _num(max(width, 2 * (min(c - left_margin, right_margin - c) - ROOM_PAD)))
+        rightmost = max(o.ink_x1 for o in every if o.horizontal)
+        paired = any(abs(o.ink_x1 - x1) <= RIGHT_EDGE and abs(o.ink_x0 - x0) > RIGHT_EDGE
+                     and 0 < abs(o.baseline - line.baseline) <= 2.5 * line.size for o in every if o.horizontal)
+        if x0 > left_margin + 0.25 * span and (
+                min(abs(x1 - right_margin), abs(x1 - rightmost)) <= RIGHT_EDGE or paired):
+            return "right", _num(max(width, x1 - left_margin))
+    return "left", _room(line, every, rules, right_margin)
 
 
 def _room(line: _Line, every: list[_Line], rules: Rules, right_margin: float) -> float:
     """Width a single-line paragraph may grow to when edited (from its left edge): up to the first vertical rule
     or other text to its right on its height, or the right margin, less ROOM_PAD; at least its own width."""
-    return _num(max(line.x1 - line.x0, _room_end(line, every, rules, right_margin) - line.x0))
+    return _num(max(line.ink_x1 - line.ink_x0, _room_end(line, every, rules, right_margin) - line.ink_x0))
 
 
 def _room_end(line: _Line, every: list[_Line], rules: Rules, right_margin: float) -> float:

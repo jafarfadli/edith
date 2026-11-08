@@ -16,8 +16,9 @@ export class ApiError extends Error {
 
 /** One original line of a paragraph; `start`/`end` index the paragraph's joined run text (end excludes trailing spaces). */
 export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number }
-/** `maxWidth` (single-line paragraphs, M5): how wide the paragraph may grow when edited, from its left edge — up to
- *  the next cell border or text on its line. */
+/** `maxWidth` (single-line paragraphs, M5): how wide the paragraph may grow when edited — up to the next cell border
+ *  or text on its line. Measured per `align` (M5b): from the left edge (left), around the centre (center: the whole
+ *  symmetric width) or leftwards from the right edge (right). Rects are the ink since M5b (no leading/trailing spaces). */
 export interface Paragraph {
   id: string; rect: Rect; lines: ParagraphLine[]; runs: Run[];
   align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean; maxWidth?: number;

@@ -221,6 +221,30 @@ def test_numbered_items_tabs_and_hanging_indents():
     assert ps[3]["rect"]["x"] == pytest.approx(ps[2]["rect"]["x"] + ps[2]["rect"]["w"] + 3.06, abs=0.05)
 
 
+def test_rects_are_the_ink_and_alignment_comes_from_the_lines_and_their_place():
+    """M5b RC2/RC3: leading spaces are the line's x, not text; trailing spaces are neither text nor width. Two
+    justified lines are justified (stretched word gaps); a centred paragraph whose first line is shorter is
+    centred. Single lines take their alignment from where they sit, and maxWidth is the room to grow in that
+    direction: around the centre (page or cell), or leftwards from the right edge."""
+    from tests.pdfs import ALIGN_JUSTIFIED, make_align_pdf
+    ps = paragraphs(make_align_pdf())
+    assert [text(p) for p in ps] == [
+        "Body text starts at the left margin of this page.", "Menyetujui,", ALIGN_JUSTIFIED,
+        "Laporan Mingguan Kerja Praktek Semester Ganjil", "SURAT KETERANGAN", "Tanggal", "Tanggal 23 April 2018"]
+    assert [p["align"] for p in ps] == ["left", "left", "justify", "center", "center", "center", "right"]
+    spaced = ps[1]
+    w = pymupdf.get_text_length("Menyetujui,", fontname="helv", fontsize=11)
+    assert spaced["rect"]["x"] == pytest.approx(72 + pymupdf.get_text_length(" " * 20, fontname="helv", fontsize=11),
+                                                abs=0.01)
+    assert spaced["rect"]["w"] == pytest.approx(w, abs=0.01) and spaced["lines"][0]["rect"]["w"] == pytest.approx(w, abs=0.01)
+    assert (spaced["lines"][0]["start"], spaced["lines"][0]["end"]) == (0, len("Menyetujui,"))
+    title, cell, date = ps[4], ps[5], ps[6]
+    assert title["maxWidth"] == pytest.approx(2 * (297.5 - 72 - 2), abs=0.1)  # symmetric up to the margins
+    assert cell["maxWidth"] == pytest.approx(220 - 100 - 4, abs=0.01)          # the cell, less its padding
+    assert date["rect"]["x"] + date["rect"]["w"] == pytest.approx(523, abs=0.01)
+    assert date["maxWidth"] == pytest.approx(523 - 72, abs=0.01)               # back to the left margin
+
+
 def test_list_markers():
     from edith.paragraphs import ITEM, TAB_LEFT
     for marker in ["1.", "12)", "a.", "(b)", "iv.", "(ii)", "IV.", "B)", "•", "1.2.", "‣"]:

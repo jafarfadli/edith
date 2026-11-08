@@ -85,3 +85,19 @@ def test_substitutes_from_base_font_names():
     assert f["Calibri"].substitute == {"kind": "bundled", "family": "Carlito", "bold": False, "italic": False}
     assert f["Courier"].substitute["family"] == "Cousine"
     assert f["Calibri"].to_json()["substitute"]["family"] == "Carlito"
+
+
+def test_two_subsets_sharing_a_name_each_draw_their_own_spans():
+    """M5b FONT_SUB: an ambiguous name used to give every span the bundled substitute; each span now gets the
+    subset that draws all of its characters."""
+    from edith.extract import extract_text
+    from tests.pdfs import TWIN_TEXTS, make_twin_subsets_pdf
+    doc = pymupdf.open(stream=make_twin_subsets_pdf(), filetype="pdf")
+    body = extract_text(doc, FontRegistry(Settings().fonts_dir))
+    runs = [p["runs"][0] for p in body["pages"][0]["paragraphs"]]
+    assert [r["text"] for r in runs] == list(TWIN_TEXTS)
+    assert all(r["font"]["kind"] == "original" for r in runs)
+    assert runs[0]["font"]["ref"] != runs[1]["font"]["ref"]
+    for run in runs:
+        program = load_font(doc, int(run["font"]["ref"][1:]))
+        assert all(program.has_glyph(ord(c)) for c in run["text"] if c != " ")

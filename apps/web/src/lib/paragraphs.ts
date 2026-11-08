@@ -77,13 +77,18 @@ export function paragraphBox(
   p: Paragraph, metricsFor: MetricsFor,
   edit?: (paragraphs: Run[][], toBox: (offset: number) => number) => Run[][],
 ): TextBox {
-  // A left-aligned single line (a form label, a table cell) may grow into the room the API measured beside it.
-  const room = p.lines.length === 1 && p.align === "left" && p.maxWidth ? p.maxWidth + WIDTH_SLACK : 0;
+  // A single line (a form label, a table cell, a title) may grow into the room the API measured beside it:
+  // rightwards when left-aligned, around its centre when centred, leftwards when right-aligned (M5b).
+  const single = p.lines.length === 1 && p.align !== "justify";
+  const room = single && p.maxWidth ? p.maxWidth + WIDTH_SLACK : 0;
   const width = Math.max(paragraphWidth(p, metricsFor), room);
+  const x = !single ? p.rect.x
+    : p.align === "center" ? p.rect.x + p.rect.w / 2 - width / 2
+      : p.align === "right" ? p.rect.x + p.rect.w - width : p.rect.x;
   const breaks = hardBreaks(p, width, metricsFor);
   const paragraphs = paragraphRuns(p, breaks);
   const box = relayout({
-    rect: { x: p.rect.x, y: 0, w: width, h: 0 }, align: p.align, lineHeight: p.lineHeight,
+    rect: { x, y: 0, w: width, h: 0 }, align: p.align, lineHeight: p.lineHeight,
     paragraphs: edit ? edit(paragraphs, rawToBox(p, breaks)) : paragraphs, layout: [],
   }, metricsFor);
   const first = box.layout[0]?.baseline ?? 0;

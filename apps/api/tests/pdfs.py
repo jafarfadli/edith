@@ -399,6 +399,54 @@ def make_lists_pdf() -> bytes:
     return doc.tobytes(garbage=3, deflate=True)
 
 
+ALIGN_JUSTIFIED = ("Edith menyunting paragraf asli dengan rapi dan teks mengalir ulang di dalam kotak selebar "
+                   "tetap sampai akhir.")
+
+
+def make_align_pdf() -> bytes:
+    """Geometry and alignment cases (Helvetica 11): a line indented with spaces and ending in spaces, a 2-line
+    justified paragraph, a 2-line centred paragraph whose first line is shorter, a title centred on the page, a
+    label centred in a table cell, and a date right-aligned at the right margin (the mirrored left one)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 80), "Body text starts at the left margin of this page.", fontname="helv", fontsize=11)
+    page.insert_text((72, 100), " " * 20 + "Menyetujui,   ", fontname="helv", fontsize=11)
+    assert page.insert_textbox(pymupdf.Rect(72, 112, 390, 150), ALIGN_JUSTIFIED, fontname="helv", fontsize=11,
+                               align=pymupdf.TEXT_ALIGN_JUSTIFY) >= 0
+    for i, text in enumerate(["Laporan Mingguan", "Kerja Praktek Semester Ganjil"]):
+        w = pymupdf.get_text_length(text, fontname="helv", fontsize=11)
+        page.insert_text((400 - w / 2, 180 + 13 * i), text, fontname="helv", fontsize=11)
+    w = pymupdf.get_text_length("SURAT KETERANGAN", fontname="helv", fontsize=14)
+    page.insert_text((297.5 - w / 2, 250), "SURAT KETERANGAN", fontname="helv", fontsize=14)
+    page.draw_rect(pymupdf.Rect(100, 300, 220, 320), width=0.5)
+    w = pymupdf.get_text_length("Tanggal", fontname="helv", fontsize=11)
+    page.insert_text((160 - w / 2, 314), "Tanggal", fontname="helv", fontsize=11)
+    w = pymupdf.get_text_length("Tanggal 23 April 2018", fontname="helv", fontsize=9)
+    page.insert_text((523 - w, 400), "Tanggal 23 April 2018", fontname="helv", fontsize=9)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+TWIN_TEXTS = ("Halo dunia", "XYZ quiz")
+
+
+def make_twin_subsets_pdf() -> bytes:
+    """One page drawing two different subsets of Tinos that share the BaseFont name "Tinos-Regular" (as Word
+    embeds TimesNewRomanPSMT twice): TWIN_TEXTS[0] in one (top), TWIN_TEXTS[1] in the other (below)."""
+    out = pymupdf.open()
+    page = out.new_page(width=595, height=842)
+    for i, text in enumerate(TWIN_TEXTS):
+        src = pymupdf.open()
+        sp = src.new_page(width=595, height=100)
+        sp.insert_font(fontname="TI", fontfile=str(FONT_FILES / "Tinos-Regular.ttf"))
+        sp.insert_text((72, 50), text, fontname="TI", fontsize=12)
+        src.subset_fonts()
+        for xref, *_rest in sp.get_fonts(full=True):
+            src.xref_set_key(xref, "BaseFont", f"/{'ABCDEF' if i == 0 else 'GHIJKL'}+Tinos-Regular")
+        src = pymupdf.open(stream=src.tobytes(garbage=3), filetype="pdf")
+        page.show_pdf_page(pymupdf.Rect(0, 100 * i, 595, 100 * (i + 1)), src, 0)
+    return out.tobytes(garbage=3, deflate=True)
+
+
 CID_TEXT = "신청서 작성 방법 Visa Form"
 
 
