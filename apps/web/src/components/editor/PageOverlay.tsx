@@ -84,9 +84,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   const selection = useEditor((s) => s.selection);
   const tool = useEditor((s) => s.tool);
   const docId = useEditor((s) => s.info?.docId ?? "");
-  const srcIndex = useEditor((s) => {
+  const src = useEditor((s) => {
     const entry = s.doc.pages.find((p) => p.pageKey === pageKey);
-    return entry && "doc" in entry.src && entry.src.doc === s.info?.docId ? entry.src.index : null; // main document only
+    return entry && "doc" in entry.src ? entry.src : null;
   });
   // renderText reads the editing id at render time (the edited op is hidden), so re-render when it changes.
   useStore(textEditStore, (s) => s.editing?.id);
@@ -119,8 +119,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
 
   // Text markup needs the page's character boxes.
   useEffect(() => {
-    if (MARKUP_TOOLS.has(tool) && docId && srcIndex !== null) void charsStore.getState().load(docId, srcIndex);
-  }, [tool, docId, srcIndex]);
+    if (MARKUP_TOOLS.has(tool) && src) void charsStore.getState().load(src.doc, src.index);
+  }, [tool, src]);
 
   /** Page-relative pointer position (clamped to the page); `evt` updates it from an event outside Konva. */
   const pos = (evt?: PointerEvent): Pt => {

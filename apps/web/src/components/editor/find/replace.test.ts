@@ -25,7 +25,7 @@ const box = (text: string) => ({ rect: { x: 72, y: 300, w: 200, h: 14 }, align: 
 
 beforeEach(() => {
   editorStore.getState().init(info);
-  textStore.setState({ status: "ready", docId: info.docId, pages: { 0: [para] }, fonts: {} });
+  textStore.setState({ status: "ready", docId: info.docId, pages: { [`${info.docId}:0`]: [para] }, fonts: {} });
   vi.spyOn(fontStore, "load").mockResolvedValue(arimo);
   vi.spyOn(fontStore, "peek").mockReturnValue(arimo);
   vi.spyOn(fontStore, "get").mockReturnValue(arimo);

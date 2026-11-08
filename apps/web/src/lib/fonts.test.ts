@@ -99,7 +99,7 @@ describe("FontRef support", () => {
     const store = new FontStore("/fonts");
     const orig = { kind: "original" as const, ref: "f9" };
     await expect(store.load(orig)).rejects.toThrow("no source for original font f9");
-    store.setOriginalSource((ref) => `/api/fonts/${ref}`);
+    store.setOriginalSource((f) => `/api/fonts/${f.ref}`);
     const m = await store.load(orig);
     expect(fetchMock).toHaveBeenCalledWith("/api/fonts/f9");
     expect(store.peek(orig)).toBe(m);
@@ -112,7 +112,7 @@ describe("FontRef support", () => {
   it("rejects bytes fontkit cannot parse", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array([1, 2, 3, 4]), { status: 200 })));
     const store = new FontStore("/fonts");
-    store.setOriginalSource((ref) => `/api/fonts/${ref}`);
+    store.setOriginalSource((f) => `/api/fonts/${f.ref}`);
     await expect(store.load({ kind: "original", ref: "f1" })).rejects.toThrow();
   });
 });

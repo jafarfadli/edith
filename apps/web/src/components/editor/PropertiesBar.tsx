@@ -7,7 +7,8 @@ import type { Dash } from "@/lib/geometry";
 import { hasOpacity, inkWidth, isMarkup, isTextOp, MARKUP_TOOLS, opacityOf, POLY_TOOLS } from "@/lib/objects";
 import { t } from "@/lib/strings";
 import { useChars } from "@/store/chars";
-import { editorStore, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
+import { editorStore, sourcePage, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
+import { srcKey } from "@/lib/sources";
 import type { LinkTarget } from "@/lib/links";
 import { STAMP_COLORS } from "@/lib/stamps";
 import { ColorField } from "./ColorField";
@@ -55,12 +56,12 @@ export function PropertiesBar() {
   // The text tool on a page without text (a scan): say why there is nothing to edit.
   const scanned = useEditor((st) => {
     const entry = st.doc.pages.find((p) => p.pageKey === st.currentPage);
-    return tool === "text" && !!entry && "doc" in entry.src && entry.src.doc === st.info?.docId && st.info?.pages[entry.src.index]?.hasText === false;
+    return tool === "text" && !!entry && !!st.info && sourcePage(entry, st.info)?.hasText === false;
   });
   // The markup tools on a page without original text (or only rotated text): nothing to mark.
   const currentSrc = useEditor((st) => {
     const entry = st.doc.pages.find((p) => p.pageKey === st.currentPage);
-    return entry && "doc" in entry.src && entry.src.doc === st.info?.docId ? entry.src.index : -1;
+    return entry && "doc" in entry.src ? srcKey(entry.src.doc, entry.src.index) : "";
   });
   const currentLines = useChars((cs) => cs.pages[currentSrc]);
   const noText = MARKUP_TOOLS.has(tool) && Array.isArray(currentLines) && currentLines.length === 0;

@@ -1,6 +1,6 @@
 import type { BundledFont, FontRef, Rect, Run, TextBox } from "@edith/ops";
 import type { DocFont, Paragraph } from "@/lib/api";
-import { covers, fontStore, isOriginal, textWidth, type FontMetrics } from "@/lib/fonts";
+import { covers, fontId, fontStore, isOriginal, textWidth, type FontMetrics } from "@/lib/fonts";
 import { normalizeRuns, runsText, sliceRuns } from "@/lib/runs";
 import { boxFonts, relayout } from "@/lib/textbox";
 
@@ -91,7 +91,7 @@ export function paragraphBox(
 }
 
 export function substituteOf(f: FontRef, fonts: FontTable): BundledFont {
-  return isOriginal(f) ? fonts[f.ref]?.substitute ?? ARIMO : f;
+  return isOriginal(f) ? fonts[fontId(f)]?.substitute ?? ARIMO : f;
 }
 
 /** One step of font fallback: a run whose original font is not loaded or lacks a glyph of its text

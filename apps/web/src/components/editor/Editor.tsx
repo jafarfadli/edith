@@ -17,6 +17,7 @@ import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
 import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
 import { pdfStore } from "@/store/pdfs";
+import { charsStore } from "@/store/chars";
 import { textStore } from "@/store/text";
 import { FormLayer } from "./forms/FormLayer";
 import { Header } from "./Header";
@@ -72,6 +73,8 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       if (resolved?.missing) setNotice({ kind: "error", text: t.pages.importGone });
       else if (draft) setNotice({ kind: "info", text: t.editor.restored });
       void textStore.getState().load(docId); // original paragraphs + fonts, in the background
+      for (const id of Object.keys(resolved?.imports ?? {})) void textStore.getState().loadImport(id);
+      charsStore.getState().reset();
       // Preload fonts of restored text boxes (in parallel with the PDF; TextNode also loads on demand).
       const texts = Object.values(editorStore.getState().doc.objects).filter(isTextOp);
       void Promise.all(texts.flatMap((o) => boxFonts(o.box)).map((f) => fontStore.load(f))).catch((e) => console.warn("font preload failed", e));

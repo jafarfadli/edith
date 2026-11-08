@@ -2,6 +2,7 @@ import { ApiError, getStructure, uploadDocument } from "@/lib/api";
 import { noticeStore } from "@/lib/notices";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore } from "@/store/editor";
+import { textStore } from "@/store/text";
 
 /** Uploads `file` as another document and inserts all its pages after `afterKey` (null: before the first page)
  *  as one undo step. Returns the new pages' keys (none on failure; a notice says why). */
@@ -11,6 +12,7 @@ export async function importPdf(file: File, afterKey: string | null): Promise<st
     const st = await getStructure(up.doc_id);
     const s = editorStore.getState();
     s.addImport(up.doc_id, st.pages);
+    void textStore.getState().loadImport(up.doc_id); // its paragraphs and fonts, for editing and Find
     const keys = s.insertImportAfter(afterKey, up.doc_id);
     noticeStore.getState().show({ kind: "info", text: t.pages.imported(keys.length) });
     return keys;

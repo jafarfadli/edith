@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Run } from "@edith/ops";
 import type { DocFont } from "@/lib/api";
+import { fontKey } from "@/lib/fonts";
 import { applyPatch, attrsOf, docToRuns, fontStyle, patchFont, runCss, runOf, runsToDoc } from "@/lib/richtext";
 
 const arimo = { kind: "bundled" as const, family: "Arimo", bold: false, italic: false };
@@ -68,5 +69,20 @@ describe("rich text model", () => {
     expect(css).toContain("font-size:calc(var(--edith-scale, 1) * 12px)");
     expect(css).toContain("text-decoration-line:underline line-through");
     expect(css).toContain("background-color:#ffff00");
+  });
+});
+
+describe("fonts of imported PDFs", () => {
+  const info = (ref: string, doc: string | undefined, bold: boolean) => ({
+    ref, doc, name: "Calibri", embedded: true, format: "ttf", reusable: true, family: "calibri", bold, italic: false,
+    substitute: { kind: "bundled" as const, family: "Carlito", bold, italic: false },
+  });
+  const fonts = { f1: info("f1", undefined, false), f2: info("f2", undefined, true), "I/f1": info("f1", "I", false), "I/f9": info("f9", "I", true) };
+
+  it("resolve by document and switch to a variant of the same PDF", () => {
+    expect(fontStyle({ kind: "original", ref: "f1", doc: "I" }, fonts).original).toBe("I/f1");
+    expect(patchFont({ kind: "original", ref: "f1", doc: "I" }, { bold: true }, fonts)).toEqual({ kind: "original", ref: "f9", doc: "I" });
+    expect(patchFont({ kind: "original", ref: "f1" }, { bold: true }, fonts)).toEqual({ kind: "original", ref: "f2" });
+    expect(fontKey({ kind: "original", ref: "f1", doc: "I" })).toBe("orig-I-f1");
   });
 });

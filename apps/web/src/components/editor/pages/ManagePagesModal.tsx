@@ -8,6 +8,7 @@ import { ApiError, getStructure, uploadDocument } from "@/lib/api";
 import * as P from "@/lib/pages";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore, pageGeom, useEditor, type EditorDoc, type PageEntry } from "@/store/editor";
+import { textStore } from "@/store/text";
 import { Thumbnail } from "../Thumbnail";
 import { pickPdf } from "./importPdf";
 
@@ -86,6 +87,7 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
       const up = await uploadDocument(file, file.name);
       const st = await getStructure(up.doc_id);
       editorStore.getState().addImport(up.doc_id, st.pages); // the registry, not the document: Batal leaves no pages
+      void textStore.getState().loadImport(up.doc_id);
       setDraft((d) => P.importPages(d, P.insertIndex(d, selected), up.doc_id, st.pages.length));
     } catch (e) {
       setError(errorMessage(e instanceof ApiError ? e.code : "generic"));
