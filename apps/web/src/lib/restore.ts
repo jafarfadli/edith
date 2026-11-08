@@ -1,4 +1,4 @@
-import type { FormField } from "@/lib/api";
+import { ApiError, type FormField } from "@/lib/api";
 import type { EditorDoc, StructurePage } from "@/store/editor";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -58,7 +58,11 @@ export async function resolveImports(
       const st = await structure(id);
       imports[id] = st.pages;
       fields[id] = st.fields ?? [];
-    } catch { /* expired or unknown: its pages go */ }
+    } catch (e) {
+      // Only an import that is gone (expired / unknown) loses its pages; anything else (network, 5xx) must not
+      // shrink the draft, which would then overwrite the stored one.
+      if (!(e instanceof ApiError && (e.status === 410 || e.status === 404))) throw e;
+    }
   }));
   const pages = doc.pages.filter((p) => !("doc" in p.src) || !doc.imports?.includes(p.src.doc) || p.src.index < (imports[p.src.doc]?.length ?? 0));
   const missing = pages.length !== doc.pages.length;

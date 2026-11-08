@@ -65,7 +65,14 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       if (cancelled) return;
       let draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
       // Pages of imported PDFs need those documents' page sizes; imports that expired lose their pages.
-      const resolved = draft?.imports?.length ? await resolveImports(draft, (id) => getStructure(id)) : null;
+      let resolved;
+      try {
+        resolved = draft?.imports?.length ? await resolveImports(draft, (id) => getStructure(id)) : null;
+      } catch (e) {
+        // Not "gone": keep the stored draft untouched (no init, so nothing autosaves over it).
+        if (!cancelled) setFatal(e instanceof ApiError ? e.code : "network");
+        return;
+      }
       if (cancelled) return;
       if (resolved) draft = resolved.doc;
       editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages, fields: st.fields, imports: resolved?.imports, importFields: resolved?.fields }, draft);

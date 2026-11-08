@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ApiError } from "@/lib/api";
 import { resolveImports, restoreDraft } from "@/lib/restore";
 
 describe("restoreDraft", () => {
@@ -70,11 +71,19 @@ describe("restoreDraft with imported PDFs", () => {
     expect(ok.fields).toEqual({ [I]: [field] });
     expect(ok.doc!.pages.map((p) => p.pageKey)).toEqual(["o0", "u-i0"]); // index 1 no longer exists
     expect(ok.missing).toBe(true);
-    const gone = await resolveImports(r, async () => { throw new Error("410"); });
+    const gone = await resolveImports(r, async () => { throw new ApiError("doc_expired", 410); });
     expect(gone.doc!.pages.map((p) => p.pageKey)).toEqual(["o0"]);
     expect(gone.imports).toEqual({});
-    const onlyImported = await resolveImports({ ...r, pages: r.pages.slice(1) }, async () => { throw new Error("410"); });
+    const onlyImported = await resolveImports({ ...r, pages: r.pages.slice(1) }, async () => { throw new ApiError("doc_expired", 410); });
     expect(onlyImported.doc).toBeNull();
+    const notFound = await resolveImports(r, async () => { throw new ApiError("doc_not_found", 404); });
+    expect(notFound.doc!.pages.map((p) => p.pageKey)).toEqual(["o0"]);
+  });
+
+  it("propagates any other failure instead of dropping the import's pages", async () => {
+    const r = restoreDraft(draft, "NEW", 1)!;
+    await expect(resolveImports(r, async () => { throw new Error("network down"); })).rejects.toThrow("network down");
+    await expect(resolveImports(r, async () => { throw new ApiError("boom", 500); })).rejects.toBeInstanceOf(ApiError);
   });
 });
 
