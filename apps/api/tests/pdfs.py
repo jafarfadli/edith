@@ -254,3 +254,18 @@ def make_secrets_pdf() -> bytes:
     _widget(page, pymupdf.PDF_WIDGET_TYPE_TEXT, "keep", (72, 400, 272, 420), field_value="visible")
     page.add_text_annot((400, 600), "public note")
     return doc.tobytes(garbage=3, deflate=True)
+
+
+def make_xfa_form_pdf() -> bytes:
+    """make_form_pdf() as an XFA hybrid: /AcroForm also has an /XFA packet (with a stale value for `nama`)."""
+    doc = pymupdf.open(stream=make_form_pdf(), filetype="pdf")
+    xfa = doc.get_new_xref()
+    doc.update_object(xfa, "<<>>")
+    doc.update_stream(xfa, b"<xfa:datasets><nama>stale</nama></xfa:datasets>")
+    cat = doc.pdf_catalog()
+    kind, value = doc.xref_get_key(cat, "AcroForm")
+    acro = doc.get_new_xref()
+    doc.update_object(acro, value)
+    doc.xref_set_key(acro, "XFA", f"[(datasets) {xfa} 0 R]")
+    doc.xref_set_key(cat, "AcroForm", f"{acro} 0 R")
+    return doc.tobytes()

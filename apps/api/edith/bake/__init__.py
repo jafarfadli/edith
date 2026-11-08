@@ -10,7 +10,7 @@ from edith.bake.scrub import scrub_page, under_redaction
 from edith.bake.source import SourcePages
 from edith.bake.util import to_rect
 from edith.errors import BakeFailed, EdithError, InvalidOp
-from edith.forms import FieldValueError, fill_forms
+from edith.forms import FieldValueError, drop_xfa, fill_forms
 from edith.ops import DocSrc, LayoutPage, PageTarget, PagesLayout
 
 # Handler modules register themselves on import (later tasks add more, e.g. text):
@@ -39,7 +39,9 @@ def _run(handler, page, op, ctx) -> None:
         raise BakeFailed(str(exc), op_id=op.id) from exc
 
 
-def _fill(doc: pymupdf.Document, forms: list, flatten: bool) -> None:
+def _fill(doc: pymupdf.Document, forms: list, flatten: bool, widgets_removed: bool) -> None:
+    if forms or flatten or widgets_removed:
+        drop_xfa(doc)
     try:
         fill_forms(doc, forms)
     except FieldValueError as exc:
@@ -90,6 +92,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
         for _, op in content:
             by_page[key_to_index[op.pageKey]].append(op)
 
+        widgets_removed = False
         redact_handlers = {t: HANDLERS[t] for t, phase in PHASE.items() if phase == "redact"}
         for page_index, page_ops in by_page.items():
             page = doc[page_index]
@@ -103,7 +106,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             # What apply_redactions() leaves under a redaction box: annotations, links, form fields.
             boxes = [to_rect(op.rect) for op in page_ops if op.type == "redact.add"]
             if boxes:
-                scrub_page(page, boxes)
+                widgets_removed |= scrub_page(page, boxes) > 0
             # Drawn content in stacking order, then native annotations over it, then links (none under
             # a redaction box: it would show — or carry — what the box hides).
             for phase in ("draw", "annot", "link"):
@@ -111,7 +114,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                     if PHASE[op.type] == phase and not (phase != "draw" and under_redaction(op, boxes)):
                         _run(HANDLERS[op.type], page, op, ctx)
 
-        _fill(doc, [op for op in ops if op.type == "form.set"], flatten_forms)
+        _fill(doc, [op for op in ops if op.type == "form.set"], flatten_forms, widgets_removed)
 
         for i, entry in enumerate(layout.pages):
             doc[i].set_rotation((base_rotation[i] + entry.rotate) % 360)

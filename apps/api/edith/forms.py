@@ -126,6 +126,17 @@ def fill_forms(doc: pymupdf.Document, ops: list[FormSet]) -> None:
             w.update()
 
 
+def drop_xfa(doc: pymupdf.Document) -> None:
+    """Removes the XFA packet of a hybrid form: once the AcroForm fields change (filled, flattened, removed by
+    a redaction) its data is stale, and a viewer that prefers XFA would show — or leak — the old values."""
+    cat = doc.pdf_catalog()
+    kind, value = doc.xref_get_key(cat, "AcroForm")
+    if kind == "xref":
+        doc.xref_set_key(int(value.split()[0]), "XFA", "null")
+    elif kind == "dict":
+        doc.xref_set_key(cat, "AcroForm/XFA", "null")
+
+
 def _adopt(doc: pymupdf.Document, xref: int, page_xref: int) -> None:
     """Lists widget `xref` in its parent's /Kids: Document.fullcopy_page() copies a page's widgets with
     their /Parent, but the parent does not know the copy (and PyMuPDF refuses to update it). Every widget's

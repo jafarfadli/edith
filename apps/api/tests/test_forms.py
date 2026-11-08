@@ -2,7 +2,7 @@ import pymupdf
 import pytest
 
 from tests.pdfs import (make_cyclic_first_form_pdf, make_cyclic_form_pdf, make_form_pdf, make_merged_form_pdf, make_pdf,
-                        make_same_name_form_pdf)
+                        make_same_name_form_pdf, make_xfa_form_pdf)
 from tests.test_documents import upload
 
 
@@ -175,3 +175,19 @@ def test_healthy_widget_after_a_cyclic_one_is_listed(client):
     assert "ok" in [f["name"] for f in fields]
     out = export(client, doc_id, [form_set("a", "ok", "baru")])
     assert values(out)["ok"] == ["baru"]
+
+
+def _xfa(doc: pymupdf.Document) -> tuple[str, str]:
+    return doc.xref_get_key(doc.pdf_catalog(), "AcroForm/XFA")
+
+
+def test_xfa_packet_is_dropped_when_the_form_changes(client):
+    """A viewer that prefers XFA would show its stale data instead of the filled/flattened AcroForm."""
+    doc_id = upload(client, make_xfa_form_pdf()).json()["doc_id"]
+    assert _xfa(export(client, doc_id, []))[0] == "array"  # untouched form: the hybrid stays a hybrid
+    filled = export(client, doc_id, [form_set("a", "nama", "Budi")])
+    assert filled.is_form_pdf and values(filled)["nama"] == ["Budi"]
+    assert _xfa(filled) == ("null", "null")
+    assert _xfa(export(client, doc_id, [], flatten=True)) == ("null", "null")
+    redacted = export(client, doc_id, [{"id": "r", "type": "redact.add", "pageKey": "o0", "rect": R(70, 98, 210, 24), "fill": "black"}])
+    assert "nama" not in values(redacted) and _xfa(redacted) == ("null", "null")
