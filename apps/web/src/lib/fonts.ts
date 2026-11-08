@@ -1,5 +1,6 @@
 import * as fontkit from "fontkit";
 import type { BundledFont, FontRef, OriginalFont } from "@edith/ops";
+import type { CjkScript, FallbackFonts } from "@/lib/fallback";
 
 export interface FontMetrics {
   unitsPerEm: number; ascent: number; descent: number;
@@ -99,10 +100,14 @@ export function cssFamily(f: FontRef): string {
   return `edith-${fontKey(f)}`;
 }
 
-interface Manifest { default: string; families: Record<string, { category: string; files: Partial<Record<Style, string>> }> }
+interface Family { category: string; files: Partial<Record<Style, string>> }
+/** `cjk`: the optional CJK pack, only the families (and styles) whose files were fetched (scripts/sync-fonts.mjs). */
+interface Manifest { default: string; families: Record<string, Family>; cjk?: Record<string, Family & { script: CjkScript }> }
 
-export class FontStore {
+export class FontStore implements FallbackFonts {
   private manifest?: Promise<Manifest>;
+  private manifestNow: Manifest | null = null;
+  private han: CjkScript = "sc";
   private loaded = new Map<string, FontMetrics>();
   private pending = new Map<string, Promise<FontMetrics>>();
   private originalUrl: ((f: OriginalFont) => string) | null = null;
@@ -120,9 +125,9 @@ export class FontStore {
   private getManifest(): Promise<Manifest> {
     if (!this.manifest) {
       const url = `${this.baseUrl}/manifest.json`;
-      const p = fetch(url).then((r) => {
+      const p = fetch(url).then(async (r) => {
         if (!r.ok) throw new Error(`font fetch failed: ${url} (${r.status})`);
-        return r.json() as Promise<Manifest>;
+        return (this.manifestNow = (await r.json()) as Manifest);
       });
       this.manifest = p;
       p.catch(() => { if (this.manifest === p) this.manifest = undefined; });
@@ -130,8 +135,33 @@ export class FontStore {
     return this.manifest;
   }
 
+  /** Families of the font picker (the CJK pack only serves as a fallback). */
   async families(): Promise<string[]> {
     return Object.keys((await this.getManifest()).families);
+  }
+
+  ready(): Promise<unknown> {
+    return this.getManifest();
+  }
+
+  cjkFamily(script: CjkScript, category: string): string | null {
+    const wanted = category === "serif" ? "serif" : "sans";
+    const found = Object.entries(this.manifestNow?.cjk ?? {}).filter(([, f]) => f.script === script);
+    return (found.find(([, f]) => f.category === wanted) ?? found[0])?.[0] ?? null;
+  }
+
+  categoryOf(family: string): string | null {
+    const m = this.manifestNow;
+    return (m?.families[family] ?? m?.cjk?.[family])?.category ?? null;
+  }
+
+  hanScript(): CjkScript {
+    return this.han;
+  }
+
+  /** The script of the open document's Han characters (see documentScript). */
+  setHanScript(script: CjkScript): void {
+    this.han = script;
   }
 
   private async url(f: FontRef): Promise<string> {
@@ -139,7 +169,9 @@ export class FontStore {
       if (!this.originalUrl) throw new Error(`no source for original font ${f.ref}`);
       return this.originalUrl(f);
     }
-    const fam = (await this.getManifest()).families[f.family];
+    const m = await this.getManifest();
+    // CJK pack families serve as fallbacks and as the API's substitutes of CJK fonts (GET /text).
+    const fam = m.families[f.family] ?? m.cjk?.[f.family];
     if (!fam) throw new Error(`unknown font family ${f.family}`);
     return `${this.baseUrl}/${pickFile(fam.files, style(f))}`;
   }

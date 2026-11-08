@@ -1,15 +1,13 @@
-import type { BundledFont, FontRef, Rect, Run, TextBox } from "@edith/ops";
-import type { DocFont, Paragraph } from "@/lib/api";
-import { covers, fontId, fontStore, isOriginal, textWidth, type FontMetrics } from "@/lib/fonts";
+import type { FontRef, Rect, Run, TextBox } from "@edith/ops";
+import type { Paragraph } from "@/lib/api";
+import { textWidth, type FontMetrics } from "@/lib/fonts";
 import { normalizeRuns, runsText, sliceRuns } from "@/lib/runs";
-import { boxFonts, relayout } from "@/lib/textbox";
+import { relayout } from "@/lib/textbox";
+
+// Font fallback lives in lib/fallback.ts (per character since M5); re-exported for its existing users.
+export { hasUnsupportedChars, preloadFallback, prepareRuns, resolveLoadedRuns, substituteOf, type FontTable } from "@/lib/fallback";
 
 export type MetricsFor = (f: FontRef) => FontMetrics;
-export type FontTable = Record<string, DocFont>;
-type Loader = Pick<typeof fontStore, "load" | "peek">;
-
-const ARIMO: BundledFont = { kind: "bundled", family: "Arimo", bold: false, italic: false };
-const NOTO_SANS = "Noto Sans";
 /** Extra box width so a line measured at exactly the box width still fits. */
 const WIDTH_SLACK = 0.01;
 /** On-screen cover of an edited paragraph's original line (× size around the baseline). */
@@ -90,81 +88,6 @@ export function paragraphBox(
   return { ...box, rect: { ...box.rect, y: p.lines[0].baseline - first } };
 }
 
-export function substituteOf(f: FontRef, fonts: FontTable): BundledFont {
-  return isOriginal(f) ? fonts[fontId(f)]?.substitute ?? ARIMO : f;
-}
-
-/** One step of font fallback: a run whose original font is not loaded or lacks a glyph of its text
- *  switches to the substitute; a run whose loaded bundled family lacks a glyph switches to Arimo
- *  (Latin, Greek, Cyrillic), and Arimo to Noto Sans (wider Unicode coverage). Runs whose bundled font is not loaded yet stay as they are. */
-export function resolveRunFonts(runs: Run[], fonts: FontTable, peek: (f: FontRef) => FontMetrics | null): Run[] {
-  return runs.map((r) => {
-    const m = peek(r.font);
-    if (m && covers(m, r.text)) return r;
-    if (isOriginal(r.font)) return { ...r, font: substituteOf(r.font, fonts) };
-    if (m && r.font.family === NOTO_SANS) return r;
-    if (m) return { ...r, font: { ...r.font, family: r.font.family === ARIMO.family ? NOTO_SANS : ARIMO.family } };
-    return r;
-  });
-}
-
-const fontsOf = (paragraphs: Run[][]) => boxFonts({ paragraphs } as TextBox);
-
-/** Fallback steps of the longest chain: original → substitute → Arimo → Noto Sans. */
-const FALLBACK_STEPS = 3;
-
-/** One fallback step over every paragraph; `null` when no run changed. */
-function fallbackStep(paragraphs: Run[][], fonts: FontTable, peek: (f: FontRef) => FontMetrics | null): Run[][] | null {
-  let changed = false;
-  const next = paragraphs.map((p) => {
-    const q = resolveRunFonts(p, fonts, peek);
-    if (q.some((r, i) => r !== p[i])) changed = true;
-    return q;
-  });
-  return changed ? next : null;
-}
-
-/** The full font fallback using only fonts that are already loaded (same result as `prepareRuns`
- *  once its fonts are in); `null` when a font it needs is not loaded yet. */
-export function resolveLoadedRuns(paragraphs: Run[][], fonts: FontTable, peek: (f: FontRef) => FontMetrics | null): Run[][] | null {
-  let out = paragraphs;
-  for (let step = 0; step <= FALLBACK_STEPS; step++) {
-    if (fontsOf(out).some((f) => !peek(f))) return null;
-    const next = fallbackStep(out, fonts, peek);
-    if (!next) return out;
-    out = next;
-  }
-  return fontsOf(out).every((f) => peek(f)) ? out : null;
-}
-
-/** Loads every font the paragraphs need and applies font fallback (original → substitute → Arimo → Noto Sans).
- *  Rejects when a bundled font cannot be loaded. */
-export async function prepareRuns(paragraphs: Run[][], fonts: FontTable, store: Loader = fontStore): Promise<Run[][]> {
-  let out = paragraphs;
-  for (let step = 0; step <= FALLBACK_STEPS; step++) {
-    await Promise.allSettled(fontsOf(out).map((f) => store.load(f)));
-    const next = fallbackStep(out, fonts, (f) => store.peek(f));
-    if (!next) break;
-    out = next;
-  }
-  await Promise.all(fontsOf(out).map((f) => store.load(f)));
-  return out;
-}
-
-/** Loads the fonts of the whole fallback chain the paragraphs may need (original -> substitute -> Arimo
- *  -> Noto Sans, in the runs' bold/italic styles) so `resolveLoadedRuns` can answer synchronously.
- *  Never rejects: a font that fails to load just stays unresolved. */
-export async function preloadFallback(paragraphs: Run[][], fonts: FontTable, store: Loader = fontStore): Promise<void> {
-  let out = paragraphs;
-  for (let step = 0; step <= FALLBACK_STEPS; step++) {
-    await Promise.allSettled(fontsOf(out).map((f) => store.load(f)));
-    const next = fallbackStep(out, fonts, (f) => store.peek(f));
-    if (!next) return;
-    out = next;
-  }
-  await Promise.allSettled(fontsOf(out).map((f) => store.load(f)));
-}
-
 /** White covers hiding an edited paragraph's original lines on screen (the bake redacts them). */
 export function maskRects(p: Paragraph): Rect[] {
   return p.lines.map((l) => ({
@@ -183,16 +106,4 @@ export function overflowsOriginal(box: TextBox, p: Paragraph): boolean {
   const height = lines[lines.length - 1].baseline - lines[0].baseline;
   const original = p.lines[p.lines.length - 1].baseline - p.lines[0].baseline;
   return height > original + OVERFLOW_SLACK;
-}
-
-/** True when some character has no glyph even after the whole font fallback (original -> substitute ->
- *  Arimo -> Noto Sans) with the loaded fonts: the bake draws it with a builtin font or as a box (CJK,
- *  emoji, check marks ...). False while a font of the chain is not loaded yet. */
-export function hasUnsupportedChars(paragraphs: Run[][], fonts: FontTable, peek: (f: FontRef) => FontMetrics | null): boolean {
-  const resolved = resolveLoadedRuns(paragraphs, fonts, peek);
-  if (!resolved) return false;
-  return resolved.flat().some((r) => {
-    const m = peek(r.font);
-    return !!m && !covers(m, r.text.replace(/[\n\r\t]/g, ""));
-  });
 }

@@ -118,6 +118,6 @@ test("warns about unsupported characters while typing, before commit", async ({ 
     await expect(editor).toBeVisible({ timeout: 1000 });
   }).toPass();
   await expect(page.getByText("beberapa karakter tidak didukung font ini")).toHaveCount(0);
-  await editor.pressSequentially("漢字");
+  await editor.pressSequentially("𓀀"); // a hieroglyph: no bundled font, CJK pack included, has it
   await expect(page.getByText("beberapa karakter tidak didukung font ini")).toBeVisible();
 });

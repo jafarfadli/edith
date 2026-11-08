@@ -149,15 +149,15 @@ describe("editing an original paragraph", () => {
     expect((editorStore.getState().doc.objects.e1 as TextEdit).box.layout).toEqual([{ baseline: expect.any(Number), segments: [] }]);
   });
 
-  it("swaps an original font for its substitute when a new character has no glyph", async () => {
+  it("keeps the original font for the characters it has and uses the substitute for a new one", async () => {
     const orig = { kind: "original" as const, ref: "f7" };
     openParagraph("Halo", orig);
     await commitEditing(runs("Halo", orig));
     expect(editorStore.getState().doc.order).toEqual([]); // unchanged
     openParagraph("Halo", orig);
     await commitEditing(runs("Halo!", orig));
-    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0][0].font)
-      .toEqual({ kind: "bundled", family: "Carlito", bold: false, italic: false });
+    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0].map((r) => [r.text, r.font])).toEqual([
+      ["Halo", orig], ["!", { kind: "bundled", family: "Carlito", bold: false, italic: false }]]);
   });
 });
 
@@ -190,11 +190,13 @@ describe("font fallback on commit", () => {
   const orig = { kind: "original" as const, ref: "f7" };
   const noto = { kind: "bundled", family: "Noto Sans", bold: false, italic: false };
 
-  it("goes original → substitute → Arimo → Noto Sans when the fonts are loaded (fast path)", async () => {
+  const committed = () => (editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0].map((r) => [r.text, r.font]);
+
+  it("goes original → substitute → Arimo → Noto Sans per character when the fonts are loaded (fast path)", async () => {
     gate.resolve(); fontsLoaded = true; notoOnly = "ꙮ";
     openParagraph("Halo", orig);
     await commitEditing(runs("Halo ꙮ", orig));
-    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0][0].font).toEqual(noto);
+    expect(committed()).toEqual([["Halo ", orig], ["ꙮ", noto]]);
   });
 
   it("does the same while fonts load (slow path)", async () => {
@@ -203,7 +205,7 @@ describe("font fallback on commit", () => {
     const commit = commitEditing(runs("Halo ꙮ", orig));
     gate.resolve();
     await commit;
-    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0][0].font).toEqual(noto);
+    expect(committed()).toEqual([["Halo ", orig], ["ꙮ", noto]]);
   });
 });
 

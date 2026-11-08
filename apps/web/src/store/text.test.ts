@@ -32,6 +32,14 @@ describe("textStore", () => {
     expect(url({ kind: "original", ref: "f5", doc: "I" })).toBe("http://localhost:8000/documents/I/fonts/f5");
   });
 
+  it("sets the script Han characters fall back to from the document's text", async () => {
+    const korean = { ...para, runs: [{ text: "사증 漢字", font: { kind: "original", ref: "f5" }, size: 12, color: "#000000" }] };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ doc_id: "D", pages: [{ index: 0, paragraphs: [korean] }], fonts: [font] }), { status: 200 })));
+    const set = vi.spyOn(fontStore, "setHanScript");
+    await textStore.getState().load("D");
+    expect(set).toHaveBeenCalledWith("kr");
+  });
+
   it("adds an imported PDF's text with its fonts named after it", async () => {
     const run = { text: "Impor", font: { kind: "original", ref: "f5" }, size: 12, color: "#000000" };
     const imported = { doc_id: "I", pages: [{ index: 0, paragraphs: [{ ...para, runs: [run] }] }], fonts: [font] };
