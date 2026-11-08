@@ -5,7 +5,7 @@ import type { StructurePage } from "@/store/editor";
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 /** Paragraph segmentation the client's paragraph ids (g0, g1, …) come from: shared contract with PARAGRAPHS_VERSION in
  *  apps/api/edith/paragraphs.py. Exports send it (the API refuses text.edit ops of another version) and drafts store it. */
-export const PARAGRAPHS_VERSION = 2;
+export const PARAGRAPHS_VERSION = 3;
 
 export class ApiError extends Error {
   constructor(public code: string, public status: number, public extra: Record<string, unknown> = {}) {
@@ -30,7 +30,7 @@ export interface DocFont {
 }
 export interface TextData {
   doc_id: string; pages: { index: number; paragraphs: Paragraph[] }[]; fonts: DocFont[];
-  /** Segmentation version (2 since M5); absent in fixtures built from extract_text directly. */
+  /** Segmentation version (2 since M5, 3 since M5b); absent in fixtures built from extract_text directly. */
   paragraphsVersion?: number;
 }
 

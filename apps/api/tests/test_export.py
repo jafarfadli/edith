@@ -129,11 +129,11 @@ def test_export_text_edit(client):
     edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
         "rect": R(72, 88, 300, 16), "lineHeight": 12, "paragraphs": [[run]],
         "layout": [{"baseline": 12, "segments": [{"x": 0, "text": "Diganti", "runIndex": 0}]}]}}
-    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": 2})
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": 3})
     assert r.status_code == 200, r.text
     text = pymupdf.open(stream=r.content, filetype="pdf")[0].get_text()
     assert "Diganti" in text and "diedit" not in text and "tetangga" in text
-    r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}], "paragraphs_version": 2})
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}], "paragraphs_version": 3})
     assert r.status_code == 422 and r.json()["error"] == {"code": "invalid_op", "message": "no paragraph g9 on o0", "op_index": 0}
 
 
@@ -251,7 +251,7 @@ def test_export_keeps_the_unicode_of_invisible_characters(client):
     assert text in out[0].get_text()
 
 
-@pytest.mark.parametrize("version", [None, 1, 3])
+@pytest.mark.parametrize("version", [None, 1, 2, 4])
 def test_text_edits_of_another_segmentation_version_are_refused(client, version):
     """Ids g0, g1, … are positions in one segmentation: a draft or tab from before an update would edit
     the wrong paragraph."""

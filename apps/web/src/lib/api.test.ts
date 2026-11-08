@@ -58,11 +58,11 @@ describe("api client", () => {
   });
 
   it("sends the paragraph segmentation version with exports and page renders", async () => {
-    expect(PARAGRAPHS_VERSION).toBe(2); // shared with apps/api/edith/paragraphs.py
+    expect(PARAGRAPHS_VERSION).toBe(3); // shared with apps/api/edith/paragraphs.py
     const fn = mockFetch(200, "%PDF-1.7", "application/pdf");
     await exportPdf("x", { ops: [] });
     await renderPage("x", { pageKey: "o0", ops: [] });
     const bodies = (fn.mock.calls as unknown as [string, RequestInit][]).map(([, init]) => JSON.parse(init.body as string));
-    expect(bodies).toEqual([{ paragraphs_version: 2, ops: [] }, { paragraphs_version: 2, pageKey: "o0", ops: [] }]);
+    expect(bodies).toEqual([{ paragraphs_version: 3, ops: [] }, { paragraphs_version: 3, pageKey: "o0", ops: [] }]);
   });
 });

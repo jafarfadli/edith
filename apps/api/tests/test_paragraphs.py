@@ -115,7 +115,7 @@ def test_line_ending_in_space_excludes_it_from_end():
 
 def test_paragraphs_version_is_pinned():
     from edith.paragraphs import PARAGRAPHS_VERSION
-    assert PARAGRAPHS_VERSION == 2  # shared with apps/web/src/lib/paragraphs.ts; bump both when ids can change
+    assert PARAGRAPHS_VERSION == 3  # shared with apps/web/src/lib/paragraphs.ts; bump both when ids can change
 
 
 def test_form_table_segments_like_a_form():
@@ -189,6 +189,19 @@ def test_list_item_continues_only_past_its_bullet():
     assert [text(p) for p in paragraphs(page_with(draw))] == [
         "• Butir pertama yang cukup panjang sehingga berlanjut ke baris kedua.",
         "• Butir kedua yang juga cukup panjang hingga", "tidak menggantung di bawah butir."]
+
+
+def test_rows_and_cells_never_join_one_paragraph():
+    """M5b RC4: a value and the next row's label (no horizontal overlap), a run crossing a column rule, a dot-leader
+    row above a label, table-of-contents entries of similar length (each ends with room for the next one)."""
+    from tests.pdfs import ROWS_TOC, make_rows_pdf
+    got = [text(p) for p in paragraphs(make_rows_pdf())]
+    assert got[:4] == ["Nama", ": Dr. Budi Santoso, S.T.", "Jabatan", ": Ketua Program Studi"]
+    assert got[4:7] == ["NIM", "1.", "Budi"]
+    assert got[7:9] == ["23/5/2026", "Pengenalan organisasi"]  # the rule cuts the run; the cell wraps on
+    assert got[9:11] == ["Nama Mahasiswa : " + "." * 60, "NIM"]
+    assert got[11] == LOREM + " " + LOREM  # justified prose: its lines leave no room
+    assert got[12:] == ROWS_TOC
 
 
 def test_first_word_of_cjk_is_one_character():

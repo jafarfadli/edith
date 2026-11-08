@@ -113,7 +113,7 @@ def test_paragraphs_per_page(client):
     page = body["pages"][0]
     assert page["index"] == 0
     assert [p["id"] for p in page["paragraphs"]] == [f"g{i}" for i in range(8)]
-    assert body["paragraphsVersion"] == 2
+    assert body["paragraphsVersion"] == 3
 
 
 def test_font_bytes(client):

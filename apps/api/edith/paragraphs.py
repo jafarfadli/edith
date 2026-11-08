@@ -1,4 +1,5 @@
 """Original text of a page as editable paragraphs (spec: Ekstraksi paragraf)."""
+import re
 import unicodedata
 from dataclasses import dataclass
 from statistics import median
@@ -9,8 +10,8 @@ import pymupdf
 from edith.rules import Rules, page_rules
 
 # Version of the segmentation: paragraph ids (g0, g1, …) of a page change when it does. Shared contract with
-# apps/web/src/lib/paragraphs.ts (drafts and exports carry it; 1 = M1–M4, 2 = rule/hard-break aware, M5).
-PARAGRAPHS_VERSION = 2
+# apps/web/src/lib/paragraphs.ts (drafts and exports carry it; 1 = M1–M4, 2 = rule/hard-break aware, M5; 3 = M5b: cells, rows, lists, ink rects).
+PARAGRAPHS_VERSION = 3
 # No TEXT_PRESERVE_LIGATURES: "ﬁ" comes out as "fi", which every font can draw.
 FLAGS = pymupdf.TEXT_PRESERVE_WHITESPACE | pymupdf.TEXT_MEDIABOX_CLIP
 GAP_FACTOR = 1.5     # a gap larger than this × the block's usual line spacing starts a paragraph
@@ -25,6 +26,9 @@ HANG_EM = 0.3       # a list item's next line must start this far right of its b
 ROOM_PAD = 2.0       # pt left free before whatever ends a single line's room (a rule, other text)
 UNIFORM = 0.9        # bold / colour changes only split lines that are (nearly) entirely in one style
 TAB_GAP = "   "      # a line with this many spaces in a row is laid out with spaces (form rows, columns), not prose
+LEADER = re.compile(r"(?:\.\s?){5,}|…{2,}|_{4,}")  # so is a dot leader or a blank to fill in ("Nama : ……", "____")
+ROOM_EM = 0.5        # a line ended early when the next line's first word fits in its own room with this much to spare …
+ROOM_SHARE = 0.25    # … and its room is this share of the paragraph's measure (a gutter alone is not room)
 
 FontResolver = Callable[[dict], dict]  # pymupdf span → FontRef JSON
 SpanCheck = Callable[[dict], bool]     # pymupdf span → True when the paragraph holding it can't be edited
@@ -98,24 +102,76 @@ def _style(spans: list[dict]) -> tuple[tuple, bool]:
     return top, weight[top] >= UNIFORM * sum(weight.values())
 
 
-def _line(raw: dict) -> _Line | None:
-    spans, chars = [], []
+def _spans(raw: dict) -> list[dict]:
+    """The raw line's spans with cleaned text; each keeps its characters under "chars" (so a line can be cut)."""
+    out = []
     for s in raw["spans"]:
-        text = _clean("".join(c["c"] for c in s["chars"]))
+        chars = [dict(c, c=_clean(c["c"])) for c in s["chars"]]
+        text = "".join(c["c"] for c in chars)
         if text:
-            spans.append({k: v for k, v in s.items() if k != "chars"} | {"text": text})
-            chars.extend(dict(c, c=_clean(c["c"])) for c in s["chars"])
+            out.append({k: v for k, v in s.items() if k != "chars"} | {"text": text, "chars": chars})
+    return out
+
+
+def _build(spans: list[dict], horizontal: bool, bbox: tuple | None = None) -> _Line | None:
+    chars = [c for s in spans for c in s["chars"]]
     ink = [c for c in chars if not c["c"].isspace()]
     if not ink:
         return None
     main = max(spans, key=lambda s: (s["size"], len(s["text"].strip())))
-    dx, dy = raw["dir"]
-    x0, y0, x1, y1 = raw["bbox"]
+    if bbox is None:  # a piece of a raw line: its own extent
+        bbox = (chars[0]["bbox"][0], min(s["bbox"][1] for s in spans),
+                chars[-1]["bbox"][2], max(s["bbox"][3] for s in spans))
+    x0, y0, x1, y1 = bbox
     style, uniform = _style(spans)
+    text = "".join(c["c"] for c in chars).strip()
     return _Line(spans=spans, x0=x0, y0=y0, x1=x1, y1=y1, baseline=main["origin"][1], size=main["size"],
-                 horizontal=abs(dx - 1) < 1e-3 and abs(dy) < 1e-3, ink_x0=ink[0]["bbox"][0],
-                 ink_x1=ink[-1]["bbox"][2], first_word=_first_word(chars), style=style, uniform=uniform,
-                 tabular=TAB_GAP in "".join(c["c"] for c in chars).strip())
+                 horizontal=horizontal, ink_x0=ink[0]["bbox"][0], ink_x1=ink[-1]["bbox"][2],
+                 first_word=_first_word(chars), style=style, uniform=uniform,
+                 tabular=TAB_GAP in text or LEADER.search(text) is not None)
+
+
+def _piece(spans: list[dict], lo: int, hi: int) -> list[dict]:
+    """Characters lo … hi-1 (over all spans) as spans."""
+    out, k = [], 0
+    for s in spans:
+        n = len(s["chars"])
+        a, b = max(lo - k, 0), min(hi - k, n)
+        if a < b:
+            chars = s["chars"][a:b]
+            out.append(dict(s, chars=chars, text="".join(c["c"] for c in chars)))
+        k += n
+    return out
+
+
+def _cuts(spans: list[dict], rules: Rules) -> list[tuple[int, int]]:
+    """(lo, hi) character ranges of a raw line cut where a vertical rule passes between two of its characters:
+    MuPDF sometimes puts the text of two table cells in one line ("23/5/2026 Pengenalan")."""
+    chars = [c for s in spans for c in s["chars"]]
+    ink = [i for i, c in enumerate(chars) if not c["c"].isspace()]
+    y0, y1 = min(s["bbox"][1] for s in spans), max(s["bbox"][3] for s in spans)
+    out, lo = [], 0
+    for a, b in zip(ink, ink[1:]):
+        if rules.v_between(chars[a]["bbox"][2], chars[b]["bbox"][0], y0, y1):
+            out.append((lo, a + 1))
+            lo = b
+    out.append((lo, len(chars)))
+    return out
+
+
+def _lines(raw: dict, rules: Rules) -> list[_Line]:
+    """The raw MuPDF line as one _Line, or several when a column rule crosses it; none when it has no ink."""
+    spans = _spans(raw)
+    if not spans:
+        return []
+    dx, dy = raw["dir"]
+    horizontal = abs(dx - 1) < 1e-3 and abs(dy) < 1e-3
+    cuts = _cuts(spans, rules) if horizontal else [(0, 0)]
+    if len(cuts) == 1:
+        line = _build(spans, horizontal, tuple(raw["bbox"]))
+        return [line] if line else []
+    pieces = (_build(_piece(spans, lo, hi), horizontal) for lo, hi in cuts)
+    return [p for p in pieces if p is not None]
 
 
 def _ruled(a: _Line, b: _Line, rules: Rules) -> bool:
@@ -141,7 +197,7 @@ def _same_row(a: _Line, b: _Line, rules: Rules) -> bool:
 def _join(a: _Line, b: _Line) -> _Line:
     spans = list(a.spans)
     if not (a.text.endswith(" ") or b.text.startswith(" ")):
-        spans.append(dict(a.spans[-1], text=" "))
+        spans.append(dict(a.spans[-1], text=" ", chars=[]))  # a synthetic space: no character of the page
     spans.extend(b.spans)
     style, uniform = _style(spans)
     return _Line(spans=spans, x0=min(a.x0, b.x0), y0=min(a.y0, b.y0), x1=max(a.x1, b.x1), y1=max(a.y1, b.y1),
@@ -189,7 +245,12 @@ def _ends_item(prev: _Line, line: _Line) -> bool:
     return _bulleted(prev) and line.ink_x0 < prev.ink_x0 + HANG_EM * prev.size
 
 
-def _split(lines: list[_Line], rules: Rules) -> list[list[_Line]]:
+def _apart(a: _Line, b: _Line) -> bool:
+    """No horizontal overlap: a wrapped line always overlaps the line above it, a cell or form row beside it doesn't."""
+    return min(a.ink_x1, b.ink_x1) - max(a.ink_x0, b.ink_x0) < 0
+
+
+def _split(lines: list[_Line], rules: Rules, room_end: "RoomEnd | None" = None) -> list[list[_Line]]:
     spacing = _spacing(lines)
     left = min(line.ink_x0 for line in lines)
     tol = max(1.0, 0.1 * max(line.size for line in lines))
@@ -210,6 +271,7 @@ def _split(lines: list[_Line], rules: Rules) -> list[list[_Line]]:
             or _bulleted(line) or _ends_item(prev, line)
             or prev.tabular or line.tabular
             or _ruled(prev, line, rules)
+            or _apart(prev, line)
             or (not right_aligned
                 and line.ink_x0 > left + INDENT_EM * line.size         # indented first line …
                 and line.ink_x0 > prev.ink_x0 + INDENT_EM * line.size  # … more than the line before …
@@ -219,20 +281,31 @@ def _split(lines: list[_Line], rules: Rules) -> list[list[_Line]]:
             groups.append([line])
         else:
             groups[-1].append(line)
-    return [part for group in groups for part in _hard_breaks(group)]
+    return [part for group in groups for part in _hard_breaks(group, room_end)]
 
 
-def _hard_breaks(lines: list[_Line]) -> list[list[_Line]]:
+RoomEnd = Callable[[_Line, float], float]  # (line, its paragraph's left edge) → x where the line's room ends
+
+
+def _hard_breaks(lines: list[_Line], room_end: RoomEnd | None = None) -> list[list[_Line]]:
     """Splits after every line that ended early: the next line's first word (plus a space) would have fit in
     the room left before the group's widest line. Wrapped text, ragged or justified, has no such line; lists,
-    form rows, addresses and short lines do."""
+    form rows, addresses and short lines do. Lines of similar length (table of contents entries, form rows)
+    are told apart by their own room (`room_end`: up to the next rule or other text, and no further than the
+    text of the column reaches): the next first word fits there with ROOM_EM to spare, and that room is a real
+    share of the measure, not a gutter. Centred and right-aligned lines end early by design: only the
+    widest-line test applies to them."""
     if len(lines) < 2:
         return [lines]
     widest = max(line.ink_x1 for line in lines)
+    left = min(line.ink_x0 for line in lines)
+    own_room = room_end is not None and _align(lines) in ("left", "justify")
     out = [[lines[0]]]
     for line, nxt in zip(lines, lines[1:]):
         need = nxt.first_word + (0.0 if _wide(nxt.text.lstrip()[:1]) else SPACE_EM * nxt.size)
-        if widest - line.ink_x1 > need:
+        end = room_end(line, left) if own_room else line.ink_x1
+        room = end - line.ink_x1
+        if widest - line.ink_x1 > need or (room > need + ROOM_EM * line.size and room > ROOM_SHARE * (end - left)):
             out.append([nxt])
         else:
             out[-1].append(nxt)
@@ -332,22 +405,29 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
             continue
         starts_block = True
         for raw in block.get("lines", []):
-            line = _line(raw)
-            if line is None:
-                continue
-            if blocks and _same_row(blocks[-1][-1], line, rules):
-                blocks[-1][-1] = _join(blocks[-1][-1], line)
-            elif blocks and (not starts_block or _continues(blocks[-1], line, rules)):
-                blocks[-1].append(line)
-            else:
-                blocks.append([line])
-            starts_block = False
+            for line in _lines(raw, rules):
+                if blocks and _same_row(blocks[-1][-1], line, rules):
+                    blocks[-1][-1] = _join(blocks[-1][-1], line)
+                elif blocks and (not starts_block or _continues(blocks[-1], line, rules)):
+                    blocks[-1].append(line)
+                else:
+                    blocks.append([line])
+                starts_block = False
     every = [line for lines in blocks for line in lines]
     # The left margin, mirrored; the cropbox is unrotated like the lines (page.rect swaps width and height at 90/270).
     right_margin = page.cropbox.width - min((line.ink_x0 for line in every), default=0.0)
+    flat = [line for line in every if line.horizontal]
+
+    def room_end(line: _Line, left: float) -> float:
+        # No further than the page's text reaches in this column: the lines that start at (or left of) the
+        # paragraph's left edge and run past it. A column of text with nothing beside it is no room to grow into.
+        column = max((o.ink_x1 for o in flat if o.ink_x0 <= left + INDENT_EM * o.size and o.ink_x1 > left),
+                     default=line.ink_x1)
+        return min(_room_end(line, every, rules, right_margin), column)
+
     paragraphs: list[dict] = []
     for lines in blocks:
-        for group in _split(lines, rules):
+        for group in _split(lines, rules, room_end):
             paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked)
             if len(group) == 1 and group[0].horizontal:
                 paragraph["maxWidth"] = _room(group[0], every, rules, right_margin)
@@ -358,9 +438,15 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
 def _room(line: _Line, every: list[_Line], rules: Rules, right_margin: float) -> float:
     """Width a single-line paragraph may grow to when edited (from its left edge): up to the first vertical rule
     or other text to its right on its height, or the right margin, less ROOM_PAD; at least its own width."""
+    return _num(max(line.x1 - line.x0, _room_end(line, every, rules, right_margin) - line.x0))
+
+
+def _room_end(line: _Line, every: list[_Line], rules: Rules, right_margin: float) -> float:
+    """Where the room right of `line` ends: the first vertical rule or other text on its height, or the right
+    margin, less ROOM_PAD."""
     mid = (line.y0 + line.y1) / 2
     ends = [right_margin]
     ends += [s.at for s in rules.vertical if s.at > line.ink_x1 - 0.5 and s.lo <= mid <= s.hi]
     ends += [o.ink_x0 for o in every if o is not line and o.ink_x0 > line.ink_x1 - 0.5
              and min(o.y1, line.y1) - max(o.y0, line.y0) > 0.5 * min(o.y1 - o.y0, line.y1 - line.y0)]
-    return _num(max(line.x1 - line.x0, min(ends) - ROOM_PAD - line.x0))
+    return min(ends) - ROOM_PAD

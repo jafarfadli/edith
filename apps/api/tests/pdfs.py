@@ -87,6 +87,8 @@ def make_paragraphs_pdf() -> bytes:
     page = doc.new_page(width=595, height=842)
     for i, text in enumerate(["Paragraf A baris satu yang cukup panjang", "baris dua lanjutan paragraf A yang", "berakhir di baris tiga A."]):
         page.insert_text((72, 100 + i * 14.4), text, fontname="helv", fontsize=12)
+    # A's frame: the measure it was wrapped to (alone on a wide page, its short lines would have room for the next word).
+    page.draw_rect(pymupdf.Rect(66, 84, 300, 136), color=(0.5, 0.5, 0.5), width=0.5)
     page.insert_textbox(pymupdf.Rect(72, 180, 372, 260), LOREM, fontname="tiro", fontsize=11,
                         align=pymupdf.TEXT_ALIGN_JUSTIFY)
     c = [(72, "Paragraf C1 baris pertama yang panjang sekali"), (72, "akhir C1."),
@@ -319,6 +321,41 @@ def make_form_table_pdf() -> bytes:
         lines = _wrap(text, cjk, 10, 200, by_char) + ["短い行。" if by_char else "짧은 줄.", text[:12]]
         for i, line in enumerate(lines):
             page.insert_text((x, 420 + 14 * i), line, fontname=font_name, fontsize=10)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+ROWS_TOC = ["Halaman Sampul", "Halaman Pengesahan", "Kata Pengantar"]
+
+
+def make_rows_pdf() -> bytes:
+    """Rows and cells that must not become one paragraph (Helvetica 11), in content-stream order:
+    a label/value form (each value is followed by the next row's label), a table whose vertical borders are drawn
+    row by row with 0.5 pt gaps ("NIM" above the next row's "1."), one text run crossing a column rule
+    ("23/5/2026 Pengenalan"), a dot-leader row above the next label, and table-of-contents entries of similar
+    length under a full-width justified paragraph (the text column)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    for y, label, value in [(100, "Nama", ": Dr. Budi Santoso, S.T."), (113.3, "Jabatan", ": Ketua Program Studi")]:
+        page.insert_text((60, y), label, fontname="helv", fontsize=11)
+        page.insert_text((190, y), value, fontname="helv", fontsize=11)
+    for y0, y1 in [(160, 180.2), (180.7, 200.0)]:  # row by row: the borders leave a 0.5 pt gap at 180.2 … 180.7
+        for x in (100, 130, 300):
+            page.draw_line((x, y0), (x, y1), width=0.5)
+    page.draw_line((100, 180.45), (300, 180.45), width=0.5)
+    page.insert_text((240, 176), "NIM", fontname="helv", fontsize=11)
+    page.insert_text((104, 194), "1.", fontname="helv", fontsize=11)
+    page.insert_text((134, 194), "Budi", fontname="helv", fontsize=11)
+    w = pymupdf.get_text_length("23/5/2026 ", fontname="helv", fontsize=11)
+    page.draw_line((60 + w - 1.5, 230), (60 + w - 1.5, 280), width=0.5)  # the column rule inside the run's space
+    page.draw_line((60 + w + 80, 230), (60 + w + 80, 280), width=0.5)    # the cell's right border: it wraps
+    page.insert_text((60, 245), "23/5/2026 Pengenalan", fontname="helv", fontsize=11)
+    page.insert_text((60 + w, 258), "organisasi", fontname="helv", fontsize=11)
+    page.insert_text((60, 320), "Nama Mahasiswa : " + "." * 60, fontname="helv", fontsize=11)
+    page.insert_text((60, 334), "NIM", fontname="helv", fontsize=11)
+    assert page.insert_textbox(pymupdf.Rect(72, 370, 523, 450), LOREM + " " + LOREM, fontname="helv", fontsize=11,
+                               align=pymupdf.TEXT_ALIGN_JUSTIFY) >= 0
+    for i, entry in enumerate(ROWS_TOC):
+        page.insert_text((90, 470 + 13.8 * i), entry, fontname="helv", fontsize=11)
     return doc.tobytes(garbage=3, deflate=True)
 
 
