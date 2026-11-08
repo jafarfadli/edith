@@ -13,7 +13,7 @@ export async function placeStamp(kind: StampKind, color: string): Promise<void> 
   const metrics = await fontStore.load(STAMP_FONT);
   const at = currentPage();
   if (!at) return;
-  const op: StampAdd = { id: newId(), type: "stamp.add", pageKey: at.entry.pageKey, rect: stampRect(kind, metrics, at.geom), color, ...kind };
+  const op: StampAdd = { id: newId(), type: "stamp.add", pageKey: at.entry.pageKey, rect: stampRect(kind, metrics, at.size), color, ...kind };
   placeObject(op);
 }
 

@@ -41,7 +41,7 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
     if (!f || !st.info || !at) return;
     try {
       const asset = await uploadAsset(st.info.docId, f);
-      const rect = fitImage(asset.width, asset.height, at.geom.width, at.geom.height);
+      const rect = fitImage(asset.width, asset.height, at.size.width, at.size.height);
       placeObject({ id: newId(), type: "image.add", pageKey: at.entry.pageKey, rect, assetId: asset.asset_id } as ContentOp);
     } catch (e) {
       onNotice({ kind: "error", text: errorMessage(e instanceof ApiError ? e.code : "generic") });

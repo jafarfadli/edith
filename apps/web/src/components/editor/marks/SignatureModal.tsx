@@ -23,7 +23,7 @@ async function placeSignature(img: SignatureImage): Promise<void> {
   const at = currentPage();
   if (!st.info || !at) return;
   const asset = await uploadAsset(st.info.docId, dataUrlToBlob(img.dataUrl));
-  const op: SignatureAdd = { id: newId(), type: "signature.add", pageKey: at.entry.pageKey, rect: signatureRect(img.width, img.height, at.geom), assetId: asset.asset_id };
+  const op: SignatureAdd = { id: newId(), type: "signature.add", pageKey: at.entry.pageKey, rect: signatureRect(img.width, img.height, at.size), assetId: asset.asset_id };
   placeObject(op);
 }
 

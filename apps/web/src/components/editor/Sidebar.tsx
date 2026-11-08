@@ -3,27 +3,28 @@
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { PDFDocumentProxy } from "pdfjs-dist";
 import { t } from "@/lib/strings";
 import { editorStore, pageGeom, useEditor, type PageEntry } from "@/store/editor";
+import { MenuButton } from "./MenuButton";
 import { PageMenu } from "./PageMenu";
+import { importPdf, pickPdf } from "./pages/importPdf";
 import { Thumbnail } from "./Thumbnail";
 import { scrollToPage } from "./ZoomPill";
 
+/** "+" between pages: a blank page or the pages of another PDF go there. */
 function InsertButton({ after }: { after: string | null }) {
+  const scroll = (k: string | undefined) => { if (k) setTimeout(() => scrollToPage(k), 50); };
   return (
-    <button
-      aria-label={t.editor.insertBlank}
-      title={t.editor.insertBlank}
-      onClick={() => { const k = editorStore.getState().insertBlankAfter(after); setTimeout(() => scrollToPage(k), 50); }}
-      className="group mx-auto my-1 flex h-5 w-full items-center justify-center"
-    >
-      <span className="grid h-5 w-5 place-items-center rounded-full bg-surface text-xs text-muted opacity-0 ring-1 ring-line transition group-hover:opacity-100 group-focus-visible:opacity-100">+</span>
-    </button>
+    <div className="group mx-auto my-1 flex h-5 w-full items-center justify-center">
+      <MenuButton label={t.pages.insert} className="grid h-5 w-5 place-items-center rounded-full bg-surface text-xs text-muted opacity-0 ring-1 ring-line transition group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100" items={[
+        { label: t.pages.blank, run: () => scroll(editorStore.getState().insertBlankAfter(after)) },
+        { label: t.pages.importPdf, run: () => void pickPdf().then(async (f) => { if (f) scroll((await importPdf(f, after))[0]); }) },
+      ]}>+</MenuButton>
+    </div>
   );
 }
 
-function SortableThumb({ pdf, entry, index, count, active }: { pdf: PDFDocumentProxy; entry: PageEntry; index: number; count: number; active: boolean }) {
+function SortableThumb({ entry, index, count, active }: { entry: PageEntry; index: number; count: number; active: boolean }) {
   const info = useEditor((s) => s.info)!;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: entry.pageKey });
   return (
@@ -36,7 +37,7 @@ function SortableThumb({ pdf, entry, index, count, active }: { pdf: PDFDocumentP
         onClick={() => scrollToPage(entry.pageKey)}
         className={`relative mx-auto w-fit cursor-pointer rounded-md p-1 ${active ? "ring-2 ring-accent" : "hover:ring-1 hover:ring-line"}`}
       >
-        <Thumbnail pdf={pdf} entry={entry} geom={pageGeom(entry, info)} />
+        <Thumbnail entry={entry} geom={pageGeom(entry, info)} />
         <PageMenu pageKey={entry.pageKey} index={index} count={count} />
         <p className="mt-1 text-center text-xs text-muted">{index + 1}</p>
       </div>
@@ -44,7 +45,7 @@ function SortableThumb({ pdf, entry, index, count, active }: { pdf: PDFDocumentP
   );
 }
 
-export function Sidebar({ pdf }: { pdf: PDFDocumentProxy }) {
+export function Sidebar() {
   const pages = useEditor((s) => s.doc.pages);
   const current = useEditor((s) => s.currentPage);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -62,7 +63,7 @@ export function Sidebar({ pdf }: { pdf: PDFDocumentProxy }) {
           <InsertButton after={null} />
           {pages.map((entry, i) => (
             <div key={entry.pageKey}>
-              <SortableThumb pdf={pdf} entry={entry} index={i} count={pages.length} active={entry.pageKey === current} />
+              <SortableThumb entry={entry} index={i} count={pages.length} active={entry.pageKey === current} />
               <InsertButton after={entry.pageKey} />
             </div>
           ))}

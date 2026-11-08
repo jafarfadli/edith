@@ -5,9 +5,9 @@ import type Konva from "konva";
 import { Group, Layer, Stage, Transformer } from "react-konva";
 import { useStore } from "zustand";
 import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
-import { groupTransform, screenSize, type PageGeom } from "@/lib/coords";
+import { groupTransform, pageBounds, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
-import { clampToPage, createFromDrag, DRAG_TOOLS, inkWidth, isMarkup, isResizable, isTextOp, MARKUP_TOOLS, MIN_DRAG, moveOp, normalizeRect, noteAt, resizeOp, symbolAt, type DragTool, type Pt } from "@/lib/objects";
+import { clampToBounds, createFromDrag, DRAG_TOOLS, inkWidth, isMarkup, isResizable, isTextOp, MARKUP_TOOLS, MIN_DRAG, moveOp, normalizeRect, noteAt, resizeOp, symbolAt, type DragTool, type Pt } from "@/lib/objects";
 import { charsStore } from "@/store/chars";
 import { editorStore, useEditor, type MarkupTool } from "@/store/editor";
 import { linkStore } from "./marks/linkStore";
@@ -81,7 +81,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     const page = pageRef.current!;
     if (evt) page.getStage()?.setPointersPositions(evt);
     const p = page.getRelativePointerPosition()!;
-    return clampToPage([p.x, p.y], geom.width, geom.height);
+    return clampToBounds([p.x, p.y], pageBounds(geom));
   };
 
   function setDrawDraft(d: ContentOp | null) {
@@ -188,7 +188,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
         onPointerDown={onDown}
       >
         <Layer>
-          <Group ref={pageRef} x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale}>
+          <Group ref={pageRef} x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale} offsetX={tr.offsetX} offsetY={tr.offsetY}>
             {overlayHooks.renderUnder?.(pageKey)}
             {objs.map((op) => (
               <Group
@@ -248,7 +248,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
           />
         </Layer>
         <Layer ref={multiplyLayer} listening={tool === "select"}>
-          <Group x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale}>
+          <Group x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale} offsetX={tr.offsetX} offsetY={tr.offsetY}>
             {markups.map((op) => (
               <Group key={op.id} onPointerDown={(e) => {
                 e.cancelBubble = true;

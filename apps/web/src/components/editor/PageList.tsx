@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import type { PDFDocumentProxy } from "pdfjs-dist";
 import { pickVisible, pruneRatios } from "@/lib/visible";
 import { editorStore, pageGeom, useEditor } from "@/store/editor";
 import { PageView, type OverlayRender } from "./PageView";
 
-export function PageList({ pdf, overlay }: { pdf: PDFDocumentProxy; overlay?: OverlayRender }) {
+export function PageList({ overlay }: { overlay?: OverlayRender }) {
   const pages = useEditor((s) => s.doc.pages);
   const info = useEditor((s) => s.info)!;
   const zoom = useEditor((s) => s.zoom);
@@ -28,7 +27,7 @@ export function PageList({ pdf, overlay }: { pdf: PDFDocumentProxy; overlay?: Ov
   return (
     <div className="flex flex-col items-center gap-6 px-6 py-8">
       {pages.map((entry) => (
-        <PageView key={entry.pageKey} pdf={pdf} entry={entry} geom={pageGeom(entry, info)} scale={zoom} overlay={overlay} onVisible={onVisible} />
+        <PageView key={entry.pageKey} entry={entry} geom={pageGeom(entry, info)} scale={zoom} overlay={overlay} onVisible={onVisible} />
       ))}
     </div>
   );

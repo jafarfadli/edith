@@ -4,7 +4,8 @@ import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
 
 export function scrollToPage(pageKey: string) {
-  document.querySelector(`[data-page-key="${pageKey}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  // The page itself, not its thumbnail (which carries the same data-page-key and comes first in the DOM).
+  document.querySelector(`[data-testid="page"][data-page-key="${pageKey}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 export function ZoomPill() {

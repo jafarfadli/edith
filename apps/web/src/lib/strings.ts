@@ -94,6 +94,14 @@ export const t = {
     remove: "Hapus tanda tangan tersimpan", add: "Tambahkan", tooBig: "Tanda tangan ini terlalu besar untuk disimpan di browser",
     colors: { "#111111": "Hitam", "#1d4ed8": "Biru", "#b91c1c": "Merah" } as Record<string, string>,
   },
+  pages: {
+    duplicate: "Duplikat halaman",
+    insert: "Sisipkan halaman",
+    blank: "Halaman kosong",
+    importPdf: "Impor PDF",
+    imported: (n: number) => `${n} halaman diimpor`,
+    importGone: "Halaman dari PDF yang diimpor sudah tidak tersedia (sesi 1 jam berakhir). Impor ulang PDF-nya.",
+  },
   form: {
     flatten: "Ratakan form",
     flattenHint: "Isian form menjadi bagian halaman dan tidak bisa diubah lagi",

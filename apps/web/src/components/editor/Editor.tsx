@@ -11,11 +11,12 @@ import { loadDraft, saveDraft } from "@/lib/draft";
 import { noticeStore } from "@/lib/notices";
 import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
-import { restoreDraft } from "@/lib/restore";
+import { resolveImports, restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
 import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
+import { pdfStore } from "@/store/pdfs";
 import { textStore } from "@/store/text";
 import { FormLayer } from "./forms/FormLayer";
 import { Header } from "./Header";
@@ -49,7 +50,6 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
 
   useEffect(() => {
     let cancelled = false;
-    let doc: PDFDocumentProxy | null = null;
     initialDoc.current = null;
     (async () => {
       let st;
@@ -60,10 +60,15 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
         return;
       }
       if (cancelled) return;
-      const draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
-      editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages, fields: st.fields }, draft);
+      let draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
+      // Pages of imported PDFs need those documents' page sizes; imports that expired lose their pages.
+      const resolved = draft?.imports?.length ? await resolveImports(draft, async (id) => (await getStructure(id)).pages) : null;
+      if (cancelled) return;
+      if (resolved) draft = resolved.doc;
+      editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages, fields: st.fields, imports: resolved?.imports }, draft);
       initialDoc.current = editorStore.getState().doc;
-      if (draft) setNotice({ kind: "info", text: t.editor.restored });
+      if (resolved?.missing) setNotice({ kind: "error", text: t.pages.importGone });
+      else if (draft) setNotice({ kind: "info", text: t.editor.restored });
       void textStore.getState().load(docId); // original paragraphs + fonts, in the background
       // Preload fonts of restored text boxes (in parallel with the PDF; TextNode also loads on demand).
       const texts = Object.values(editorStore.getState().doc.objects).filter(isTextOp);
@@ -71,7 +76,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       try {
         const loaded = await loadPdf(fileUrl(docId));
         if (cancelled) { destroyPdf(loaded); return; }
-        doc = loaded;
+        pdfStore.getState().put(docId, loaded); // pages render from the store (imported PDFs load there on demand)
         setPdf(loaded);
       } catch {
         if (!cancelled) setFatal("network");
@@ -79,7 +84,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     })();
     return () => {
       cancelled = true;
-      if (doc) destroyPdf(doc);
+      pdfStore.getState().reset(); // destroys the main PDF and every imported one
       setPdf(null);
       setFatal(null);
     };
@@ -143,7 +148,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       <Toolbar onNotice={setNotice} />
       <PropertiesBar />
       <div className="flex min-h-0 flex-1">
-        {pdf ? <Sidebar pdf={pdf} /> : <aside className="w-48 shrink-0 border-r border-line bg-surface" />}
+        {pdf ? <Sidebar /> : <aside className="w-48 shrink-0 border-r border-line bg-surface" />}
         <main
           className="relative min-w-0 flex-1 overflow-auto bg-bg"
           id="page-scroller"
@@ -161,7 +166,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
           }}
           onPointerUp={() => { drag.current = null; }}
         >
-          {info && pdf ? <PageList pdf={pdf} overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><LinkPopover {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
+          {info && pdf ? <PageList overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><LinkPopover {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
         </main>
       </div>
       <FindBar />
