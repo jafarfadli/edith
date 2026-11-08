@@ -221,3 +221,12 @@ def test_form_set_and_original_fonts_may_name_a_document():
     assert Run.model_validate({**run, "font": {"kind": "original", "ref": "f3", "doc": "IMPORTED"}}).font.doc == "IMPORTED"
     with pytest.raises(ValidationError):
         Run.model_validate({**run, "font": {"kind": "original", "ref": "f3", "doc": "../x"}})
+
+
+def test_layout_doc_id_must_be_a_valid_doc_id():
+    import pytest
+    from pydantic import ValidationError
+    from edith.ops import ExportRequest
+    bad = {"id": "L", "type": "pages.layout", "pages": [{"pageKey": "a", "src": {"doc": "../x", "index": 0}}]}
+    with pytest.raises(ValidationError):
+        ExportRequest.model_validate({"ops": [bad]})

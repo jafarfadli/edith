@@ -264,7 +264,7 @@ class FormSet(Model):
 
 
 class DocSrc(Model):
-    doc: str
+    doc: DocId
     index: int = Field(ge=0)
 
 
