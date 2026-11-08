@@ -42,10 +42,14 @@ test("a failing download says why and can be retried", async ({ page }) => {
   await page.route(EXPORT, (r) => r.abort("connectionreset"), { times: 1 });
   await unduh.click();
   await expect(alert).toContainText("Tidak dapat terhubung ke server");
+  // Renamed after the failure: the retry saves under the new name, cleaned like the server cleans it.
+  await page.getByRole("textbox", { name: "Nama file" }).fill("../Laporan: final.");
   const pending = page.waitForEvent("download");
   await alert.getByRole("button", { name: "Coba lagi" }).click();
+  const download = await pending;
+  expect(download.suggestedFilename()).toBe("Laporan final.pdf");
   const file = path.join(test.info().outputDir, "retry.pdf");
-  await (await pending).saveAs(file);
+  await download.saveAs(file);
   expect(readFileSync(file).subarray(0, 5).toString()).toBe("%PDF-");
   await expect(page.getByRole("status").filter({ hasText: "Mengunduh" })).toBeVisible();
   await expect(page.getByRole("status").getByRole("button", { name: "Buka di tab baru" })).toBeVisible();

@@ -2,11 +2,11 @@
 
 import { Download, LoaderCircle, Search } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Op } from "@edith/ops";
 import { ApiError, exportPdf } from "@/lib/api";
 import { compact, failedOpId } from "@/lib/compact";
-import { downloadError, isPdfBlob, openBlob, saveBlob } from "@/lib/download";
+import { downloadError, downloadName, isPdfBlob, openBlob, savedNotice, saveBlob } from "@/lib/download";
 import type { NoticeMsg } from "@/lib/notices";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
@@ -17,7 +17,7 @@ import { openFind } from "./find/findStore";
 import { whenTextCommitted } from "./text/textEdit";
 
 /** The editor's one top bar: wordmark and file name, the tools (`children`), then Cari, Ratakan form and Unduh. */
-export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg) => void; children?: React.ReactNode }) {
+export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null) => void; children?: React.ReactNode }) {
   const info = useEditor((s) => s.info);
   const [name, setName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -25,9 +25,16 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg) => voi
   const hasForm = useEditor((s) => (s.info?.fields?.length ?? 0) > 0 || Object.values(s.info?.importFields ?? {}).some((f) => f.length > 0));
   const fileName = name ?? info?.fileName ?? "document.pdf";
 
+  // One export at a time: Enter held on the button or "Coba lagi" while a request runs must not start another.
+  const inFlight = useRef(false);
+  // "Coba lagi" runs the download of the latest render: the file name or "Ratakan form" may have changed since.
+  const latest = useRef<() => Promise<void>>(async () => {});
+
   async function download() {
-    if (!editorStore.getState().info) return;
+    if (inFlight.current || !editorStore.getState().info) return;
+    inFlight.current = true;
     setBusy(true);
+    onNotice(null); // the previous attempt's notice no longer applies
     let s = editorStore.getState();
     let sent: Op[] = [];
     try {
@@ -35,13 +42,12 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg) => voi
       s = editorStore.getState();
       if (!s.info) return;
       sent = compact(s.doc, s.info);
-      const blob = await exportPdf(s.info.docId, { ops: sent, flatten_forms: hasForm && flatten, filename: fileName });
+      const name = downloadName(fileName, s.info.fileName);
+      const blob = await exportPdf(s.info.docId, { ops: sent, flatten_forms: hasForm && flatten, filename: name });
       if (!(await isPdfBlob(blob))) throw new ApiError("bad_response", 200);
-      const name = fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
       // A download the browser blocks silently still leaves the notice's "Buka di tab baru" (a fresh click: no popup block).
       const openTab = { label: t.download.openTab, run: () => { if (!openBlob(blob)) onNotice({ kind: "error", text: t.download.blocked }); } };
-      if (saveBlob(blob, name) === "blocked") onNotice({ kind: "error", text: t.download.blocked, action: openTab });
-      else onNotice({ kind: "info", text: t.download.started(name), action: openTab });
+      onNotice(savedNotice(saveBlob(blob, name), name, openTab));
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError("generic", 0);
       if (err.code === "bake_failed" || err.code === "invalid_op") console.warn(`export ${err.code}:`, err.extra.message);
@@ -52,11 +58,13 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg) => voi
         s.select(failed);
       }
       const { message, retry } = downloadError(err);
-      onNotice({ kind: "error", text: message, action: retry ? { label: t.download.retry, run: () => void download() } : undefined });
+      onNotice({ kind: "error", text: message, action: retry ? { label: t.download.retry, run: () => void latest.current() } : undefined });
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
+  useEffect(() => { latest.current = download; });
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-panel px-2">

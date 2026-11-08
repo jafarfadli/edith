@@ -6,7 +6,7 @@ import { t } from "@/lib/strings";
 import { ICON } from "../ui/icon";
 import { POPOVER } from "../ui/styles";
 
-/** A toast at the bottom of the canvas (Editor renders it in the canvas wrapper): an error stays until closed, info goes away by itself (Editor). */
+/** A toast at the bottom of the canvas (Editor renders it in the canvas wrapper): an error stays until closed, info goes away by itself (Editor: 5 s, 20 s with a button). */
 export function Notice({ kind, children, action, onClose }: {
   kind: "error" | "info"; children: React.ReactNode; action?: NoticeMsg["action"]; onClose?: () => void;
 }) {

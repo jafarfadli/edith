@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api";
+import type { NoticeMsg } from "@/lib/notices";
 import { errorMessage, t } from "@/lib/strings";
 
 /** What saveBlob/openBlob need from the browser (tests pass fakes). */
@@ -10,9 +11,10 @@ export interface SaveEnv {
   open(url: string): Window | null;
 }
 
-/** A blob URL opened in a tab must outlive the tab's load; one used by an <a download> click only the click. */
+/** A blob URL opened in a tab must outlive the tab's load; one used by an <a download> click must outlive a slow
+ *  "Save as" dialog and the browser reading the blob (a revoked URL makes some browsers save a failed download). */
 const OPEN_REVOKE_MS = 60_000;
-const CLICK_REVOKE_MS = 1_000;
+const CLICK_REVOKE_MS = 40_000;
 
 function browserEnv(revokeMs: number): SaveEnv {
   return {
@@ -57,6 +59,31 @@ export function saveBlob(blob: Blob, filename: string, env?: SaveEnv): SaveResul
     }
   }
   return openBlob(blob, env ?? browserEnv(OPEN_REVOKE_MS)) ? "opened" : "blocked";
+}
+
+/** What the server's safe_filename strips too: path separators, characters Windows reserves, control characters. */
+const RESERVED = new Set([..."\\/:*?\"<>|"]);
+const allowed = (ch: string) => { const c = ch.codePointAt(0)!; return c > 0x1f && c !== 0x7f && !RESERVED.has(ch); };
+
+function cleanName(name: string): string | null {
+  const n = [...name].filter(allowed).join("").trim();
+  const hasExt = /\.pdf$/i.test(n);
+  const base = (hasExt ? n.slice(0, -4) : n).replace(/^[\s.]+|[\s.]+$/g, "");
+  return base ? base + (hasExt ? n.slice(-4) : ".pdf") : null;
+}
+
+/** The name a download is saved under: `name` (the file name field) cleaned like the server's safe_filename, spaces
+ *  and dots trimmed, ending in .pdf; never just ".pdf": then `original`'s name (cleaned), else "document.pdf". */
+export function downloadName(name: string, original?: string): string {
+  return cleanName(name) ?? (original ? cleanName(original) : null) ?? "document.pdf";
+}
+
+/** The notice after saveBlob: "Mengunduh …" only for a real download (with the new-tab fallback in case the browser
+ *  dropped it silently); a PDF that opened in a tab says so; a blocked one offers the tab as the way out. */
+export function savedNotice(result: SaveResult, name: string, openTab: NonNullable<NoticeMsg["action"]>): NoticeMsg {
+  if (result === "blocked") return { kind: "error", text: t.download.blocked, action: openTab };
+  if (result === "opened") return { kind: "info", text: t.download.opened };
+  return { kind: "info", text: t.download.started(name), action: openTab };
 }
 
 /** True when `blob` starts with the PDF signature (a proxy can answer 200 with an HTML error page). */

@@ -8,3 +8,13 @@ export const noticeStore = createStore<{ notice: NoticeMsg | null; show(n: Notic
   notice: null,
   show: (n) => set({ notice: { ...n } }), // a fresh object: the same message twice still notifies
 }));
+
+export const INFO_NOTICE_MS = 5_000;
+/** An info notice with a button ("Buka di tab baru") stays long enough to reach the button. */
+export const ACTION_NOTICE_MS = 20_000;
+
+/** How long a notice shows before it goes away by itself; null: until closed (errors). */
+export function noticeLifetime(n: NoticeMsg): number | null {
+  if (n.kind !== "info") return null;
+  return n.action ? ACTION_NOTICE_MS : INFO_NOTICE_MS;
+}

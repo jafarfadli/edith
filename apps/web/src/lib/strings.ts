@@ -221,6 +221,7 @@ export const t = {
   download: {
     started: (name: string) => `Mengunduh ${name}`,
     openTab: "Buka di tab baru",
+    opened: "PDF dibuka di tab baru. Simpan dari sana.",
     retry: "Coba lagi",
     blocked: "Browser memblokir unduhan. Buka PDF di tab baru lalu simpan dari sana.",
     server: (status: number) => `Server sedang bermasalah (${status}). Coba lagi sebentar lagi.`,

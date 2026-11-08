@@ -8,7 +8,7 @@ import { ApiError, fileUrl, getStructure } from "@/lib/api";
 import { toPage } from "@/lib/coords";
 import { fontStore } from "@/lib/fonts";
 import { loadDraft, saveDraft } from "@/lib/draft";
-import { noticeStore, type NoticeMsg } from "@/lib/notices";
+import { noticeLifetime, noticeStore, type NoticeMsg } from "@/lib/notices";
 import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
@@ -40,7 +40,6 @@ const TextEditor = dynamic(() => import("./text/TextEditor").then((m) => m.TextE
 const CropOverlay = dynamic(() => import("./pages/CropOverlay"), { ssr: false });
 const FindBar = dynamic(() => import("./find/FindBar").then((m) => m.FindBar), { ssr: false });
 
-const INFO_NOTICE_MS = 5000;
 
 export function Editor({ docId, initialName }: { docId: string; initialName: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
@@ -124,10 +123,11 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
   // Notices raised by store actions (e.g. a text commit that deleted marks).
   useEffect(() => noticeStore.subscribe((s, prev) => { if (s.notice && s.notice !== prev.notice) setNotice(s.notice); }), []);
 
-  // Info notices go away by themselves; errors stay until closed.
+  // Info notices go away by themselves (later when they carry a button); errors stay until closed.
   useEffect(() => {
-    if (notice?.kind !== "info") return;
-    const timer = setTimeout(() => setNotice((n) => (n === notice ? null : n)), INFO_NOTICE_MS);
+    const ms = notice ? noticeLifetime(notice) : null;
+    if (ms === null) return;
+    const timer = setTimeout(() => setNotice((n) => (n === notice ? null : n)), ms);
     return () => clearTimeout(timer);
   }, [notice]);
 
