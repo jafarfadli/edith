@@ -105,3 +105,18 @@ test("place an Indonesian preset stamp and a custom stamp with date", async ({ p
   await expect(page.getByRole("dialog", { name: "Pilih stamp" })).toHaveCount(0);
   await expect(page.getByRole("radiogroup", { name: "Warna" })).toBeVisible();
 });
+
+test("Kelola Halaman: Escape closes the dialog even after a button was disabled, Batal discards", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("file-input").setInputFiles(SAMPLE);
+  await expect(page.getByTestId("page")).toHaveCount(3);
+  await page.getByRole("button", { name: "Kelola Halaman" }).click();
+  const dlg = page.getByRole("dialog", { name: "Kelola Halaman" });
+  await expect(dlg.getByTestId("manage-page")).toHaveCount(3);
+  await dlg.getByTestId("manage-page").nth(2).click();
+  await dlg.getByRole("button", { name: /Hapus/ }).click(); // selection clears, so the button disables and loses focus
+  await expect(dlg.getByTestId("manage-page")).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await expect(dlg).toHaveCount(0);
+  await expect(page.getByTestId("page")).toHaveCount(3); // discarded
+});

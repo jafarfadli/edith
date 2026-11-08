@@ -44,7 +44,17 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
   const keys = [...selected].filter((k) => draft.pages.some((p) => p.pageKey === k));
   const none = keys.length === 0;
 
-  useEffect(() => { box.current?.focus(); }, []);
+  useEffect(() => {
+    box.current?.focus();
+    // Focus can fall to <body> when a clicked button becomes disabled: keep Escape working and keep editor shortcuts out.
+    const onKey = (e: KeyboardEvent) => {
+      if (box.current?.contains(e.target as Node)) return; // the dialog's own handler deals with it
+      e.stopPropagation();
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
 
   function toggle(key: string, shift: boolean) {
     const next = new Set(selected);
