@@ -69,8 +69,11 @@ def font_bytes(doc: pymupdf.Document, xref: int) -> tuple[bytes, str] | None:
     if any(font.has_glyph(c) for c in _SAMPLE):
         return buf, ext
     if ext == "ttf":
-        _family, bold, italic = parse_font_name(base_font_name(doc.xref_get_key(xref, "BaseFont")[1].lstrip("/")))
-        rebuilt = add_cmap(buf, char_to_glyph(doc, xref), f"Edith Original {xref}", bold, italic)
+        try:
+            _family, bold, italic = parse_font_name(base_font_name(doc.xref_get_key(xref, "BaseFont")[1].lstrip("/")))
+            rebuilt = add_cmap(buf, char_to_glyph(doc, xref), f"Edith Original {xref}", bold, italic)
+        except Exception:  # noqa: BLE001 - damaged font objects or CMaps: not reusable, as without a rebuild
+            rebuilt = None
         if rebuilt is not None:
             return rebuilt, "ttf"
     return None

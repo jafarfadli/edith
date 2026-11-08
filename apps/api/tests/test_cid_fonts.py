@@ -1,11 +1,12 @@
 import io
+import time
 
 import pymupdf
 import pytest
 from fontTools.ttLib import TTFont
 
-from edith.cid_fonts import add_cmap, char_to_glyph, parse_to_unicode
-from tests.pdfs import CID_TEXT, make_cid_subset_pdf, make_fonts_pdf
+from edith.cid_fonts import MAX_ENTRIES, add_cmap, char_to_glyph, parse_to_unicode
+from tests.pdfs import BROKEN_TABLES, CID_TEXT, break_font_table, make_cid_subset_pdf, make_fonts_pdf
 
 CMAP = b"""/CIDInit /ProcSet findresource begin 12 dict begin begincmap
 1 begincodespacerange <0000> <FFFF> endcodespacerange
@@ -23,6 +24,42 @@ endcmap"""
 
 def test_parse_to_unicode():
     assert parse_to_unicode(CMAP) == {3: "A", 4: "신", 5: "fi", 0x10: "a", 0x11: "b", 0x12: "c", 0x20: "가"}
+
+
+def cmap(bfchar: list[str] = (), bfrange: list[str] = ()) -> bytes:
+    return (b"begincmap\n" + f"{len(bfchar)} beginbfchar\n{chr(10).join(bfchar)}\nendbfchar\n".encode()
+            + f"{len(bfrange)} beginbfrange\n{chr(10).join(bfrange)}\nendbfrange\nendcmap".encode())
+
+
+def test_parse_to_unicode_accepts_whitespace_inside_hex_strings():
+    assert parse_to_unicode(cmap(["<00 03> <00 41>"], ["<00 10> <00 11> <00 61>", "<0020> <0021> [<ac 00> <ac01>]"])) == {
+        3: "A", 0x10: "a", 0x11: "b", 0x20: "가", 0x21: "각"}
+
+
+def test_parse_to_unicode_skips_codes_and_destinations_out_of_range():
+    got = parse_to_unicode(cmap(
+        ["<12345> <0041>", "<0005> <D800>"],              # a code wider than a CID; a lone surrogate
+        ["<10000> <10005> <0041>",                         # codes wider than a CID
+         "<0001> <0003> <DBFFDFFF>",                       # U+10FFFF, then past the last code point
+         "<0010> <0012> <D7FF>"]))                         # runs into the surrogates
+    assert got == {1: "\U0010ffff", 0x10: "\ud7ff"}
+
+
+def test_parse_to_unicode_ignores_ranges_of_codes_wider_than_a_cid():
+    start = time.perf_counter()
+    assert parse_to_unicode(cmap(bfrange=[f"<{i:02x}0000> <{i:02x}ffff> <0041>" for i in range(1, 21)])) == {}
+    assert time.perf_counter() - start < 1
+
+
+def test_parse_to_unicode_caps_the_work_of_huge_ranges():
+    start = time.perf_counter()
+    got = parse_to_unicode(cmap(bfrange=["<0000> <FFFF> <4E00>"] * 2000))
+    assert time.perf_counter() - start < 1
+    assert len(got) == 0x10000 - 0x800  # every CID once, but the ones landing on surrogates
+    # MAX_ENTRIES range steps in total (duplicates count): parsing stops there and keeps what it mapped.
+    assert MAX_ENTRIES == 2 * 0x10000
+    capped = parse_to_unicode(cmap(bfrange=["<0000> <FFFF> <4E00>", "<0000> <FFFF> <4E00>", "<0000> <0000> <0042>"]))
+    assert capped[0] == "\u4e00"
 
 
 def doc_and_font(name: str) -> tuple[pymupdf.Document, int]:
@@ -78,3 +115,12 @@ def test_add_cmap_needs_a_glyph_and_a_readable_program():
     doc, xref = doc_and_font("Dotum")
     assert add_cmap(doc.extract_font(xref)[3], {}, "X") is None
     assert add_cmap(b"not a font", {65: 1}, "X") is None
+
+
+@pytest.mark.parametrize("damage", BROKEN_TABLES)
+def test_add_cmap_gives_up_on_programs_fonttools_cant_read(damage):
+    data = break_font_table(make_cid_subset_pdf(), "Dotum", damage)
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    xref = next(e[0] for e in doc[0].get_fonts(full=True) if e[3].endswith("Dotum"))
+    pymupdf.Font(fontbuffer=doc.extract_font(xref)[3])  # FreeType still reads it
+    assert add_cmap(doc.extract_font(xref)[3], char_to_glyph(doc, xref), "X") is None

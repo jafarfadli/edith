@@ -1,4 +1,6 @@
 import io
+import struct
+from collections.abc import Callable
 from pathlib import Path
 
 import pymupdf
@@ -54,7 +56,8 @@ def make_fonts_pdf() -> bytes:
 
 
 def make_pymupdf_subset_pdf() -> bytes:
-    """An embedded TTF subset by PyMuPDF: it has no cmap, so it can't be reused."""
+    """An embedded TTF subset by PyMuPDF: it has no cmap, so it is reused through one rebuilt from its
+    ToUnicode (edith.cid_fonts)."""
     doc = pymupdf.open()
     page = doc.new_page(width=595, height=842)
     page.insert_font(fontname="FC", fontfile=str(FONT_FILES / "Cousine-Regular.ttf"))
@@ -349,4 +352,30 @@ def make_cid_subset_pdf() -> bytes:
     for xref, _ext, _type, basefont, *_rest in page.get_fonts(full=True):
         name = next(n for n in ("Dotum", "Batang", "Wingdings") if n in basefont)
         doc.xref_set_key(xref, "BaseFont", f"/EDITHA+{name}")
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+# Damage FreeType accepts but fontTools can't read (the rebuild must fall back to "not reusable").
+BROKEN_TABLES: dict[str, tuple[bytes, Callable[[bytes], bytes]]] = {
+    "glyf garbage": (b"glyf", lambda t: b"\xff" * len(t)),
+    "hhea garbage": (b"hhea", lambda t: b"\xff" * len(t)),
+    "maxp numGlyphs 0xFFFF": (b"maxp", lambda t: t[:4] + b"\xff\xff" + t[6:]),
+}
+
+
+def break_font_table(data: bytes, name: str, damage: str) -> bytes:
+    """`data` with one table of the embedded program of Type0 font `name` damaged as BROKEN_TABLES[damage] says."""
+    tag, fn = BROKEN_TABLES[damage]
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    xref = next(e[0] for e in doc[0].get_fonts(full=True) if e[3].endswith(name))
+    cid_font = int(doc.xref_get_key(xref, "DescendantFonts")[1].strip("[]").split()[0])
+    descriptor = int(doc.xref_get_key(cid_font, "FontDescriptor")[1].split()[0])
+    stream = int(doc.xref_get_key(descriptor, "FontFile2")[1].split()[0])
+    buf = bytearray(doc.xref_stream(stream))
+    for i in range(struct.unpack(">H", buf[4:6])[0]):
+        rec = 12 + 16 * i
+        if buf[rec:rec + 4] == tag:
+            offset, length = struct.unpack(">II", buf[rec + 8:rec + 16])
+            buf[offset:offset + length] = fn(bytes(buf[offset:offset + length]))
+    doc.update_stream(stream, bytes(buf))
     return doc.tobytes(garbage=3, deflate=True)

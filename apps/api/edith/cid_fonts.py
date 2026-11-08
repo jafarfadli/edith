@@ -6,6 +6,7 @@ can be served to the browser and used by TextWriter like any embedded TrueType f
 import io
 import re
 import unicodedata
+from collections.abc import Iterator
 
 import pymupdf
 from fontTools.fontBuilder import FontBuilder
@@ -13,46 +14,71 @@ from fontTools.ttLib import TTFont
 
 _BFCHAR = re.compile(rb"beginbfchar(.*?)endbfchar", re.S)
 _BFRANGE = re.compile(rb"beginbfrange(.*?)endbfrange", re.S)
-_HEX = re.compile(rb"<([0-9A-Fa-f]*)>")
+_HEX = re.compile(rb"<([0-9A-Fa-f\s]*)>")
 # A glyph whose ToUnicode says no-break space or soft hyphen (MuPDF writes those for the space and hyphen of
 # many fonts, see edith.bake.tounicode) also draws the plain character.
 _ALIASES = {0xA0: 0x20, 0xAD: 0x2D}
-_RANGE = re.compile(rb"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(<[0-9A-Fa-f]*>|\[[^\]]*\])")
+_RANGE = re.compile(rb"<([0-9A-Fa-f\s]+)>\s*<([0-9A-Fa-f\s]+)>\s*(<[0-9A-Fa-f\s]*>|\[[^\]]*\])")
+MAX_CID = 0xFFFF         # Identity-H/V codes are two bytes
+MAX_ENTRIES = 1 << 17    # bfchar entries + bfrange steps parsed per CMap (duplicates count); then parsing stops
+
+
+def _code(hex_digits: bytes) -> int | None:
+    """A source code (hex, whitespace allowed); None when empty or wider than a CID."""
+    digits = re.sub(rb"\s", b"", hex_digits)
+    code = int(digits, 16) if digits else None
+    return code if code is not None and code <= MAX_CID else None
 
 
 def _text(hex_digits: bytes) -> str | None:
-    """A ToUnicode destination (UTF-16BE hex) as a string; None when it is not valid UTF-16."""
+    """A ToUnicode destination (UTF-16BE hex, whitespace allowed) as a string; None when it is not valid UTF-16
+    (lone surrogates included)."""
     try:
-        return bytes.fromhex(hex_digits.decode()).decode("utf-16-be")
+        return bytes.fromhex(re.sub(rb"\s", b"", hex_digits).decode()).decode("utf-16-be")
     except (ValueError, UnicodeDecodeError):
         return None
 
 
+def _bfrange(start: int, end: int, dst: bytes) -> Iterator[tuple[int, str | None]]:
+    """(code, text or None) for each code of a bfrange entry; None where the destination is no character."""
+    if dst.startswith(b"["):
+        items = _HEX.findall(dst)
+        for i, code in enumerate(range(start, end + 1)):
+            yield code, _text(items[i]) if i < len(items) else None
+        return
+    base = _text(dst[1:-1])
+    for i, code in enumerate(range(start, end + 1)):
+        cp = ord(base[-1]) + i if base else -1
+        ok = 0 <= cp <= 0x10FFFF and not 0xD800 <= cp <= 0xDFFF
+        yield code, base[:-1] + chr(cp) if ok else None
+
+
 def parse_to_unicode(data: bytes) -> dict[int, str]:
-    """code → text of a ToUnicode CMap (bfchar and bfrange entries; ranges with a destination array too)."""
+    """code → text of a ToUnicode CMap (bfchar and bfrange entries; ranges with a destination array too).
+    Codes wider than a CID and destinations that are no character are left out; after MAX_ENTRIES entries
+    and range steps parsing stops, keeping what it mapped."""
     out: dict[int, str] = {}
+    budget = MAX_ENTRIES
     for block in _BFCHAR.findall(data):
         codes = _HEX.findall(block)
         for src, dst in zip(codes[0::2], codes[1::2]):
-            text = _text(dst)
-            if src and text:
-                out[int(src, 16)] = text
+            if budget == 0:
+                return out
+            budget -= 1
+            code, text = _code(src), _text(dst)
+            if code is not None and text:
+                out[code] = text
     for block in _BFRANGE.findall(data):
         for lo, hi, dst in _RANGE.findall(block):
-            start, end = int(lo, 16), int(hi, 16)
-            if end < start or end - start > 0xFFFF:
+            start, end = _code(lo), _code(hi)
+            if start is None or end is None or end < start:
                 continue
-            if dst.startswith(b"["):
-                for code, item in zip(range(start, end + 1), _HEX.findall(dst)):
-                    text = _text(item)
-                    if text:
-                        out[code] = text
-                continue
-            base = _text(dst[1:-1])
-            if not base:
-                continue
-            for i in range(end - start + 1):
-                out[start + i] = base[:-1] + chr(ord(base[-1]) + i)
+            for code, text in _bfrange(start, end, dst):
+                if budget == 0:
+                    return out
+                budget -= 1
+                if text:
+                    out[code] = text
     return out
 
 
@@ -101,13 +127,17 @@ def char_to_glyph(doc: pymupdf.Document, xref: int) -> dict[int, int]:
 
 def add_cmap(buf: bytes, mapping: dict[int, int], family: str, bold: bool = False, italic: bool = False) -> bytes | None:
     """The TrueType program `buf` with a Unicode cmap built from `mapping` (code point → glyph id; empty glyphs
-    left out, but spaces) and the name, OS/2 and post tables it lacks. None when the program can't be read or no
-    glyph is left."""
+    left out, but spaces) and the name, OS/2 and post tables it lacks. None when fontTools can't read or
+    rebuild the program (damaged tables FreeType tolerates) or no glyph is left."""
     try:
-        font = TTFont(io.BytesIO(buf))
-        order = font.getGlyphOrder()
-    except Exception:  # noqa: BLE001 - not a TrueType program fontTools can read
+        return _add_cmap(buf, mapping, family, bold, italic)
+    except Exception:  # noqa: BLE001 - not a TrueType program fontTools can read or write
         return None
+
+
+def _add_cmap(buf: bytes, mapping: dict[int, int], family: str, bold: bool, italic: bool) -> bytes | None:
+    font = TTFont(io.BytesIO(buf))
+    order = font.getGlyphOrder()
     glyf = font["glyf"] if "glyf" in font else None
 
     def drawn(cp: int, name: str) -> bool:

@@ -61,9 +61,16 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
                 font.substitute = registry.substitute(font.name, span["flags"])
             return {"kind": "original", "ref": font.ref} if font.reusable else dict(font.substitute)
 
-        def locked(span: dict, by_name=by_name) -> bool:
-            font = by_name.get(name_key(span["font"]))
-            return not font.reusable and font.symbolic if font is not None else is_symbolic(span["font"])
+        page_fonts = list({e[0]: fonts[e[0]] for e in page.get_fonts(full=True) if e[0] in fonts}.values())
+
+        def locked(span: dict, page_fonts=page_fonts) -> bool:
+            key = name_key(span["font"])
+            candidates = [f for f in page_fonts if key in f.keys]  # several when the name is ambiguous
+            if not candidates:
+                return is_symbolic(span["font"])
+            if len(candidates) == 1:
+                return candidates[0].symbolic and not candidates[0].reusable
+            return is_symbolic(span["font"]) and not any(f.reusable for f in candidates)
 
         pages.append({"index": page.number, "paragraphs": extract_paragraphs(page, resolve, locked)})
     fill_substitutes(fonts, registry)

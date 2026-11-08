@@ -1,9 +1,10 @@
 import io
 
 import pymupdf
+import pytest
 from fontTools.ttLib import TTFont
 
-from tests.pdfs import (CID_TEXT, make_cid_subset_pdf, make_fonts_pdf, make_paragraphs_pdf, make_pdf,
+from tests.pdfs import (BROKEN_TABLES, CID_TEXT, break_font_table, make_cid_subset_pdf, make_fonts_pdf, make_paragraphs_pdf, make_pdf,
                         make_pymupdf_subset_pdf, rename_font)
 from tests.test_documents import upload
 
@@ -77,6 +78,28 @@ def test_text_in_a_symbol_font_that_cant_be_reused_is_not_editable(client):
     page.insert_text((72, 140), "Teks biasa", fontname="helv", fontsize=12)
     body = text_of(client, doc.tobytes())
     assert [p["editable"] for p in body["pages"][0]["paragraphs"]] == [False, True]
+
+
+@pytest.mark.parametrize("damage", BROKEN_TABLES)
+def test_cid_program_fonttools_cant_read_is_not_reusable(client, damage):
+    body = text_of(client, break_font_table(make_cid_subset_pdf(), "Dotum", damage))
+    f = by_name(body)
+    assert (f["Dotum"]["reusable"], f["Batang"]["reusable"]) == (False, True)
+    assert body["pages"][0]["paragraphs"][0]["runs"][0]["font"] == f["Dotum"]["substitute"]
+    assert client.get(f"/documents/{body['doc_id']}/fonts/{f['Dotum']['ref']}").status_code == 404
+
+
+def test_symbol_name_shared_with_a_reusable_font_does_not_lock(client):
+    """A span whose font name matches two fonts of the page is locked by its symbol name only when neither
+    font can be reused."""
+    doc = pymupdf.open(stream=make_cid_subset_pdf(), filetype="pdf")
+    doc[0].insert_text((72, 300), "abc", fontname="helv", fontsize=12)
+    for xref, _ext, _type, basefont, *_rest in doc[0].get_fonts(full=True):
+        if basefont == "Helvetica":
+            doc.xref_set_key(xref, "BaseFont", "/Wingdings")  # not embedded; its spans are named "Wingdings" too
+    body = text_of(client, doc.tobytes())
+    assert [(p["runs"][0]["text"], p["editable"]) for p in body["pages"][0]["paragraphs"][2:]] == [
+        ("èô", True), ("abc", True)]
 
 
 def test_calibri_maps_to_carlito(client):
