@@ -42,6 +42,7 @@ def _ctx(request: Request, doc_id: str) -> BakeContext:
         doc_id=doc_id,
         asset_path=lambda asset_id: storage.asset_path(doc_id, asset_id),
         fonts=request.app.state.fonts,
+        load_source=lambda other: _read_source(request, other),  # imported PDFs (pages.layout src.doc)
     )
 
 
