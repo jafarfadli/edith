@@ -19,3 +19,8 @@ Items deliberately left out of M5 (see README.md, Deviations):
 - Form-row rule (3 spaces) splits wrapped labels/sentences from continuation (reference p3 g24/g25, g26/g27; p4 g11/g12, g36–g38).
 - Hard-break result depends on group content (reference p5 g12: Korean line + English translation merge).
 - `scripts/paragraph_overlay.py`: no box on cropped+rotated pages; no usage message without arguments.
+
+## Task 4 review (deferred)
+- Cache `font_bytes` rebuild (LRU keyed by doc hash + xref); `_doc_font` parses the result twice.
+- Bake does not reject `text.edit` on an `editable: false` paragraph (also true for vertical text).
+- Word lists with a non-embedded Symbol bullet lock the whole list item.
