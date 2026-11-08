@@ -368,6 +368,23 @@ describe("markup over an edited paragraph", () => {
     expect(Object.keys(editorStore.getState().doc.objects).sort()).toEqual(["h1", "h4", "n", "s3", "u2"]);
   });
 
+  it("keeps the marks on the lines an edit leaves alone: those keep their original glyphs (LayoutLine.source)", async () => {
+    gate.resolve();
+    await startParagraphEdit("o0", g3);
+    const e = textEditStore.getState().editing!;
+    expect(e.box.paragraphs.map((p) => p[0].text)).toEqual(["Halo", "lama"]); // "lama" would fit after "Halo": a hard break
+    await commitEditing([e.box.paragraphs[0], [{ ...e.box.paragraphs[1][0], text: "lamb" }]]);
+    const doc = editorStore.getState().doc;
+    const op = Object.values(doc.objects).find((o) => o.type === "text.edit") as TextEdit;
+    expect(op.box.layout.map((l) => l.source ?? null)).toEqual([0, null]);
+    expect(Object.keys(doc.objects).sort()).toEqual([op.id, "h1", "h4", "n", "s3"].sort()); // only u2 (line 2) went
+    // Reopened and committed again unchanged: the same op, nothing new to undo.
+    const before = editorStore.getState().past.length;
+    textEditStore.getState().start({ id: op.id, pageKey: "o0", box: op.box, isNew: false, kind: "text.edit", paragraphId: "g3" });
+    await commitEditing(op.box.paragraphs);
+    expect(editorStore.getState().past.length).toBe(before);
+  });
+
   it("also when an existing text.edit is edited again, and no notice when nothing was removed", async () => {
     openParagraph("Halo lama");
     await commitEditing(runs("Halo baru"));

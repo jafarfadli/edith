@@ -76,7 +76,10 @@ test("edit an original paragraph, find & replace, download", async ({ page }) =>
   expect(text).toContain("penting");
 
   // Raw PyMuPDF text: a bad ToUnicode would show here as U+00A0 (pdf.js hides it).
-  expect(pdfSpans(file, true)[0].map((s) => s.text).join("")).not.toContain("\u00a0");
+  // Lines an edit leaves alone keep the original's glyphs and text, which in this fixture reads back with U+00A0.
+  const kept = new Set(pdfSpans(TEXT_PDF, true)[0].map((s) => s.text));
+  for (const s of pdfSpans(file, true)[0]) if (!kept.has(s.text)) expect(s.text).not.toContain("\u00a0");
+  expect(pdfSpans(file, true)[0].some((s) => s.text.startsWith("Paragraf\u00a0kedua"))).toBe(true); // that line was kept
   const spans = pdfSpans(file)[0];
   const bold = spans.find((s) => s.text.includes("penting"))!;
   expect(bold.font).toMatch(/Arimo.*Bold/);

@@ -13,9 +13,10 @@ export function markLines(pageKey: string): CharLine[] {
   const s = editorStore.getState();
   const entry = s.doc.pages.find((p) => p.pageKey === pageKey);
   if (!entry || !("doc" in entry.src)) return [];
-  const edited = new Set(Object.values(s.doc.objects)
-    .filter((op): op is TextEdit => op.type === "text.edit" && op.pageKey === pageKey).map((op) => op.paragraphId));
-  const hidden = paragraphsOf(entry.src).filter((p) => edited.has(p.id)).flatMap(maskRects);
+  const edits = new Map(Object.values(s.doc.objects)
+    .filter((op): op is TextEdit => op.type === "text.edit" && op.pageKey === pageKey).map((op) => [op.paragraphId, op.box]));
+  // The lines an edit keeps (LayoutLine.source) are still the page's text: they can be marked.
+  const hidden = paragraphsOf(entry.src).filter((p) => edits.has(p.id)).flatMap((p) => maskRects(p, edits.get(p.id)));
   return usableLines(charLines(srcKey(entry.src.doc, entry.src.index)), hidden);
 }
 

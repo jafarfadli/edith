@@ -1,4 +1,4 @@
-import type { AnnotAdd, ContentOp, Rect, ShapeAdd, SymbolAdd, TextAdd, TextEdit } from "@edith/ops";
+import type { AnnotAdd, ContentOp, Rect, ShapeAdd, SymbolAdd, TextAdd, TextBox, TextEdit } from "@edith/ops";
 import type { CropBox } from "@/lib/coords";
 import type { ToolStyle } from "@/store/editor";
 
@@ -72,12 +72,18 @@ export function opBounds(op: ContentOp): Rect {
   }
 }
 
+/** A text box without kept original lines (LayoutLine.source): once moved or resized, every line is drawn. */
+function redrawAll(box: TextBox): TextBox {
+  if (!box.layout.some((l) => l.source !== undefined && l.source !== null)) return box;
+  return { ...box, layout: box.layout.map((l) => ({ baseline: l.baseline, segments: l.segments })) };
+}
+
 export function moveOp<T extends ContentOp>(op: T, dx: number, dy: number): T {
   const o = op as Any;
   const mv = (p: number[]) => [p[0] + dx, p[1] + dy];
   const mr = (r: Rect): Rect => ({ ...r, x: r.x + dx, y: r.y + dy });
   switch (op.type) {
-    case "text.add": case "text.edit": { const box = o.box as { rect: Rect }; return { ...op, box: { ...box, rect: mr(box.rect) } }; }
+    case "text.add": case "text.edit": { const box = o.box as TextBox; return { ...op, box: { ...redrawAll(box), rect: mr(box.rect) } }; }
     case "ink.add": return { ...op, paths: (o.paths as number[][][]).map((path) => path.map(mv)) };
     case "shape.add": return o.points ? { ...op, points: (o.points as number[][]).map(mv) } : { ...op, rect: mr(o.rect as Rect) };
     case "annot.add": return o.point ? { ...op, point: mv(o.point as number[]) } : op; // markup stays on its text
@@ -91,7 +97,7 @@ export function resizeOp<T extends ContentOp>(op: T, to: Rect): T {
   const sx = b.w ? to.w / b.w : 1, sy = b.h ? to.h / b.h : 1;
   const sc = (p: number[]) => [to.x + (p[0] - b.x) * sx, to.y + (p[1] - b.y) * sy];
   switch (op.type) {
-    case "text.add": case "text.edit": { const box = o.box as { rect: Rect }; return { ...op, box: { ...box, rect: { ...box.rect, x: to.x, y: to.y, w: to.w } } }; }
+    case "text.add": case "text.edit": { const box = o.box as TextBox; return { ...op, box: { ...redrawAll(box), rect: { ...box.rect, x: to.x, y: to.y, w: to.w } } }; }
     case "ink.add": return { ...op, paths: (o.paths as number[][][]).map((path) => path.map(sc)) };
     case "shape.add": return o.points ? { ...op, points: (o.points as number[][]).map(sc) } : { ...op, rect: to };
     case "annot.add": return op;

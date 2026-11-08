@@ -32,6 +32,8 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
 
   const overflow = useOverflow(op);
   const runs = box.paragraphs.flat();
+  // A text.edit's kept lines (`source`) are the page's own glyphs: not drawn again (ParagraphLayer leaves them uncovered).
+  const drawn = op.type === "text.edit" ? box.layout.filter((l) => l.source === undefined || l.source === null) : box.layout;
   const { x, y, w, h } = box.rect;
   return (
     <>
@@ -56,7 +58,7 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
             if ("fontKerning" in c) c.fontKerning = "none";
             // Same order as the bake: every background, then the glyphs, then underline/strike.
             const bands: { x: number; y: number; w: number; h: number; color: string; over: boolean }[] = [];
-            for (const line of box.layout) {
+            for (const line of drawn) {
               for (const seg of line.segments) {
                 const r = runs[seg.runIndex];
                 if (!r || !(r.bgColor || r.underline || r.strike)) continue;
@@ -68,7 +70,7 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
             }
             const fill = (over: boolean) => bands.filter((b) => b.over === over).forEach((b) => { c.fillStyle = b.color; c.fillRect(b.x, b.y, b.w, b.h); });
             fill(false);
-            for (const line of box.layout) {
+            for (const line of drawn) {
               for (const seg of line.segments) {
                 const r = runs[seg.runIndex];
                 if (!r) continue;

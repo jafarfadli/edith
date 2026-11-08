@@ -103,6 +103,29 @@ describe("applyReplacements", () => {
     expect((after.doc.objects.t as TextAdd).box.paragraphs[0][0].text).toBe("diketik");
     expect(Object.values(after.doc.objects).filter((o) => o.type === "text.edit")).toHaveLength(1);
   });
+
+  it("keeps the original lines a replacement leaves alone, in every paragraph it rewrites", async () => {
+    // g1: three short lines (each a hard break) under g0.
+    const texts = ["baris satu", "baris lama", "baris tiga"];
+    let at = 0;
+    const lines = texts.map((s, i) => {
+      const line = { rect: { x: 72, y: 110 + 14 * i, w: 60, h: 14 }, baseline: 120 + 14 * i, size: 12, start: at, end: at + s.length };
+      at += s.length + 1;
+      return line;
+    });
+    const g1: Paragraph = { id: "g1", rect: { x: 72, y: 110, w: 200, h: 42 }, align: "left", lineHeight: 14, editable: true,
+      runs: [{ text: texts.join(" "), font, size: 12, color: "#000000" }], lines };
+    textStore.setState({ pages: { [`${info.docId}:0`]: [para, g1] } });
+    await applyReplacements(findMatches(buildTargets(editorStore.getState().doc, textStore.getState().pages), "lama", true), "baru");
+    const edits = Object.values(editorStore.getState().doc.objects) as TextEdit[];
+    const sourcesOf = (id: string) => edits.find((e) => e.paragraphId === id)!.box.layout.map((l) => l.source ?? null);
+    expect(sourcesOf("g0")).toEqual([null]);
+    expect(sourcesOf("g1")).toEqual([0, null, 2]);
+    // Replaced again in the op: still compared with the original paragraph.
+    await applyReplacements(findMatches(buildTargets(editorStore.getState().doc, textStore.getState().pages), "tiga", true), "empat");
+    const again = Object.values(editorStore.getState().doc.objects).find((o) => (o as TextEdit).paragraphId === "g1") as TextEdit;
+    expect(again.box.layout.map((l) => l.source ?? null)).toEqual([0, null, null]);
+  });
 });
 
 describe("Replace All and markup", () => {

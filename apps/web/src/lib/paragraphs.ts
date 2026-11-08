@@ -1,5 +1,5 @@
 import type { FontRef, Rect, Run, TextBox } from "@edith/ops";
-import type { Paragraph } from "@/lib/api";
+import type { Paragraph, ParagraphLine } from "@/lib/api";
 import { textWidth, type FontMetrics } from "@/lib/fonts";
 import { normalizeRuns, runsText, sliceRuns } from "@/lib/runs";
 import { relayout } from "@/lib/textbox";
@@ -71,17 +71,22 @@ export function rawToBox(p: Paragraph, breaks: number[]): (offset: number) => nu
   };
 }
 
+/** What paragraphBox lays `p` out in: the box width, the lines followed by a hard break and the logical paragraphs. */
+export function paragraphFrame(p: Paragraph, metricsFor: MetricsFor): { width: number; breaks: number[]; paragraphs: Run[][] } {
+  // A left-aligned single line (a form label, a table cell) may grow into the room the API measured beside it.
+  const room = p.lines.length === 1 && p.align === "left" && p.maxWidth ? p.maxWidth + WIDTH_SLACK : 0;
+  const width = Math.max(paragraphWidth(p, metricsFor), room);
+  const breaks = hardBreaks(p, width, metricsFor);
+  return { width, breaks, paragraphs: paragraphRuns(p, breaks) };
+}
+
 /** The TextBox that redraws `p` in place: same lines, first baseline on the original one. `edit`
  *  changes the logical paragraphs first (Replace); `toBox` maps offsets of the paragraph's joined text. */
 export function paragraphBox(
   p: Paragraph, metricsFor: MetricsFor,
   edit?: (paragraphs: Run[][], toBox: (offset: number) => number) => Run[][],
 ): TextBox {
-  // A left-aligned single line (a form label, a table cell) may grow into the room the API measured beside it.
-  const room = p.lines.length === 1 && p.align === "left" && p.maxWidth ? p.maxWidth + WIDTH_SLACK : 0;
-  const width = Math.max(paragraphWidth(p, metricsFor), room);
-  const breaks = hardBreaks(p, width, metricsFor);
-  const paragraphs = paragraphRuns(p, breaks);
+  const { width, breaks, paragraphs } = paragraphFrame(p, metricsFor);
   const box = relayout({
     rect: { x: p.rect.x, y: 0, w: width, h: 0 }, align: p.align, lineHeight: p.lineHeight,
     paragraphs: edit ? edit(paragraphs, rawToBox(p, breaks)) : paragraphs, layout: [],
@@ -90,9 +95,23 @@ export function paragraphBox(
   return { ...box, rect: { ...box.rect, y: p.lines[0].baseline - first } };
 }
 
-/** White covers hiding an edited paragraph's original lines on screen (the bake redacts them). */
-export function maskRects(p: Paragraph): Rect[] {
-  return p.lines.map((l) => ({
+/** The original lines a text.edit box keeps (its layout lines' `source`): the bake neither redacts nor redraws them. */
+export function keptLines(box: TextBox | undefined): Set<number> {
+  const out = new Set<number>();
+  for (const line of box?.layout ?? []) if (line.source !== undefined && line.source !== null) out.add(line.source);
+  return out;
+}
+
+/** The original lines of `p` that its text.edit `box` replaces (all of them without a box). */
+export function replacedLines(p: Paragraph, box?: TextBox): ParagraphLine[] {
+  const kept = keptLines(box);
+  return p.lines.filter((_, i) => !kept.has(i));
+}
+
+/** White covers hiding an edited paragraph's original lines on screen (the bake redacts them), except the lines its
+ *  text.edit `box` keeps. */
+export function maskRects(p: Paragraph, box?: TextBox): Rect[] {
+  return replacedLines(p, box).map((l) => ({
     x: l.rect.x - 0.5, y: l.baseline - MASK_ASCENT * l.size, w: l.rect.w + 1, h: (MASK_ASCENT + MASK_DESCENT) * l.size,
   }));
 }
