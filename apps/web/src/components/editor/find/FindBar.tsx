@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowDown, ArrowUp, CaseSensitive, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import type { BundledFont } from "@edith/ops";
@@ -12,6 +13,8 @@ import { editorStore, useEditor } from "@/store/editor";
 import { textStore, useText } from "@/store/text";
 import { commitOpenSession, whenTextCommitted } from "../text/textEdit";
 import { isFindKey } from "../useShortcuts";
+import { ICON } from "../../ui/icon";
+import { BTN_QUIET, BTN_ICON, FIELD, POPOVER, toggle } from "../../ui/styles";
 import { findStore } from "./findStore";
 import { applyReplacements } from "./replace";
 
@@ -91,39 +94,38 @@ export function FindBar() {
     }
   };
   const close = () => f.set({ open: false, matches: [] });
-  const btn = "h-8 rounded-md px-2 text-sm hover:bg-bg disabled:opacity-40";
 
   return (
     <div role="search" aria-label={t.find.title} data-testid="find-bar"
-      className="fixed right-4 top-28 z-30 flex w-[26rem] flex-col gap-2 rounded-xl border border-line bg-surface p-2 shadow-lg"
+      className={`fixed right-4 top-[3.75rem] z-30 flex w-[27rem] max-w-[calc(100vw-2rem)] flex-col gap-1.5 p-1.5 ${POPOVER}`}
       onKeyDown={(e) => {
         if (e.key === "Escape") { e.preventDefault(); close(); }
         if (isFindKey(e)) return; // the window shortcut re-focuses the query
         e.stopPropagation();
       }}>
       <div className="flex items-center gap-1">
-        <button type="button" aria-label={t.find.toggleReplace} aria-expanded={f.showReplace} className={btn}
-          onClick={() => f.set({ showReplace: !f.showReplace })}>{f.showReplace ? "▾" : "▸"}</button>
+        <button type="button" aria-label={t.find.toggleReplace} aria-expanded={f.showReplace} className={BTN_ICON}
+          onClick={() => f.set({ showReplace: !f.showReplace })}>{f.showReplace ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}</button>
         <input ref={input} aria-label={t.find.query} value={f.query} placeholder={t.find.query}
           onChange={(e) => f.set({ query: e.target.value, current: 0 })}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); go(e.shiftKey ? -1 : 1); } }}
-          className="min-w-0 flex-1 rounded border border-line px-2 py-1 text-sm" />
-        <span className="w-20 text-center text-xs tabular-nums text-muted" aria-live="polite">
+          className={`${FIELD} min-w-0 flex-1`} />
+        <span className="w-16 shrink-0 text-center text-xs tabular-nums text-muted" aria-live="polite">
           {status === "loading" ? t.find.loading : t.find.count(n ? f.current + 1 : 0, n)}
         </span>
         <button type="button" aria-label={t.find.caseSensitive} aria-pressed={f.caseSensitive} title={t.find.caseSensitive}
-          className={`${btn} ${f.caseSensitive ? "bg-accent/10 text-accent" : ""}`} onClick={() => f.set({ caseSensitive: !f.caseSensitive })}>Aa</button>
-        <button type="button" aria-label={t.find.prev} disabled={!n} className={btn} onClick={() => go(-1)}>↑</button>
-        <button type="button" aria-label={t.find.next} disabled={!n} className={btn} onClick={() => go(1)}>↓</button>
-        <button type="button" aria-label={t.editor.close} className={btn} onClick={close}>✕</button>
+          className={toggle(f.caseSensitive)} onClick={() => f.set({ caseSensitive: !f.caseSensitive })}><CaseSensitive {...ICON} /></button>
+        <button type="button" aria-label={t.find.prev} disabled={!n} className={BTN_ICON} onClick={() => go(-1)}><ArrowUp {...ICON} /></button>
+        <button type="button" aria-label={t.find.next} disabled={!n} className={BTN_ICON} onClick={() => go(1)}><ArrowDown {...ICON} /></button>
+        <button type="button" aria-label={t.editor.close} className={BTN_ICON} onClick={close}><X {...ICON} /></button>
       </div>
       {f.showReplace && (
-        <div className="flex items-center gap-1 pl-9">
+        <div className="flex items-center gap-1 pl-9 pr-1">
           <input aria-label={t.find.replacement} value={f.replacement} placeholder={t.find.replacement}
             onChange={(e) => f.set({ replacement: e.target.value })}
-            className="min-w-0 flex-1 rounded border border-line px-2 py-1 text-sm" />
-          <button type="button" disabled={!n || busy} className={btn} onClick={() => void replace(false)}>{t.find.replace}</button>
-          <button type="button" disabled={!n || busy} className={btn} onClick={() => void replace(true)}>{t.find.replaceAll}</button>
+            className={`${FIELD} min-w-0 flex-1`} />
+          <button type="button" disabled={!n || busy} className={BTN_QUIET} onClick={() => void replace(false)}>{t.find.replace}</button>
+          <button type="button" disabled={!n || busy} className={BTN_QUIET} onClick={() => void replace(true)}>{t.find.replaceAll}</button>
         </div>
       )}
     </div>

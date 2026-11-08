@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SignatureAdd } from "@edith/ops";
 import { ApiError, uploadAsset } from "@/lib/api";
@@ -10,6 +11,8 @@ import {
 } from "@/lib/signatures";
 import { errorMessage, t } from "@/lib/strings";
 import { editorStore } from "@/store/editor";
+import { ICON } from "../../ui/icon";
+import { BACKDROP, BTN_ICON, BTN_PRIMARY, BTN_QUIET, DIALOG, DIALOG_TITLE, FIELD, SEGMENTED, segment, swatch } from "../../ui/styles";
 import { currentPage, placeObject } from "../placement";
 import { cropDrawing, loadUpload, renderTyped, scriptFont, type SignatureImage } from "./signatureCanvas";
 
@@ -29,10 +32,10 @@ async function placeSignature(img: SignatureImage): Promise<void> {
 
 function Colors({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
-    <div role="radiogroup" aria-label={t.editor.color} className="flex gap-1">
+    <div role="radiogroup" aria-label={t.editor.color} className="flex gap-2">
       {SIGNATURE_COLORS.map((c) => (
         <button key={c} type="button" role="radio" aria-checked={value === c} aria-label={t.signature.colors[c]} onClick={() => onChange(c)}
-          className={`h-6 w-6 rounded-full ring-1 ring-line ${value === c ? "outline outline-2 outline-accent" : ""}`} style={{ background: c }} />
+          className={swatch(value === c)} style={{ background: c }} />
       ))}
     </div>
   );
@@ -46,7 +49,7 @@ function DrawPad({ color, canvasRef }: { color: string; canvasRef: React.RefObje
   };
   return (
     <canvas ref={canvasRef} width={PAD_W} height={PAD_H} data-testid="signature-pad"
-      className="w-full touch-none rounded-md bg-white ring-1 ring-line" style={{ aspectRatio: `${PAD_W} / ${PAD_H}` }}
+      className="w-full touch-none rounded-lg bg-paper" style={{ aspectRatio: `${PAD_W} / ${PAD_H}` }}
       onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); last.current = at(e); }}
       onPointerMove={(e) => {
         if (!last.current) return;
@@ -99,14 +102,14 @@ export function SignatureModal({ onClose, onNotice }: { onClose: () => void; onN
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/20 pt-20" onPointerDown={onClose}>
+    <div className={`${BACKDROP} items-start pt-20`} onPointerDown={onClose}>
       <div ref={box} tabIndex={-1} role="dialog" aria-label={t.signature.title} data-testid="signature-modal" onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Escape") onClose(); }}
-        className="flex w-[34rem] flex-col outline-none gap-3 rounded-xl bg-surface p-4 text-sm shadow-xl ring-1 ring-line">
+        className={`${DIALOG} w-[34rem] max-w-[calc(100vw-2rem)] gap-4 p-4`}>
         <div className="flex items-center gap-2">
-          <span className="font-medium">{t.signature.title}</span>
+          <span className={DIALOG_TITLE}>{t.signature.title}</span>
           <div className="flex-1" />
-          <button aria-label={t.editor.close} onClick={onClose} className="rounded-md px-2 py-1 hover:bg-bg">✕</button>
+          <button aria-label={t.editor.close} onClick={onClose} className={BTN_ICON}><X {...ICON} /></button>
         </div>
         {saved.length > 0 && (
           <section aria-label={t.signature.saved} className="flex flex-col gap-1">
@@ -115,21 +118,21 @@ export function SignatureModal({ onClose, onNotice }: { onClose: () => void; onN
               {saved.map((sig) => (
                 <div key={sig.id} className="relative">
                   <button aria-label={t.signature.use} disabled={busy} onClick={() => run(async () => sig, false)}
-                    className="h-14 w-36 rounded-md bg-white p-1 ring-1 ring-line hover:ring-accent">
+                    className="h-14 w-36 rounded-md bg-paper p-1 ring-2 ring-transparent transition-shadow hover:ring-accent">
                     {/* eslint-disable-next-line @next/next/no-img-element -- a data: URL from localStorage */}
                     <img src={sig.dataUrl} alt="" className="h-full w-full object-contain" />
                   </button>
                   <button aria-label={t.signature.remove} onClick={() => setSaved(removeSignature(sig.id))}
-                    className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full bg-surface text-xs ring-1 ring-line hover:text-danger">✕</button>
+                    className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-raised text-muted shadow-pop hover:text-danger-text"><X size={12} strokeWidth={2} aria-hidden /></button>
                 </div>
               ))}
             </div>
           </section>
         )}
-        <div role="tablist" className="flex self-start rounded-md ring-1 ring-line">
+        <div role="tablist" className={`self-start ${SEGMENTED}`}>
           {(["draw", "type", "upload"] as const).map((k) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-              className={`px-3 py-1 ${tab === k ? "bg-accent/10 text-accent" : "hover:bg-bg"}`}>{t.signature[k]}</button>
+              className={segment(tab === k)}>{t.signature[k]}</button>
           ))}
         </div>
         {tab === "draw" && (
@@ -138,18 +141,18 @@ export function SignatureModal({ onClose, onNotice }: { onClose: () => void; onN
             <div className="flex items-center gap-2">
               <Colors value={color} onChange={setColor} />
               <div className="flex-1" />
-              <button type="button" onClick={() => pad.current?.getContext("2d")!.clearRect(0, 0, PAD_W, PAD_H)} className="rounded-md px-2 py-1 hover:bg-bg">{t.signature.clear}</button>
+              <button type="button" onClick={() => pad.current?.getContext("2d")!.clearRect(0, 0, PAD_W, PAD_H)} className={BTN_QUIET}>{t.signature.clear}</button>
             </div>
           </div>
         )}
         {tab === "type" && (
           <div className="flex flex-col gap-2">
             <input aria-label={t.signature.name} placeholder={t.signature.name} value={name} autoFocus onChange={(e) => setName(e.target.value)}
-              className="rounded border border-line px-2 py-1.5" />
+              className={FIELD} />
             <div role="radiogroup" aria-label={t.signature.font} className="grid grid-cols-2 gap-2">
               {SIGNATURE_FONTS.map((f) => (
                 <button key={f} type="button" role="radio" aria-checked={family === f} aria-label={f} onClick={() => setFamily(f)}
-                  className={`truncate rounded-md px-2 py-2 text-2xl ring-1 ${family === f ? "ring-accent" : "ring-line"}`}
+                  className={`truncate rounded-md bg-paper px-2 py-2 text-2xl ring-2 ${family === f ? "ring-accent" : "ring-transparent hover:ring-line-strong"}`}
                   style={{ fontFamily: `"${cssFamily(scriptFont(f))}"`, color }}>
                   {name.trim() || f}
                 </button>
@@ -160,12 +163,13 @@ export function SignatureModal({ onClose, onNotice }: { onClose: () => void; onN
         )}
         {tab === "upload" && (
           <input type="file" accept="image/png,image/jpeg" aria-label={t.signature.upload} data-testid="signature-file"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="text-sm text-muted file:mr-3 file:h-8 file:cursor-pointer file:rounded-md file:border-0 file:bg-hover file:px-3 file:text-ink file:ring-1 file:ring-inset file:ring-line-strong" />
         )}
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5"><input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />{t.signature.save}</label>
+          <label className="flex items-center gap-1.5 text-muted"><input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />{t.signature.save}</label>
           <div className="flex-1" />
-          <button onClick={() => run(make, save)} disabled={busy} className="rounded-md bg-accent px-3 py-1.5 text-accent-ink disabled:opacity-50">{t.signature.add}</button>
+          <button onClick={() => run(make, save)} disabled={busy} className={BTN_PRIMARY}>{t.signature.add}</button>
         </div>
       </div>
     </div>

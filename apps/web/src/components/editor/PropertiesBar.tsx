@@ -11,6 +11,7 @@ import { editorStore, sourcePage, useEditor, type MarkupTool, type ToolStyle } f
 import { srcKey } from "@/lib/sources";
 import { STAMP_COLORS } from "@/lib/stamps";
 import { ICON } from "../ui/icon";
+import { BTN_DANGER, FIELD, PROP_LABEL, swatch } from "../ui/styles";
 import { ColorField } from "./ColorField";
 import { textEditStore } from "./text/textEdit";
 
@@ -120,18 +121,18 @@ export function PropertiesBar() {
       {(kind === "shape" || kind === "line" || kind === "ink") && (
         <>
           <ColorField label={t.editor.color} value={stroke} onChange={(v) => set({ stroke: v })} />
-          <label className="flex items-center gap-1.5 text-xs text-muted">
+          <label className={PROP_LABEL}>
             {t.editor.strokeWidth}
             <input type="range" min={kind === "shape" ? 0 : 1} max={20} step={0.5} value={width} aria-label={t.editor.strokeWidth}
-              onChange={(e) => set({ width: Number(e.target.value) })} className="w-24 accent-[var(--accent)]" />
-            <span className="w-8 tabular-nums text-ink">{width}</span>
+              onChange={(e) => set({ width: Number(e.target.value) })} className="w-24" />
+            <span className="w-7 tabular-nums text-ink">{width}</span>
           </label>
         </>
       )}
       {(kind === "shape" || kind === "line") && (
-        <label className="flex items-center gap-1.5 text-xs text-muted">
+        <label className={PROP_LABEL}>
           {t.editor.dash}
-          <select value={dash} aria-label={t.editor.dash} onChange={(e) => setDash(e.target.value as Dash)} className="rounded border border-line px-1 py-0.5 text-ink">
+          <select value={dash} aria-label={t.editor.dash} onChange={(e) => setDash(e.target.value as Dash)} className={`${FIELD} h-7 pr-1`}>
             <option value="solid">{t.editor.dashSolid}</option>
             <option value="dashed">{t.editor.dashDashed}</option>
             <option value="dotted">{t.editor.dashDotted}</option>
@@ -140,7 +141,7 @@ export function PropertiesBar() {
       )}
       {kind === "shape" && (
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1 text-xs text-muted">
+          <label className={PROP_LABEL}>
             <input type="checkbox" checked={fill === null} onChange={(e) => set({ fill: e.target.checked ? null : "#ffffff" })} />
             {t.editor.noFill}
           </label>
@@ -148,9 +149,9 @@ export function PropertiesBar() {
         </div>
       )}
       {kind === "redact" && o && (
-        <label className="flex items-center gap-1.5 text-xs text-muted">
+        <label className={PROP_LABEL}>
           {t.editor.fill}
-          <select value={o.fill as string} onChange={(e) => set({ redactFill: e.target.value as "black" | "white" })} className="rounded border border-line px-1 py-0.5 text-ink">
+          <select value={o.fill as string} onChange={(e) => set({ redactFill: e.target.value as "black" | "white" })} className={`${FIELD} h-7 pr-1`}>
             <option value="black">{t.editor.black}</option>
             <option value="white">{t.editor.white}</option>
           </select>
@@ -160,32 +161,32 @@ export function PropertiesBar() {
         <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.markup[tool as MarkupTool] ?? style.markup.highlight}
           onChange={(v) => setColor(v)} />
       )}
-      {kind === "markup" && noText && <span className="text-xs text-muted">{t.annot.noText}</span>}
+      {kind === "markup" && noText && <span className="text-xs text-warn">{t.annot.noText}</span>}
       {kind === "symbol" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.symbolColor} onChange={setColor} />}
       {kind === "stamp" && o && (
-        <div role="radiogroup" aria-label={t.editor.color} className="flex items-center gap-1">
+        <div role="radiogroup" aria-label={t.editor.color} className="flex items-center gap-1.5">
           {STAMP_COLORS.map((c) => (
             <button key={c} role="radio" aria-checked={o.color === c} aria-label={`${t.editor.color} ${c}`} onClick={() => setColor(c)}
-              className={`h-5 w-5 rounded-full ring-1 ring-line ${o.color === c ? "outline outline-2 outline-accent" : ""}`} style={{ background: c }} />
+              className={swatch(o.color === c)} style={{ background: c }} />
           ))}
         </div>
       )}
       {kind === "text" && textPropsSlot.render?.()}
       {showOpacity && (
-        <label className="flex items-center gap-1.5 text-xs text-muted">
+        <label className={PROP_LABEL}>
           {t.editor.opacity}
           <input type="range" min={0.1} max={1} step={0.05} value={opacity} aria-label={t.editor.opacity}
-            onChange={(e) => setOpacity(Number(e.target.value))} className="w-20 accent-[var(--accent)]" />
-          <span className="w-9 tabular-nums text-ink">{Math.round(opacity * 100)}%</span>
+            onChange={(e) => setOpacity(Number(e.target.value))} className="w-20" />
+          <span className="w-8 tabular-nums text-ink">{Math.round(opacity * 100)}%</span>
         </label>
       )}
-      {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
+      {kind === "text" && scanned && <span className="text-xs text-warn">{t.text.scanned}</span>}
       {selection && (
         // Deleting a text.edit op brings the original paragraph back.
         <>
           <span aria-hidden className="h-5 w-px shrink-0 bg-line" />
           <button onClick={() => s.deleteObject(selection)} aria-label={op?.type === "text.edit" ? t.text.revert : t.editor.delete}
-            className="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-danger-text hover:bg-danger/15">
+            className={BTN_DANGER}>
             {op?.type === "text.edit" ? <Undo2 {...ICON} /> : <Trash2 {...ICON} />}
             {op?.type === "text.edit" ? t.text.revert : t.editor.delete}
           </button>

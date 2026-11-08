@@ -17,6 +17,7 @@ import { useEditor as useEditorStore } from "@/store/editor";
 import { isFindKey } from "../useShortcuts";
 import { createRunMark } from "./runMark";
 import { commitOpenSession, preloadSessionFonts, session, textEditStore, type Editing } from "./textEdit";
+import { CANVAS } from "@/lib/theme";
 
 export function TextEditor({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const editing = useStore(textEditStore, (s) => s.editing);
@@ -126,7 +127,7 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
         lineHeight: `${box.lineHeight * scale}px`, textAlign: box.align ?? "left",
         fontKerning: "none", fontVariantLigatures: "none", letterSpacing: 0,
         whiteSpace: "pre-wrap", overflowWrap: "break-word",
-        outline: "1px dashed #0f766e", background: editing.kind === "text.edit" ? "#ffffff" : "rgba(255,255,255,0.85)",
+        outline: `1px dashed ${CANVAS.accent}`, background: editing.kind === "text.edit" ? "#ffffff" : "rgba(255,255,255,0.85)",
       }}
     >
       <EditorContent editor={editor} />

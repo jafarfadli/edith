@@ -1,11 +1,22 @@
 "use client";
 
 import type { ContentOp } from "@edith/ops";
+import {
+  ArrowUpRight, Check, Circle, Cloud, Eraser, EyeOff, Highlighter, Image, Link2, MessageSquare, Pencil, Pentagon, Signature, Slash,
+  Spline, Square, Stamp, Strikethrough, Type, Underline, X, type LucideIcon,
+} from "lucide-react";
 import { useRef } from "react";
-import { listedObjects, objectLabel } from "@/lib/objectLabels";
+import { listedObjects, objectLabel, type ObjectIcon } from "@/lib/objectLabels";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
+import { ICON_SM } from "../ui/icon";
 import { scrollToPage } from "./ZoomPill";
+
+const ICONS: Record<ObjectIcon, LucideIcon> = {
+  text: Type, textEdit: Type, image: Image, signature: Signature, rect: Square, ellipse: Circle, line: Slash, arrow: ArrowUpRight,
+  polygon: Pentagon, polyline: Spline, cloud: Cloud, ink: Pencil, whiteout: Eraser, redact: EyeOff, stamp: Stamp, check: Check, cross: X,
+  link: Link2, note: MessageSquare, highlight: Highlighter, underline: Underline, strike: Strikethrough,
+};
 
 /** Every object added to the document, grouped by page in page order: a click goes to it and selects it. */
 export function AnnotationsPanel() {
@@ -16,7 +27,7 @@ export function AnnotationsPanel() {
   const groups = listedObjects({ pages, order, objects });
   const root = useRef<HTMLDivElement>(null);
 
-  if (!groups.length) return <div ref={root} tabIndex={-1} className="outline-none"><p className="px-2 py-4 text-xs text-muted">{t.panel.empty}</p></div>;
+  if (!groups.length) return <div ref={root} tabIndex={-1} className="outline-none"><p className="px-2 py-4 text-xs leading-relaxed text-faint">{t.panel.empty}</p></div>;
 
   function remove(op: ContentOp) {
     const items = Array.from(root.current?.querySelectorAll<HTMLElement>("[data-testid=annotation-item]") ?? []);
@@ -37,22 +48,23 @@ export function AnnotationsPanel() {
   }
 
   return (
-    <div ref={root} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-testid="annotations-panel">
+    <div ref={root} tabIndex={-1} className="flex flex-col gap-4 outline-none" data-testid="annotations-panel">
       {groups.map((g) => (
         <section key={g.pageKey} aria-label={t.pages.pageN(g.n)}>
-          <h3 className="px-1 pb-1 text-xs font-medium text-muted">{t.pages.pageN(g.n)}</h3>
+          <h3 className="px-2 pb-1 text-2xs font-medium uppercase tracking-wider text-faint">{t.pages.pageN(g.n)}</h3>
           <ul className="flex flex-col gap-0.5">
             {g.ops.map((op) => {
               const { icon, label, detail } = objectLabel(op);
+              const Icon = ICONS[icon];
               return (
-                <li key={op.id} className={`group flex items-center rounded-md ${selection === op.id ? "bg-accent/10" : "hover:bg-bg"}`}>
-                  <button onClick={() => go(op)} data-testid="annotation-item" data-op-id={op.id} className="flex min-w-0 flex-1 items-center gap-2 px-1.5 py-1 text-left text-xs">
-                    <span aria-hidden className="w-4 shrink-0 text-center">{icon}</span>
+                <li key={op.id} className={`group flex items-center rounded-md ${selection === op.id ? "bg-accent/20 text-accent-text" : "text-ink hover:bg-hover"}`}>
+                  <button onClick={() => go(op)} data-testid="annotation-item" data-op-id={op.id} className="flex h-8 min-w-0 flex-1 items-center gap-2 px-2 text-left text-xs">
+                    <Icon {...ICON_SM} className="shrink-0 text-muted" />
                     <span className="shrink-0">{label}</span>
-                    {detail && <span className="truncate text-muted">{detail}</span>}
+                    {detail && <span className="truncate text-faint">{detail}</span>}
                   </button>
                   <button aria-label={t.panel.deleteItem(label)} title={t.editor.delete} onClick={() => remove(op)}
-                    className="px-1.5 text-xs text-muted opacity-0 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100">✕</button>
+                    className="grid h-8 w-7 place-items-center text-faint opacity-0 hover:text-danger-text focus-visible:opacity-100 group-hover:opacity-100"><X {...ICON_SM} /></button>
                 </li>
               );
             })}

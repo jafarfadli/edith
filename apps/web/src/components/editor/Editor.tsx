@@ -157,7 +157,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     <div className="flex h-dvh flex-col bg-panel">
       <Header onNotice={setNotice}><Toolbar onNotice={setNotice} /></Header>
       <div className="flex min-h-0 flex-1">
-        {pdf ? <Sidebar /> : <aside className="w-48 shrink-0 border-r border-line bg-panel" />}
+        {pdf ? <Sidebar /> : <aside className="w-52 shrink-0 border-r border-line bg-panel" />}
         <div className="relative min-w-0 flex-1">
           <PropertiesBar />
           <main

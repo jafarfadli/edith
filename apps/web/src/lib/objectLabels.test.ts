@@ -9,11 +9,11 @@ const box = (text: string) => ({ rect: { x: 0, y: 0, w: 10, h: 10 }, lineHeight:
 
 describe("objectLabel", () => {
   it("names each kind, with a snippet where there is text", () => {
-    expect(objectLabel(op({ type: "text.add", box: box("Halo\ndunia") }))).toEqual({ icon: "T", label: "Teks", detail: "Halo dunia" });
-    expect(objectLabel(op({ type: "shape.add", kind: "cloud", points: [], stroke: "#000000", width: 1 }))).toEqual({ icon: "☁", label: "Awan" });
+    expect(objectLabel(op({ type: "text.add", box: box("Halo\ndunia") }))).toEqual({ icon: "text", label: "Teks", detail: "Halo dunia" });
+    expect(objectLabel(op({ type: "shape.add", kind: "cloud", points: [], stroke: "#000000", width: 1 }))).toEqual({ icon: "cloud", label: "Awan" });
     expect(objectLabel(op({ type: "stamp.add", preset: "disetujui", rect: {}, color: "#000000" })).detail).toBe("DISETUJUI");
     expect(objectLabel(op({ type: "stamp.add", custom: { text: "OK", date: "01/01/2026" }, rect: {}, color: "#000000" })).detail).toBe("OK 01/01/2026");
-    expect(objectLabel(op({ type: "annot.add", kind: "note", point: [0, 0], color: "#000000", content: "" }))).toEqual({ icon: "🗒", label: "Catatan", detail: undefined });
+    expect(objectLabel(op({ type: "annot.add", kind: "note", point: [0, 0], color: "#000000", content: "" }))).toEqual({ icon: "note", label: "Catatan", detail: undefined });
     expect(objectLabel(op({ type: "annot.add", kind: "strike", quads: [], color: "#000000" })).label).toBe("Coret");
     expect(objectLabel(op({ type: "link.add", rect: {}, target: { pageKey: "o1" } })).detail).toBeUndefined();
   });
