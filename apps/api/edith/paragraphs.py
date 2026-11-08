@@ -22,6 +22,7 @@ UNDERLINE_EM = 0.15  # a rule this close below a baseline underlines it rather t
 CAP_EM = 0.6         # a rule must lie this far above the next line's baseline to separate it
 BULLETS = frozenset("•‣▪■□○●◦※►▶➢✓√·∙")
 HANG_EM = 0.3       # a list item's next line must start this far right of its bullet to continue it
+ROOM_PAD = 2.0       # pt left free before whatever ends a single line's room (a rule, other text)
 UNIFORM = 0.9        # bold / colour changes only split lines that are (nearly) entirely in one style
 TAB_GAP = "   "      # a line with this many spaces in a row is laid out with spaces (form rows, columns), not prose
 
@@ -322,7 +323,8 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
     """Paragraphs of `page` in content order, ids `g0`, `g1`, … (stable for a given file and extraction
     version). Coordinates are unrotated-CropBox points. `resolve` maps a span to its run FontRef (None →
     runs get font None); a paragraph with a span `locked` accepts is not editable. Text is never merged
-    across a drawn rule (table borders, separators)."""
+    across a drawn rule (table borders, separators). A single-line paragraph also gets `maxWidth`: how wide
+    it may grow when edited (see _room)."""
     rules = page_rules(page)
     blocks: list[list[_Line]] = []
     for block in page.get_text("rawdict", flags=FLAGS)["blocks"]:
@@ -340,8 +342,24 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
             else:
                 blocks.append([line])
             starts_block = False
+    every = [line for lines in blocks for line in lines]
+    right_margin = page.rect.width - min((line.ink_x0 for line in every), default=0.0)  # the left margin, mirrored
     paragraphs: list[dict] = []
     for lines in blocks:
         for group in _split(lines, rules):
-            paragraphs.append(_paragraph(f"g{len(paragraphs)}", group, resolve, locked))
+            paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked)
+            if len(group) == 1 and group[0].horizontal:
+                paragraph["maxWidth"] = _room(group[0], every, rules, right_margin)
+            paragraphs.append(paragraph)
     return paragraphs
+
+
+def _room(line: _Line, every: list[_Line], rules: Rules, right_margin: float) -> float:
+    """Width a single-line paragraph may grow to when edited (from its left edge): up to the first vertical rule
+    or other text to its right on its height, or the right margin, less ROOM_PAD; at least its own width."""
+    mid = (line.y0 + line.y1) / 2
+    ends = [right_margin]
+    ends += [s.at for s in rules.vertical if s.at > line.ink_x1 - 0.5 and s.lo <= mid <= s.hi]
+    ends += [o.ink_x0 for o in every if o is not line and o.ink_x0 > line.ink_x1 - 0.5
+             and min(o.y1, line.y1) - max(o.y0, line.y0) > 0.5 * min(o.y1 - o.y0, line.y1 - line.y0)]
+    return _num(max(line.x1 - line.x0, min(ends) - ROOM_PAD - line.x0))

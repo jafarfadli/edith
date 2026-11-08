@@ -410,3 +410,30 @@ def break_font_table(data: bytes, name: str, damage: str) -> bytes:
             buf[offset:offset + length] = fn(bytes(buf[offset:offset + length]))
     doc.update_stream(stream, bytes(buf))
     return doc.tobytes(garbage=3, deflate=True)
+
+
+KO_LABEL = "1.1 성명 Full name in English"
+
+
+def make_korean_form_pdf() -> bytes:
+    """A stand-in for the owner's Korean visa form (apps/web/e2e/fixtures/form-ko.pdf): Korean and Latin text in a
+    cmap-less CID subset named "Dotum" (as Hancom exports it), an instruction list, and a bordered table whose two
+    labels share one baseline 12 pt apart across a cell border, a field label under a rule and two checkbox rows."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    droid = pymupdf.Font("korea")
+    page.insert_font(fontname="DO", fontbuffer=_renamed(droid.buffer, "Dotum"))
+    for i, text in enumerate(["<신청서 작성방법>", "※ 신청서는 한글 또는 영문으로 작성합니다.", "※ 해당 칸에 표시를 하시기 바랍니다."]):
+        page.insert_text((56, 80 + 13 * i), text, fontname="DO", fontsize=10)
+    page.draw_rect(pymupdf.Rect(50, 150, 545, 240), color=(0, 0, 0), width=0.5)
+    page.draw_line((300, 150), (300, 240), color=(0, 0, 0), width=0.5)
+    page.draw_line((50, 175), (545, 175), color=(0, 0, 0), width=0.5)
+    page.insert_text((294 - droid.text_length(KO_LABEL, 10), 167), KO_LABEL, fontname="DO", fontsize=10)
+    page.insert_text((306, 167), "1.2 성별 Sex", fontname="DO", fontsize=10)
+    page.insert_text((56, 195), "성 Family Name", fontname="DO", fontsize=10)
+    page.insert_text((306, 195), "남성 Male      [   ]", fontname="DO", fontsize=10)
+    page.insert_text((306, 210), "여성 Female    [   ]", fontname="DO", fontsize=10)
+    doc.subset_fonts()
+    for xref, *_rest in page.get_fonts(full=True):
+        doc.xref_set_key(xref, "BaseFont", "/EDITHB+Dotum")
+    return doc.tobytes(garbage=3, deflate=True)

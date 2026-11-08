@@ -159,3 +159,11 @@ def test_cjk_fonts_substitute_with_the_pack(tmp_path):
     with TestClient(create_app(settings)) as c:
         f = by_name(text_of(c, make_cid_subset_pdf()))
     assert (f["Dotum"]["substitute"]["family"], f["Batang"]["substitute"]["family"]) == ("Noto Sans KR", "Noto Serif KR")
+
+
+def test_korean_form_fixture_reuses_its_dotum_subset(client):
+    from tests.pdfs import make_korean_form_pdf
+    body = text_of(client, make_korean_form_pdf())
+    (font,) = body["fonts"]
+    assert (font["name"], font["reusable"]) == ("Dotum", True)
+    assert {p["runs"][0]["font"]["kind"] for p in body["pages"][0]["paragraphs"]} == {"original"}

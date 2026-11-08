@@ -229,3 +229,21 @@ def test_uniform_bold_heading_still_splits_from_body():
         pg.insert_text((72, 126), "ke baris berikutnya sampai selesai.", fontname="AR", fontsize=11)
     assert [text(p) for p in paragraphs(page_with(draw))] == [
         "Judul Bagian", "Isi bagian dimulai di sini dan berlanjut ke baris berikutnya sampai selesai."]
+
+
+def test_korean_form_fixture_segments_cell_by_cell():
+    from tests.pdfs import KO_LABEL, make_korean_form_pdf
+    assert [text(p) for p in paragraphs(make_korean_form_pdf())] == [
+        "<신청서 작성방법>", "※ 신청서는 한글 또는 영문으로 작성합니다.", "※ 해당 칸에 표시를 하시기 바랍니다.",
+        KO_LABEL, "1.2 성별 Sex", "성 Family Name", "남성 Male      [   ]", "여성 Female    [   ]"]
+
+
+def test_single_lines_get_room_up_to_the_next_rule_or_text():
+    from tests.pdfs import make_korean_form_pdf
+    ps = {text(p): p for p in paragraphs(make_korean_form_pdf())}
+    assert ps["1.1 성명 Full name in English"]["maxWidth"] == pytest.approx(300 - 2 - ps["1.1 성명 Full name in English"]["rect"]["x"], abs=0.01)  # cell border
+    left = min(p["rect"]["x"] for p in ps.values())  # 56
+    assert ps["1.2 성별 Sex"]["maxWidth"] == pytest.approx(595 - left - 2 - 306, abs=0.01)  # margin before the table side (545)
+    assert ps["<신청서 작성방법>"]["maxWidth"] == pytest.approx(595 - left - 2 - left, abs=0.01)  # mirrored left margin
+    wrapped = paragraphs(make_paragraphs_pdf())[0]
+    assert len(wrapped["lines"]) == 3 and "maxWidth" not in wrapped  # wrapped text keeps its measure
