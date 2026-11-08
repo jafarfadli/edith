@@ -9,6 +9,7 @@ from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
 from edith.bake.scrub import scrub_page, under_redaction
 from edith.bake.source import SourcePages
 from edith.bake.text import links_under_redactions, restore_links
+from edith.bake.transform import draw_transformed
 from edith.bake.util import to_rect
 from edith.errors import BakeFailed, EdithError, InvalidOp
 from edith.forms import FieldValueError, drop_xfa, fill_forms
@@ -33,7 +34,7 @@ def _default_layout(page_count: int, doc_id: str) -> PagesLayout:
 
 def _run(handler, page, op, ctx) -> None:
     try:
-        handler(page, op, ctx)
+        draw_transformed(page, op, lambda: handler(page, op, ctx))
     except EdithError as exc:
         raise BakeFailed(exc.message, op_id=op.id) from exc
     except Exception as exc:  # noqa: BLE001
