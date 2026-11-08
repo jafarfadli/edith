@@ -91,8 +91,6 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
         <span aria-hidden>✍</span><span className="hidden lg:inline">{t.annot.signature}</span>
       </button>
       {signatureOpen && <SignatureModal onClose={() => setSignatureOpen(false)} onNotice={onNotice} />}
-      <ToolButton tool="note" label={t.annot.note} icon="🗒" active={tool} />
-      <ToolButton tool="link" label={t.annot.link} icon="🔗" active={tool} />
       <div className="flex-1" />
       <button aria-label={t.pages.manage} title={t.pages.manage} onClick={() => setPagesOpen(true)} className="flex h-9 items-center gap-1 rounded-md px-2 text-sm hover:bg-bg">
         <span aria-hidden>▦</span><span className="hidden lg:inline">{t.pages.manage}</span>

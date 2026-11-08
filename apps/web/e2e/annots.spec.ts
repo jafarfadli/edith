@@ -18,7 +18,7 @@ async function download(page: Page, name: string): Promise<string> {
   return file;
 }
 
-test("highlight, note, signature, stamp, link and form, then download", async ({ page }) => {
+test("highlight, signature, stamp and form, then download", async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear()); // no autosave draft or signature library from an earlier run of this fixture
   await page.getByTestId("file-input").setInputFiles(ANNOTS_PDF);
@@ -37,10 +37,9 @@ test("highlight, note, signature, stamp, link and form, then download", async ({
   await page.mouse.move(box.x + x1 - 1, box.y + 76, { steps: 3 });
   await page.mouse.up();
 
-  // Sticky note with text.
-  await page.getByRole("button", { name: "Catatan", exact: true }).click();
-  await page.mouse.click(box.x + 400, box.y + 200);
-  await page.getByRole("textbox", { name: "Isi catatan" }).fill("Periksa pasal ini");
+  // Sticky notes and links have no tool since M5 (hidden, the bake still supports them).
+  await expect(page.getByRole("button", { name: "Catatan", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Link", exact: true })).toHaveCount(0);
 
   // Typed signature (saved to the library), then the same signature again from the library.
   await page.getByRole("button", { name: "Tanda Tangan", exact: true }).click();
@@ -65,24 +64,11 @@ test("highlight, note, signature, stamp, link and form, then download", async ({
   await picker.getByRole("button", { name: "APPROVED", exact: true }).click();
   await expect(picker).toHaveCount(0);
 
-  // A link to page 2.
-  await page.getByRole("button", { name: "Link", exact: true }).click();
-  await page.mouse.move(box.x + 72, box.y + 300);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 140, box.y + 310, { steps: 3 });
-  await page.mouse.move(box.x + 200, box.y + 320, { steps: 3 });
-  await page.mouse.up();
-  const popover = page.getByTestId("link-popover");
-  await popover.getByRole("radio", { name: "Ke halaman" }).click();
-  await popover.getByRole("combobox", { name: "Halaman tujuan" }).selectOption({ label: "Halaman 2" });
-  await popover.getByRole("button", { name: "Simpan link" }).click();
-  await expect(popover).toHaveCount(0);
-
   // Fill the form.
   await page.getByRole("textbox", { name: "nama", exact: true }).fill("Budi Santoso");
   await page.getByRole("checkbox", { name: "setuju" }).check();
 
-  // Download with the form kept: native annotations, link, signatures, stamp and field values.
+  // Download with the form kept: the highlight, signatures, stamps and field values.
   const kept = pdfReport(await download(page, "annots.pdf"));
   const p1 = kept.pages[0];
   const hl = p1.annots.find((a) => a.type === "Highlight")!;
@@ -92,14 +78,9 @@ test("highlight, note, signature, stamp, link and form, then download", async ({
   expect(Math.abs(Math.max(...xs) - x1)).toBeLessThanOrEqual(1);
   expect(Math.min(...ys)).toBeCloseTo(80 - 0.9 * 12, 1);
   expect(Math.max(...ys)).toBeCloseTo(80 + 0.25 * 12, 1);
-  const note = p1.annots.find((a) => a.type === "Text")!;
-  expect(note.content).toBe("Periksa pasal ini");
-  expect(note.author).toBe(""); // /T stays empty
-  expect(hl.author).toBe("");
-  expect(note.rect.map(Math.round)).toEqual([400, 200, 416, 216]);
-  const [link] = p1.links;
-  expect([link.kind, link.page]).toEqual([1, 1]); // LINK_GOTO → page 2
-  expect(link.from.map(Math.round)).toEqual([72, 300, 200, 320]);
+  expect(hl.author).toBe(""); // /T stays empty
+  expect(p1.annots.map((a) => a.type)).toEqual(["Highlight"]);
+  expect(p1.links).toEqual([]);
   expect(p1.images).toBe(2); // the typed signature and the same one again from the library
   expect(p1.text).toContain("DISETUJUI");
   expect(p1.text).toContain("APPROVED");
@@ -112,6 +93,5 @@ test("highlight, note, signature, stamp, link and form, then download", async ({
   expect(flat.isForm).toBe(false);
   expect(flat.pages[0].widgets).toEqual([]);
   expect(flat.pages[0].text).toContain("Budi Santoso");
-  expect(flat.pages[0].annots.map((a) => a.type)).toEqual(expect.arrayContaining(["Highlight", "Text"]));
-  expect(flat.pages[0].links).toHaveLength(1);
+  expect(flat.pages[0].annots.map((a) => a.type)).toEqual(["Highlight"]);
 });

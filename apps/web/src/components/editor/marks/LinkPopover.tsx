@@ -1,5 +1,8 @@
 "use client";
 
+// Not mounted since M5: the Link tool is hidden (owner decision). Kept with LinkTargetFields and linkStore so the
+// tool can come back; link.add objects from older drafts still render, export and can be deleted.
+
 import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import type { LinkAdd } from "@edith/ops";

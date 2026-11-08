@@ -85,7 +85,7 @@ export const t = {
   },
   annot: {
     markup: "Penanda", highlight: "Stabilo", underline: "Garis bawah", strike: "Coret",
-    check: "Centang", cross: "Silang", note: "Catatan", noteContent: "Isi catatan", link: "Link",
+    check: "Centang", cross: "Silang",
     signature: "Tanda Tangan", stamp: "Stamp", uploadImage: "Unggah gambar",
     noText: "Tidak ada teks asli yang bisa ditandai di halaman ini",
   },

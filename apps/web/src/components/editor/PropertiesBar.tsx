@@ -1,7 +1,6 @@
 "use client";
 
 import type { ContentOp } from "@edith/ops";
-import { useEffect, useRef } from "react";
 import { useStore } from "zustand";
 import type { Dash } from "@/lib/geometry";
 import { hasOpacity, inkWidth, isMarkup, isTextOp, MARKUP_TOOLS, opacityOf, POLY_TOOLS } from "@/lib/objects";
@@ -9,16 +8,15 @@ import { t } from "@/lib/strings";
 import { useChars } from "@/store/chars";
 import { editorStore, sourcePage, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
 import { srcKey } from "@/lib/sources";
-import type { LinkTarget } from "@/lib/links";
 import { STAMP_COLORS } from "@/lib/stamps";
 import { ColorField } from "./ColorField";
-import { LinkTargetFields } from "./marks/LinkTargetFields";
-import { linkStore } from "./marks/linkStore";
 import { textEditStore } from "./text/textEdit";
 
 export const textPropsSlot: { render?: () => React.ReactNode } = {};
 
-type Kind = "shape" | "line" | "ink" | "redact" | "text" | "markup" | "symbol" | "note" | "link" | "stamp" | null;
+// Sticky notes and links (annot.add note, link.add) have no tool since M5: one restored from an older draft can
+// still be selected, moved and deleted, but has no properties here.
+type Kind = "shape" | "line" | "ink" | "redact" | "text" | "markup" | "symbol" | "stamp" | null;
 
 function kindOf(op: ContentOp | undefined, tool: string): Kind {
   if (op) {
@@ -28,14 +26,11 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
     if (isTextOp(op)) return "text";
     if (isMarkup(op)) return "markup";
     if (op.type === "symbol.add") return "symbol";
-    if (op.type === "annot.add") return "note";
-    if (op.type === "link.add") return "link";
     if (op.type === "stamp.add") return "stamp";
     return null;
   }
   if (MARKUP_TOOLS.has(tool)) return "markup";
   if (tool === "check" || tool === "cross") return "symbol";
-  if (tool === "note") return "note";
   if (tool === "rect" || tool === "ellipse" || tool === "polygon" || tool === "cloud") return "shape";
   if (tool === "line" || tool === "arrow" || tool === "polyline") return "line";
   if (tool === "ink") return "ink";
@@ -65,16 +60,6 @@ export function PropertiesBar() {
   });
   const currentLines = useChars((cs) => cs.pages[currentSrc]);
   const noText = MARKUP_TOOLS.has(tool) && Array.isArray(currentLines) && currentLines.length === 0;
-  const noteField = useRef<HTMLTextAreaElement>(null);
-  const focusNote = useStore(linkStore, (st) => st.focusNote);
-  // Only a note just created takes focus; selecting an existing note must leave Delete/Backspace to the editor.
-  useEffect(() => {
-    if (!focusNote || focusNote !== selection || !noteField.current) return;
-    // Past the pointerdown that created the note: its mousedown default action would blur the field again.
-    const el = noteField.current;
-    linkStore.getState().setFocusNote(null);
-    requestAnimationFrame(() => setTimeout(() => el.focus(), 0)); // not cancelled: clearing the flag re-runs this effect
-  }, [focusNote, selection]);
   const o = op as (ContentOp & Record<string, unknown>) | undefined;
   const s = editorStore.getState();
 
@@ -83,7 +68,6 @@ export function PropertiesBar() {
     if (o) s.updateObject(o.id, { color: v } as Partial<ContentOp>, { coalesce: `props:${o.id}` });
     else if (MARKUP_TOOLS.has(tool)) s.setStyle({ markup: { ...style.markup, [tool]: v } });
     else if (kind === "symbol") s.setStyle({ symbolColor: v });
-    else if (kind === "note") s.setStyle({ noteColor: v });
   }
 
   const stroke = (o?.type === "ink.add" ? (o.color as string) : (o?.stroke as string | undefined)) ?? style.stroke;
@@ -170,17 +154,6 @@ export function PropertiesBar() {
       )}
       {kind === "markup" && noText && <span className="text-xs text-muted">{t.annot.noText}</span>}
       {kind === "symbol" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.symbolColor} onChange={setColor} />}
-      {kind === "note" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.noteColor} onChange={setColor} />}
-      {kind === "note" && o && (
-        <textarea key={o.id} aria-label={t.annot.noteContent} placeholder={t.annot.noteContent} ref={noteField} rows={1}
-          value={(o.content as string | null | undefined) ?? ""}
-          onChange={(e) => s.updateObject(o.id, { content: e.target.value } as Partial<ContentOp>, { coalesce: `note:${o.id}` })}
-          className="h-8 w-80 resize-none rounded border border-line px-1.5 py-1 text-ink" />
-      )}
-      {kind === "link" && o && (
-        <LinkTargetFields key={o.id} target={o.target as LinkTarget}
-          onChange={(target) => { if (target) s.updateObject(o.id, { target } as Partial<ContentOp>, { coalesce: `link:${o.id}` }); }} />
-      )}
       {kind === "stamp" && o && (
         <div role="radiogroup" aria-label={t.editor.color} className="flex items-center gap-1">
           {STAMP_COLORS.map((c) => (
