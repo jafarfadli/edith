@@ -151,6 +151,20 @@ export async function prepareRuns(paragraphs: Run[][], fonts: FontTable, store: 
   return out;
 }
 
+/** Loads the fonts of the whole fallback chain the paragraphs may need (original -> substitute -> Arimo
+ *  -> Noto Sans, in the runs' bold/italic styles) so `resolveLoadedRuns` can answer synchronously.
+ *  Never rejects: a font that fails to load just stays unresolved. */
+export async function preloadFallback(paragraphs: Run[][], fonts: FontTable, store: Loader = fontStore): Promise<void> {
+  let out = paragraphs;
+  for (let step = 0; step <= FALLBACK_STEPS; step++) {
+    await Promise.allSettled(fontsOf(out).map((f) => store.load(f)));
+    const next = fallbackStep(out, fonts, (f) => store.peek(f));
+    if (!next) return;
+    out = next;
+  }
+  await Promise.allSettled(fontsOf(out).map((f) => store.load(f)));
+}
+
 /** White covers hiding an edited paragraph's original lines on screen (the bake redacts them). */
 export function maskRects(p: Paragraph): Rect[] {
   return p.lines.map((l) => ({

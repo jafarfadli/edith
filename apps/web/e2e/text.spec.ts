@@ -104,3 +104,20 @@ test("edit an original paragraph, find & replace, download", async ({ page }) =>
     }
   }
 });
+
+test("warns about unsupported characters while typing, before commit", async ({ page }) => {
+  await page.goto("/");
+  const textLoaded = page.waitForResponse((r) => /\/documents\/[^/]+\/text$/.test(r.url()) && r.ok());
+  await page.getByTestId("file-input").setInputFiles(TEXT_PDF);
+  await expect(page).toHaveURL(/\/edit\//);
+  await textLoaded;
+  const box = (await page.getByTestId("page").first().boundingBox())!;
+  const editor = page.getByTestId("text-editor");
+  await expect(async () => {
+    await page.mouse.dblclick(box.x + 150, box.y + 110);
+    await expect(editor).toBeVisible({ timeout: 1000 });
+  }).toPass();
+  await expect(page.getByText("beberapa karakter tidak didukung font ini")).toHaveCount(0);
+  await editor.pressSequentially("漢字");
+  await expect(page.getByText("beberapa karakter tidak didukung font ini")).toBeVisible();
+});

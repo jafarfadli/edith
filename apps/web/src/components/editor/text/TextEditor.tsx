@@ -14,7 +14,7 @@ import { attrsOf, docToRuns, runsToDoc, type RunAttrs } from "@/lib/richtext";
 import { boxFonts, boxLineHeight } from "@/lib/textbox";
 import { isFindKey } from "../useShortcuts";
 import { createRunMark } from "./runMark";
-import { commitOpenSession, session, textEditStore, type Editing } from "./textEdit";
+import { commitOpenSession, preloadSessionFonts, session, textEditStore, type Editing } from "./textEdit";
 
 export function TextEditor({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const editing = useStore(textEditStore, (s) => s.editing);
@@ -48,6 +48,7 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
     onUpdate: ({ editor }) => {
       const paragraphs = docToRuns(editor.getJSON(), fallback);
       session.paragraphs = paragraphs;
+      preloadSessionFonts(paragraphs);
       // Text typed with a style picked at an empty caret (or pasted) may need a font not loaded yet.
       for (const f of boxFonts({ ...editing.box, paragraphs })) {
         const key = fontKey(f);

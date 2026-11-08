@@ -6,7 +6,7 @@ import type { ContentOp, Run, TextBox } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
 import { newId } from "@/lib/id";
-import { paragraphBox, prepareRuns, resolveLoadedRuns } from "@/lib/paragraphs";
+import { paragraphBox, preloadFallback, prepareRuns, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
 import { boxFonts, boxLineHeight, newBox, relayout } from "@/lib/textbox";
@@ -41,11 +41,21 @@ interface TextEditState {
  *  content as runs, kept current on every change (still readable after the editor unmounted). */
 export const session: { editor: Editor | null; paragraphs: Run[][] | null } = { editor: null, paragraphs: null };
 
+/** Loads the fallback-chain fonts of `paragraphs` (live warning in the properties bar), then nudges
+ *  the bar to re-render. Ignored when the session's content moved on meanwhile. */
+export function preloadSessionFonts(paragraphs: Run[][]): void {
+  void preloadFallback(paragraphs, textStore.getState().fonts).then(() => {
+    const { editing, current, setCurrent } = textEditStore.getState();
+    if (editing && current && session.paragraphs === paragraphs) setCurrent({ ...current });
+  });
+}
+
 export const textEditStore = createStore<TextEditState>()((set, get) => ({
   editing: null, current: null, paragraph: null,
   start: (editing) => {
     if (editing.kind === "text.edit" && !editing.paragraphId) throw new Error(`text.edit session ${editing.id} has no paragraphId`);
     session.paragraphs = editing.box.paragraphs;
+    preloadSessionFonts(editing.box.paragraphs);
     set({ editing, current: attrsOf(editing.box.paragraphs[0][0]), paragraph: null });
   },
   update: (box) => { const e = get().editing; if (e) set({ editing: { ...e, box } }); },

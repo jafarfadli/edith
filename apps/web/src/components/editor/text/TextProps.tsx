@@ -120,7 +120,7 @@ export function TextProps() {
   return (
     <div
       data-text-props
-      className="flex items-center gap-2"
+      className="flex flex-wrap items-center gap-2"
       // Keep focus in the rich editor for buttons (a select/input takes focus; the session stays open).
       onMouseDown={(e) => { const tag = (e.target as HTMLElement).tagName; if (tag !== "SELECT" && tag !== "INPUT") e.preventDefault(); }}
     >
@@ -143,8 +143,8 @@ export function TextProps() {
         <button key={a} type="button" aria-label={alignLabel[a]} aria-pressed={align === a}
           className={toggle(align === a)} onClick={() => set({ align: a })}>{ALIGN_ICON[a]}</button>
       ))}
-      {unsupported && <span role="status" className="whitespace-nowrap text-xs text-danger">⚠ {t.text.unsupported}</span>}
-      {overflow && <span role="status" className="whitespace-nowrap text-xs text-[#ea580c]">⚠ {t.text.overflow}</span>}
+      {unsupported && <span role="status" className="text-xs text-danger">⚠ {t.text.unsupported}</span>}
+      {overflow && <span role="status" className="text-xs text-[#ea580c]">⚠ {t.text.overflow}</span>}
     </div>
   );
 }

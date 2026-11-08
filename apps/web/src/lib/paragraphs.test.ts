@@ -5,7 +5,7 @@ import type { FontRef, Run } from "@edith/ops";
 import type { DocFont, Paragraph, TextData } from "@/lib/api";
 import { fontKey, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
 import { runsText } from "@/lib/runs";
-import { hardBreaks, hasUnsupportedChars, maskRects, overflowsOriginal, paragraphBox, paragraphRuns, prepareRuns, rawToBox, resolveLoadedRuns, resolveRunFonts } from "@/lib/paragraphs";
+import { preloadFallback, hardBreaks, hasUnsupportedChars, maskRects, overflowsOriginal, paragraphBox, paragraphRuns, prepareRuns, rawToBox, resolveLoadedRuns, resolveRunFonts } from "@/lib/paragraphs";
 
 const FONTS = path.resolve(__dirname, "../../../../packages/fonts/files");
 const metrics = new Map<string, FontMetrics>();
@@ -178,5 +178,22 @@ describe("hasUnsupportedChars", () => {
   });
   it("waits for the fonts of the chain", () => {
     expect(hasUnsupportedChars([[run("ab✓")]], fonts, (f) => (isOriginal(f) ? onlyAbc : null))).toBe(false);
+  });
+});
+
+describe("preloadFallback", () => {
+  it("loads the chain so the unsupported warning resolves after the preload", async () => {
+    const notoAbcz: FontMetrics = { ...onlyAbc, hasGlyph: (cp) => "abcz ".includes(String.fromCodePoint(cp)) };
+    const loaded = new Set<string>([fontKey(ORIG)]);
+    const metricsOf = (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? notoAbcz : onlyAbc);
+    const store = {
+      async load(f: FontRef) { loaded.add(fontKey(f)); return metricsOf(f); },
+      peek: (f: FontRef) => (loaded.has(fontKey(f)) ? metricsOf(f) : null),
+    };
+    const peek = (f: FontRef) => store.peek(f);
+    const runs = [[run("ab✓")]];
+    expect(hasUnsupportedChars(runs, fonts, peek)).toBe(false); // cold: chain not loaded
+    await preloadFallback(runs, fonts, store);
+    expect(hasUnsupportedChars(runs, fonts, peek)).toBe(true);
   });
 });
