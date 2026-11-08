@@ -13,3 +13,9 @@ Items deliberately left out of M5 (see README.md, Deviations):
 - Notes and links: decide whether they come back (data, bake and Anotasi labels are kept; the tools and their properties are hidden).
 - A first-run tour of the tools (the one-line hint per tool is the M5 answer).
 - `pages.spec` flaked once under parallel load in the spike (passed on rerun); watch it.
+
+## Task 2 review minors
+- Indent test uses `ink_x0`: Korean wrapped by character with a leading space looks indented (1 → 2 paragraphs).
+- Form-row rule (3 spaces) splits wrapped labels/sentences from continuation (reference p3 g24/g25, g26/g27; p4 g11/g12, g36–g38).
+- Hard-break result depends on group content (reference p5 g12: Korean line + English translation merge).
+- `scripts/paragraph_overlay.py`: no box on cropped+rotated pages; no usage message without arguments.
