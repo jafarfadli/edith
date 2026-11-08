@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type Konva from "konva";
 import { Group, Layer, Stage, Transformer } from "react-konva";
 import { useStore } from "zustand";
@@ -92,6 +92,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   useStore(textEditStore, (s) => s.editing?.id);
   const pageRef = useRef<Konva.Group>(null);
   const trRef = useRef<Konva.Transformer>(null);
+  const stageRef = useRef<Konva.Stage>(null);
   const nodes = useRef(new Map<string, Konva.Group>());
   const [draft, setDraft] = useState<ContentOp | null>(null);
   // The draw in progress. Move/up are tracked on window so a drag released outside the stage still commits.
@@ -113,6 +114,12 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     }
     trRef.current?.getLayer()?.batchDraw();
   }, [selection, mine, objects]);
+
+  // Konva rebuilds a layer's hit graph in a batched draw (requestAnimationFrame, which can lag by hundreds of ms
+  // in a busy or background tab). A pointer event in between is hit-tested against the stale graph: right after a
+  // tool switch (objects' `listening` flipped) or a new object, the click found nothing and selected nothing.
+  // Draw the layers synchronously once React has applied the props, so the hit graph is current before any event.
+  useLayoutEffect(() => { stageRef.current?.getLayers().forEach((l) => l.draw()); });
 
   useEffect(() => () => drawing.current?.stop(), []);
   const poly = usePolyTool(pageKey, POLY_TOOLS.has(tool) ? (tool as PolyTool) : null, scale);
@@ -231,6 +238,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       style={{ pointerEvents: tool === "pan" ? "none" : "auto", cursor: tool === "select" ? "default" : MARKUP_TOOLS.has(tool) ? "text" : "crosshair" }}
     >
       <Stage
+        ref={stageRef}
         width={size.width}
         height={size.height}
         onPointerDown={onDown}
