@@ -4,7 +4,7 @@ import pymupdf
 
 from edith.bake.registry import register
 from edith.bake.util import rgb, to_rect
-from edith.ops import ImageAdd, InkAdd, RedactAdd, ShapeAdd, WhiteoutAdd
+from edith.ops import ImageAdd, InkAdd, RedactAdd, ShapeAdd, SignatureAdd, WhiteoutAdd
 
 
 @register("whiteout.add")
@@ -56,4 +56,10 @@ def ink(page: pymupdf.Page, op: InkAdd, ctx) -> None:
 
 @register("image.add")
 def image(page: pymupdf.Page, op: ImageAdd, ctx) -> None:
+    page.insert_image(to_rect(op.rect), filename=str(ctx.asset_path(op.assetId)), keep_proportion=False)
+
+
+@register("signature.add")
+def signature(page: pymupdf.Page, op: SignatureAdd, ctx) -> None:
+    # Drawn, typed and uploaded signatures are all PNG/JPEG assets (a PNG keeps its transparency).
     page.insert_image(to_rect(op.rect), filename=str(ctx.asset_path(op.assetId)), keep_proportion=False)

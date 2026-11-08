@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FontRef, Run, TextAdd, TextEdit } from "@edith/ops";
+import type { ContentOp, FontRef, Run, TextAdd, TextEdit } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
 import { fontStore, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
+import { noticeStore } from "@/lib/notices";
+import { t } from "@/lib/strings";
 import { boxLineHeight, newBox } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
@@ -243,5 +245,75 @@ describe("original paragraphs", () => {
     expect(editorStore.getState().selection).toBe(op.id);
     editorStore.getState().undo();
     expect(editorStore.getState().doc.order).toEqual([]);
+  });
+});
+
+describe("markup over an edited paragraph", () => {
+  const g3: Paragraph = {
+    id: "g3", rect: { x: 72, y: 88, w: 200, h: 30 }, align: "left", lineHeight: 14, editable: true,
+    runs: [{ text: "Halo lama", font, size: 12, color: "#000000" }],
+    lines: [{ rect: { x: 72, y: 89, w: 200, h: 14 }, baseline: 100, size: 12, start: 0, end: 4 },
+      { rect: { x: 72, y: 103, w: 120, h: 14 }, baseline: 114, size: 12, start: 5, end: 9 }],
+  };
+  const mark = (id: string, kind: "highlight" | "underline" | "strike", y: number, pageKey = "o0") =>
+    ({ id, type: "annot.add", pageKey, kind, quads: [{ x: 80, y, w: 40, h: 13.8 }], color: "#ffeb3b" }) as ContentOp;
+  const note = { id: "n", type: "annot.add", pageKey: "o0", kind: "note", point: [90, 95], color: "#facc15", content: "x" } as ContentOp;
+
+  beforeEach(() => {
+    textStore.setState({ pages: { 0: [g3] } });
+    fontsLoaded = true;
+    const st = editorStore.getState();
+    // On line 1, on line 2, on the next paragraph below (baseline 128), on another page; and a note.
+    for (const op of [mark("h1", "highlight", 89.2), mark("u2", "underline", 103.2), mark("s3", "strike", 117.2),
+      mark("h4", "highlight", 89.2, "o1"), note]) st.addObject(op);
+    noticeStore.setState({ notice: null });
+  });
+
+  it("deletes the markup on the paragraph's original lines in the same undo step, with a notice", async () => {
+    const before = editorStore.getState().past.length;
+    openParagraph("Halo lama");
+    await commitEditing(runs("Halo baru"));
+    const after = editorStore.getState();
+    expect(after.doc.objects.e1).toBeDefined();
+    expect(Object.keys(after.doc.objects).sort()).toEqual(["e1", "h4", "n", "s3"]);
+    expect(after.past.length).toBe(before + 1);
+    expect(noticeStore.getState().notice).toEqual({ kind: "info", text: t.text.markupRemoved });
+    editorStore.getState().undo();
+    const undone = editorStore.getState().doc;
+    expect(undone.objects.e1).toBeUndefined();
+    expect(Object.keys(undone.objects).sort()).toEqual(["h1", "h4", "n", "s3", "u2"]);
+  });
+
+  it("also when the paragraph is only moved (materialized), in one undo step", async () => {
+    gate.resolve();
+    const before = editorStore.getState().past.length;
+    await materializeParagraph("o0", g3, (b) => ({ ...b, rect: { ...b.rect, x: b.rect.x + 10 } }));
+    const after = editorStore.getState();
+    const moved = Object.values(after.doc.objects).find((o) => o.type === "text.edit") as TextEdit;
+    expect(moved).toMatchObject({ paragraphId: "g3" });
+    expect(Object.keys(after.doc.objects).sort()).toEqual([moved.id, "h4", "n", "s3"].sort());
+    expect(after.past.length).toBe(before + 1);
+    expect(noticeStore.getState().notice).toEqual({ kind: "info", text: t.text.markupRemoved });
+    editorStore.getState().undo();
+    expect(Object.keys(editorStore.getState().doc.objects).sort()).toEqual(["h1", "h4", "n", "s3", "u2"]);
+  });
+
+  it("also when an existing text.edit is edited again, and no notice when nothing was removed", async () => {
+    openParagraph("Halo lama");
+    await commitEditing(runs("Halo baru"));
+    noticeStore.setState({ notice: null });
+    editorStore.getState().addObject(mark("h5", "highlight", 89.2));
+    const before = editorStore.getState().past.length;
+    textEditStore.getState().start({ id: "e1", pageKey: "o0", box: (editorStore.getState().doc.objects.e1 as TextEdit).box, isNew: false, kind: "text.edit", paragraphId: "g3" });
+    await commitEditing(runs("Halo lagi"));
+    expect(editorStore.getState().doc.objects.h5).toBeUndefined();
+    expect(editorStore.getState().past.length).toBe(before + 1);
+    editorStore.getState().undo();
+    expect(editorStore.getState().doc.objects.h5).toBeDefined();
+    expect((editorStore.getState().doc.objects.e1 as TextEdit).box.paragraphs[0][0].text).toBe("Halo baru");
+    noticeStore.setState({ notice: null });
+    openSession("t9");
+    await commitEditing(runs("Halo"));
+    expect(noticeStore.getState().notice).toBeNull(); // a new text box removes nothing
   });
 });

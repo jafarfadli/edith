@@ -10,6 +10,7 @@ import { opKey } from "@/lib/targets";
 import { relayout } from "@/lib/textbox";
 import { editorStore, textEditFor } from "@/store/editor";
 import { paragraphsOf, textStore } from "@/store/text";
+import { markupUnderEdits, noteMarkupRemoved } from "../text/textEdit";
 
 const metrics = (f: Parameters<typeof fontStore.get>[0]) => fontStore.get(f);
 
@@ -28,7 +29,7 @@ function endsAfter(ranges: { start: number; end: number }[], text: string): numb
 }
 
 /** Replaces `matches` with `text` (style of each match's first character) as ONE undo step: text ops
- *  are updated, original paragraphs become text.edit ops. Targets changed while fonts were loading
+ *  are updated, original paragraphs become text.edit ops, and text markup on those paragraphs is deleted. Targets changed while fonts were loading
  *  (an op edited, a paragraph edited elsewhere) are left alone. Returns where each applied
  *  replacement ended (sorted by target, then offset). */
 export async function applyReplacements(matches: Match[], text: string): Promise<Replaced[]> {
@@ -63,6 +64,9 @@ export async function applyReplacements(matches: Match[], text: string): Promise
   const fresh = out.filter(({ op, base }) => base
     ? now.objects[op.id] === base
     : now.pages.some((p) => p.pageKey === op.pageKey) && !textEditFor(now, op.pageKey, (op as TextEdit).paragraphId));
-  editorStore.getState().putObjects(fresh.map((x) => x.op));
+  // Marks on the original lines of rewritten paragraphs go in the same undo step (see markupUnderEdits).
+  const removed = markupUnderEdits(now, fresh.map((x) => x.op).filter((op): op is TextEdit => op.type === "text.edit"));
+  editorStore.getState().putObjects(fresh.map((x) => x.op), removed);
+  noteMarkupRemoved(removed);
   return fresh.flatMap(({ op, ends }) => ends.map((end) => ({ key: opKey(op.id), end })));
 }

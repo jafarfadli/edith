@@ -1,5 +1,98 @@
 {
   "$defs": {
+    "AnnotAdd": {
+      "additionalProperties": false,
+      "description": "A native PDF annotation: text markup over `quads` (one rect per line, horizontal text) or a\nsticky note whose icon's top-left corner is `point`.",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "annot.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "highlight",
+            "underline",
+            "strike",
+            "note"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "quads": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Rect"
+              },
+              "maxItems": 2000,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quads"
+        },
+        "point": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Point"
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "kind",
+        "color"
+      ],
+      "title": "AnnotAdd",
+      "type": "object"
+    },
     "BlankSize": {
       "additionalProperties": false,
       "properties": {
@@ -93,11 +186,17 @@
           "items": {
             "discriminator": {
               "mapping": {
+                "annot.add": "#/$defs/AnnotAdd",
+                "form.set": "#/$defs/FormSet",
                 "image.add": "#/$defs/ImageAdd",
                 "ink.add": "#/$defs/InkAdd",
+                "link.add": "#/$defs/LinkAdd",
                 "pages.layout": "#/$defs/PagesLayout",
                 "redact.add": "#/$defs/RedactAdd",
                 "shape.add": "#/$defs/ShapeAdd",
+                "signature.add": "#/$defs/SignatureAdd",
+                "stamp.add": "#/$defs/StampAdd",
+                "symbol.add": "#/$defs/SymbolAdd",
                 "text.add": "#/$defs/TextAdd",
                 "text.edit": "#/$defs/TextEdit",
                 "whiteout.add": "#/$defs/WhiteoutAdd"
@@ -127,6 +226,24 @@
                 "$ref": "#/$defs/RedactAdd"
               },
               {
+                "$ref": "#/$defs/SignatureAdd"
+              },
+              {
+                "$ref": "#/$defs/StampAdd"
+              },
+              {
+                "$ref": "#/$defs/SymbolAdd"
+              },
+              {
+                "$ref": "#/$defs/LinkAdd"
+              },
+              {
+                "$ref": "#/$defs/AnnotAdd"
+              },
+              {
+                "$ref": "#/$defs/FormSet"
+              },
+              {
                 "$ref": "#/$defs/PagesLayout"
               }
             ]
@@ -151,6 +268,48 @@
         "ops"
       ],
       "title": "ExportRequest",
+      "type": "object"
+    },
+    "FormSet": {
+      "additionalProperties": false,
+      "description": "Value of AcroForm field `fieldName` (every widget of that name): text/combo/list -> the string,\ncheckbox -> bool, radio -> the on-state name of the chosen button (or \"Off\").",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "form.set",
+          "title": "Type",
+          "type": "string"
+        },
+        "fieldName": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Fieldname",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "fieldName",
+        "value"
+      ],
+      "title": "FormSet",
       "type": "object"
     },
     "ImageAdd": {
@@ -310,6 +469,50 @@
       "title": "LayoutPage",
       "type": "object"
     },
+    "LinkAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "link.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UrlTarget"
+            },
+            {
+              "$ref": "#/$defs/PageTarget"
+            }
+          ],
+          "title": "Target"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "rect",
+        "target"
+      ],
+      "title": "LinkAdd",
+      "type": "object"
+    },
     "OriginalFont": {
       "additionalProperties": false,
       "description": "A font embedded in the uploaded PDF (`ref` from GET /documents/{id}/text), reused as is.",
@@ -330,6 +533,21 @@
         "ref"
       ],
       "title": "OriginalFont",
+      "type": "object"
+    },
+    "PageTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pageKey"
+      ],
+      "title": "PageTarget",
       "type": "object"
     },
     "PagesLayout": {
@@ -448,11 +666,17 @@
           "items": {
             "discriminator": {
               "mapping": {
+                "annot.add": "#/$defs/AnnotAdd",
+                "form.set": "#/$defs/FormSet",
                 "image.add": "#/$defs/ImageAdd",
                 "ink.add": "#/$defs/InkAdd",
+                "link.add": "#/$defs/LinkAdd",
                 "pages.layout": "#/$defs/PagesLayout",
                 "redact.add": "#/$defs/RedactAdd",
                 "shape.add": "#/$defs/ShapeAdd",
+                "signature.add": "#/$defs/SignatureAdd",
+                "stamp.add": "#/$defs/StampAdd",
+                "symbol.add": "#/$defs/SymbolAdd",
                 "text.add": "#/$defs/TextAdd",
                 "text.edit": "#/$defs/TextEdit",
                 "whiteout.add": "#/$defs/WhiteoutAdd"
@@ -480,6 +704,24 @@
               },
               {
                 "$ref": "#/$defs/RedactAdd"
+              },
+              {
+                "$ref": "#/$defs/SignatureAdd"
+              },
+              {
+                "$ref": "#/$defs/StampAdd"
+              },
+              {
+                "$ref": "#/$defs/SymbolAdd"
+              },
+              {
+                "$ref": "#/$defs/LinkAdd"
+              },
+              {
+                "$ref": "#/$defs/AnnotAdd"
+              },
+              {
+                "$ref": "#/$defs/FormSet"
               },
               {
                 "$ref": "#/$defs/PagesLayout"
@@ -681,6 +923,231 @@
       "title": "ShapeAdd",
       "type": "object"
     },
+    "SignatureAdd": {
+      "additionalProperties": false,
+      "description": "A signature image (drawn, typed or uploaded; always a PNG/JPEG asset).",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "signature.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "assetId": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "title": "Assetid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "rect",
+        "assetId"
+      ],
+      "title": "SignatureAdd",
+      "type": "object"
+    },
+    "StampAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "stamp.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "preset": {
+          "anyOf": [
+            {
+              "enum": [
+                "approved",
+                "not-approved",
+                "draft",
+                "final",
+                "completed",
+                "confidential",
+                "for-public-release",
+                "not-for-public-release",
+                "for-comment",
+                "void",
+                "preliminary-results",
+                "information-only",
+                "witness",
+                "initial-here",
+                "sign-here",
+                "accepted",
+                "rejected",
+                "disetujui",
+                "tidak-disetujui",
+                "draf",
+                "final-id",
+                "selesai",
+                "rahasia",
+                "untuk-publik",
+                "tidak-untuk-publik",
+                "untuk-dikomentari",
+                "batal",
+                "hasil-sementara",
+                "hanya-informasi",
+                "saksi",
+                "paraf-di-sini",
+                "tanda-tangan-di-sini",
+                "diterima",
+                "ditolak"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preset"
+        },
+        "custom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StampCustom"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "rect",
+        "color"
+      ],
+      "title": "StampAdd",
+      "type": "object"
+    },
+    "StampCustom": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "maxLength": 20,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "StampCustom",
+      "type": "object"
+    },
+    "SymbolAdd": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "symbol.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "check",
+            "cross"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/Rect"
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "kind",
+        "rect",
+        "color"
+      ],
+      "title": "SymbolAdd",
+      "type": "object"
+    },
     "TextAdd": {
       "additionalProperties": false,
       "properties": {
@@ -799,6 +1266,22 @@
         "box"
       ],
       "title": "TextEdit",
+      "type": "object"
+    },
+    "UrlTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "maxLength": 2048,
+          "pattern": "^(https?://|mailto:)\\S+$",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "UrlTarget",
       "type": "object"
     },
     "WhiteoutAdd": {

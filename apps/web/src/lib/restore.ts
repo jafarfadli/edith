@@ -10,6 +10,12 @@ function validSrc(src: unknown): boolean {
   return typeof b === "object" && b !== null && isNum(b.width) && isNum(b.height);
 }
 
+/** Form values of a draft: a plain object of string/boolean values (M1/M2 drafts have none). */
+function validForms(forms: unknown): Record<string, string | boolean> {
+  if (typeof forms !== "object" || forms === null || Array.isArray(forms)) return {};
+  return Object.fromEntries(Object.entries(forms).filter(([, v]) => typeof v === "string" || typeof v === "boolean"));
+}
+
 export function restoreDraft(draft: EditorDoc | null, docId: string, pageCount: number): EditorDoc | null {
   if (!draft || !Array.isArray(draft.pages) || draft.pages.length === 0) return null;
   const pages = [];
@@ -22,5 +28,5 @@ export function restoreDraft(draft: EditorDoc | null, docId: string, pageCount: 
       pages.push(p);
     }
   }
-  return { ...draft, pages };
+  return { ...draft, pages, forms: validForms(draft.forms) };
 }

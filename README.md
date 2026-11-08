@@ -1,6 +1,6 @@
 # Edith
 
-Editor PDF berbasis web: unggah PDF, edit teks aslinya (rich text per kata, Cari & Ganti), tambah teks, bentuk, gambar, gambar bebas, whiteout, redaksi, atur halaman, lalu unduh.
+Editor PDF berbasis web: unggah PDF, edit teks aslinya (rich text per kata, Cari & Ganti), tambah teks, bentuk, gambar, gambar bebas, whiteout, redaksi, stabilo/garis bawah/coret dan catatan (anotasi PDF asli), tanda tangan (dengan pustaka di browser), stamp (34 preset Indonesia/Inggris), centang/silang, link, isi form (opsional diratakan), atur halaman, lalu unduh.
 
 ## Struktur
 
@@ -27,6 +27,7 @@ Fixture yang dihasilkan dari kode API (jalankan ulang setelah mengubah ekstraksi
 
     cd apps/api && uv run python -m scripts.text_fixture   # apps/web/src/lib/fixtures/text.json
     cd apps/api && uv run python -m scripts.e2e_text_pdf   # apps/web/e2e/fixtures/text.pdf
+    cd apps/api && uv run python -m scripts.e2e_annots_pdf # apps/web/e2e/fixtures/annots.pdf
 
 Setelah mengubah `apps/api/edith/ops.py`:
 

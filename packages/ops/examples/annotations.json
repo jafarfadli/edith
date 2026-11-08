@@ -1,0 +1,20 @@
+{
+  "ops": [
+    { "id": "layout", "type": "pages.layout", "pages": [
+      { "pageKey": "o0", "src": { "doc": "d1", "index": 0 }, "rotate": 0 },
+      { "pageKey": "o1", "src": { "doc": "d1", "index": 1 }, "rotate": 90 }
+    ] },
+    { "id": "s1", "type": "signature.add", "pageKey": "o0", "rect": { "x": 300, "y": 700, "w": 160, "h": 50 }, "assetId": "a1" },
+    { "id": "st1", "type": "stamp.add", "pageKey": "o0", "rect": { "x": 72, "y": 600, "w": 140, "h": 40 }, "preset": "approved", "color": "#15803d" },
+    { "id": "st2", "type": "stamp.add", "pageKey": "o0", "rect": { "x": 72, "y": 650, "w": 160, "h": 54 }, "custom": { "text": "DIPERIKSA", "date": "05/11/2026", "time": "14:30" }, "color": "#1d4ed8" },
+    { "id": "sy1", "type": "symbol.add", "pageKey": "o0", "kind": "check", "rect": { "x": 72, "y": 560, "w": 20, "h": 20 }, "color": "#1d4ed8" },
+    { "id": "l1", "type": "link.add", "pageKey": "o0", "rect": { "x": 72, "y": 500, "w": 100, "h": 20 }, "target": { "url": "https://example.com" } },
+    { "id": "l2", "type": "link.add", "pageKey": "o0", "rect": { "x": 72, "y": 530, "w": 100, "h": 20 }, "target": { "pageKey": "o1" } },
+    { "id": "h1", "type": "annot.add", "pageKey": "o0", "kind": "highlight", "quads": [{ "x": 72, "y": 89.2, "w": 80, "h": 13.8 }], "color": "#ffeb3b" },
+    { "id": "n1", "type": "annot.add", "pageKey": "o1", "kind": "note", "point": [300, 300], "color": "#facc15", "content": "Periksa lagi" },
+    { "id": "f1", "type": "form.set", "fieldName": "nama", "value": "Budi" },
+    { "id": "f2", "type": "form.set", "fieldName": "setuju", "value": true }
+  ],
+  "flatten_forms": true,
+  "filename": "annotated.pdf"
+}

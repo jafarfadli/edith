@@ -3,6 +3,7 @@ import pymupdf
 from edith.doc_fonts import collect_fonts, fill_substitutes, name_key, span_fonts
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
 from edith.fonts import FontRegistry
+from edith.forms import extract_fields
 from edith.paragraphs import extract_paragraphs
 
 
@@ -40,7 +41,7 @@ def extract_structure(doc: pymupdf.Document) -> dict:
             "rotation": page.rotation,
             "hasText": bool(page.get_text("text").strip()),
         })
-    return {"page_count": doc.page_count, "pages": pages}
+    return {"page_count": doc.page_count, "pages": pages, "fields": extract_fields(doc)}
 
 
 def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:

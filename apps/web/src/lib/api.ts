@@ -1,4 +1,5 @@
 import type { BundledFont, ExportRequest, Rect, RenderPageRequest, Run } from "@edith/ops";
+import type { CharLine } from "@/lib/markup";
 import type { StructurePage } from "@/store/editor";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
@@ -22,8 +23,21 @@ export interface DocFont {
 }
 export interface TextData { doc_id: string; pages: { index: number; paragraphs: Paragraph[] }[]; fonts: DocFont[] }
 
+/** One AcroForm widget (GET /documents/{id}/structure). Radio buttons of a group share `name`. */
+export interface FormField {
+  name: string; type: "text" | "checkbox" | "radio" | "combo" | "list" | "button" | "signature";
+  /** Text/choice value; checkbox/radio: the widget's state name ("Off" when not chosen). */
+  value: string;
+  /** Checkbox/radio: the state name of this widget when it is on. */
+  onState: string | null;
+  options: string[] | null; page: number; rect: Rect; readOnly: boolean; multiline: boolean;
+  /** 0 = auto. */
+  fontSize: number;
+}
+export type { CharLine } from "@/lib/markup";
+
 export interface UploadResult { doc_id: string; sha256: string; page_count: number }
-export interface Structure { doc_id: string; sha256: string; page_count: number; pages: StructurePage[] }
+export interface Structure { doc_id: string; sha256: string; page_count: number; pages: StructurePage[]; fields: FormField[] }
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
   let res: Response;
@@ -54,6 +68,10 @@ export async function getStructure(docId: string): Promise<Structure> {
 
 export async function getText(docId: string): Promise<TextData> {
   return (await request(`/documents/${docId}/text`)).json();
+}
+
+export async function getChars(docId: string, index: number): Promise<CharLine[]> {
+  return ((await (await request(`/documents/${docId}/pages/${index}/chars`)).json()) as { lines: CharLine[] }).lines;
 }
 
 export function fontFileUrl(docId: string, ref: string): string {

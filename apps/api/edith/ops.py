@@ -135,6 +135,95 @@ class RedactAdd(_Content):
     fill: Literal["black", "white"] = "black"
 
 
+class SignatureAdd(_Content):
+    """A signature image (drawn, typed or uploaded; always a PNG/JPEG asset)."""
+    type: Literal["signature.add"]
+    rect: Rect
+    assetId: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
+# 17 English presets (spec) followed by their 17 Indonesian equivalents, in the same order.
+STAMP_PRESETS = (
+    "approved", "not-approved", "draft", "final", "completed", "confidential", "for-public-release",
+    "not-for-public-release", "for-comment", "void", "preliminary-results", "information-only", "witness",
+    "initial-here", "sign-here", "accepted", "rejected",
+    "disetujui", "tidak-disetujui", "draf", "final-id", "selesai", "rahasia", "untuk-publik",
+    "tidak-untuk-publik", "untuk-dikomentari", "batal", "hasil-sementara", "hanya-informasi", "saksi",
+    "paraf-di-sini", "tanda-tangan-di-sini", "diterima", "ditolak",
+)
+StampPreset = Literal[STAMP_PRESETS]  # type: ignore[valid-type]
+
+
+class StampCustom(Model):
+    text: str = Field(min_length=1, max_length=60)
+    date: str | None = Field(default=None, max_length=40)  # formatted by the client, drawn as is
+    time: str | None = Field(default=None, max_length=20)
+
+
+class StampAdd(_Content):
+    type: Literal["stamp.add"]
+    rect: Rect
+    preset: StampPreset | None = None
+    custom: StampCustom | None = None
+    color: HexColor
+
+    @model_validator(mode="after")
+    def _one_kind(self):
+        if (self.preset is None) == (self.custom is None):
+            raise ValueError("stamp needs exactly one of preset, custom")
+        return self
+
+
+class SymbolAdd(_Content):
+    type: Literal["symbol.add"]
+    kind: Literal["check", "cross"]
+    rect: Rect
+    color: HexColor
+
+
+class UrlTarget(Model):
+    url: str = Field(max_length=2048, pattern=r"^(https?://|mailto:)\S+$")
+
+
+class PageTarget(Model):
+    pageKey: PageKey
+
+
+class LinkAdd(_Content):
+    type: Literal["link.add"]
+    rect: Rect
+    target: UrlTarget | PageTarget
+
+
+class AnnotAdd(_Content):
+    """A native PDF annotation: text markup over `quads` (one rect per line, horizontal text) or a
+    sticky note whose icon's top-left corner is `point`."""
+    type: Literal["annot.add"]
+    kind: Literal["highlight", "underline", "strike", "note"]
+    quads: list[Rect] | None = Field(default=None, min_length=1, max_length=2000)
+    point: Point | None = None
+    color: HexColor
+    content: str | None = Field(default=None, max_length=10000)
+
+    @model_validator(mode="after")
+    def _geometry(self):
+        if self.kind == "note":
+            if self.point is None or self.quads is not None:
+                raise ValueError("note needs point (and no quads)")
+        elif self.quads is None or self.point is not None:
+            raise ValueError(f"{self.kind} needs quads (and no point)")
+        return self
+
+
+class FormSet(Model):
+    """Value of AcroForm field `fieldName` (every widget of that name): text/combo/list -> the string,
+    checkbox -> bool, radio -> the on-state name of the chosen button (or "Off")."""
+    id: OpId
+    type: Literal["form.set"]
+    fieldName: str = Field(min_length=1, max_length=500)
+    value: str | bool
+
+
 class DocSrc(Model):
     doc: str
     index: int = Field(ge=0)
@@ -168,9 +257,11 @@ class PagesLayout(Model):
         return self
 
 
-ContentOp = Union[TextAdd, TextEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd]
+ContentOp = Union[TextAdd, TextEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd,
+                  SignatureAdd, StampAdd, SymbolAdd, LinkAdd, AnnotAdd]
 Op = Annotated[
-    Union[TextAdd, TextEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd, PagesLayout],
+    Union[TextAdd, TextEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd,
+          SignatureAdd, StampAdd, SymbolAdd, LinkAdd, AnnotAdd, FormSet, PagesLayout],
     Field(discriminator="type"),
 ]
 
@@ -184,6 +275,9 @@ def _check_ops(ops: list) -> None:
     edited = [(op.pageKey, op.paragraphId) for op in ops if op.type == "text.edit"]
     if len(edited) != len(set(edited)):
         raise ValueError("at most one text.edit per (pageKey, paragraphId)")
+    fields = [op.fieldName for op in ops if op.type == "form.set"]
+    if len(fields) != len(set(fields)):
+        raise ValueError("at most one form.set per fieldName")
 
 
 class ExportRequest(Model):

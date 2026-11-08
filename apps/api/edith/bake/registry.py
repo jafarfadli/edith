@@ -12,9 +12,11 @@ TEXT_REDACTIONS: dict[str, Handler] = {}
 
 
 def register(op_type: str, phase: str = "draw"):
-    """phase "draw" or "redact": the op's main handler. phase "redact_text": an extra handler that
-    marks text for the text-only redaction pass (an op type may have both)."""
-    assert phase in ("redact_text", "redact", "draw")
+    """phase "redact", "draw", "annot" or "link": the op's main handler; per page, bake() runs the
+    redactions, then the drawn content, then native annotations, then links (spec: Urutan bake).
+    phase "redact_text": an extra handler that marks text for the text-only redaction pass (an op
+    type may have both)."""
+    assert phase in ("redact_text", "redact", "draw", "annot", "link")
 
     def deco(fn: Handler) -> Handler:
         if phase == "redact_text":

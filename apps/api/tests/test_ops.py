@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from edith.ops import BundledFont, ExportRequest, OriginalFont, PagesLayout, Run, ShapeAdd, TextAdd, TextEdit
+from edith.ops import (STAMP_PRESETS, AnnotAdd, BundledFont, ExportRequest, FormSet, LinkAdd, OriginalFont, PageTarget, PagesLayout,
+                       Run, ShapeAdd, StampAdd, TextAdd, TextEdit, UrlTarget)
 from edith.settings import REPO_ROOT
 from scripts.export_schema import build_schema
 
@@ -100,3 +101,66 @@ def test_paragraph_id_and_font_ref_patterns():
     for bad in ({"kind": "original", "ref": "3"}, {"kind": "original"}, {"family": "Arimo", "ref": "f1"}):
         with pytest.raises(ValidationError):
             Run.model_validate({**run, "font": bad})
+
+
+def test_annotations_example_validates():
+    data = json.loads((OPS_DIR / "examples" / "annotations.json").read_text())
+    req = ExportRequest.model_validate(data)
+    assert [op.type for op in req.ops] == ["pages.layout", "signature.add", "stamp.add", "stamp.add", "symbol.add",
+                                           "link.add", "link.add", "annot.add", "annot.add", "form.set", "form.set"]
+    assert isinstance(req.ops[6].target, PageTarget) and req.ops[6].target.pageKey == "o1"
+    assert isinstance(req.ops[5].target, UrlTarget)
+    assert req.ops[3].custom.date == "05/11/2026"
+    assert req.ops[-1].value is True and req.flatten_forms is True
+
+
+def _annot(**kw) -> dict:
+    return {"id": "a", "type": "annot.add", "pageKey": "o0", "color": "#ffeb3b", **kw}
+
+
+QUAD = {"x": 0, "y": 0, "w": 10, "h": 10}
+
+
+def test_annot_geometry():
+    AnnotAdd.model_validate(_annot(kind="highlight", quads=[QUAD]))
+    AnnotAdd.model_validate(_annot(kind="note", point=[1, 2], content="x"))
+    for bad in (_annot(kind="highlight"), _annot(kind="underline", quads=[]), _annot(kind="strike", quads=[QUAD], point=[0, 0]),
+                _annot(kind="note"), _annot(kind="note", point=[0, 0], quads=[QUAD]), _annot(kind="squiggly", quads=[QUAD])):
+        with pytest.raises(ValidationError):
+            AnnotAdd.model_validate(bad)
+
+
+def test_stamp_needs_exactly_one_kind():
+    base = {"id": "s", "type": "stamp.add", "pageKey": "o0", "rect": QUAD, "color": "#15803d"}
+    assert len(STAMP_PRESETS) == 34 and len(set(STAMP_PRESETS)) == 34
+    assert STAMP_PRESETS[:17] == ("approved", "not-approved", "draft", "final", "completed", "confidential", "for-public-release",
+                                  "not-for-public-release", "for-comment", "void", "preliminary-results", "information-only",
+                                  "witness", "initial-here", "sign-here", "accepted", "rejected")
+    for preset in STAMP_PRESETS:
+        StampAdd.model_validate({**base, "preset": preset})
+    StampAdd.model_validate({**base, "preset": "disetujui"})
+    StampAdd.model_validate({**base, "custom": {"text": "OK"}})
+    for bad in (base, {**base, "preset": "approved", "custom": {"text": "OK"}}, {**base, "preset": "nope"},
+                {**base, "custom": {"text": ""}}):
+        with pytest.raises(ValidationError):
+            StampAdd.model_validate(bad)
+
+
+def test_link_targets():
+    base = {"id": "l", "type": "link.add", "pageKey": "o0", "rect": QUAD}
+    for ok in ({"url": "https://a.b/c?d=1"}, {"url": "http://x"}, {"url": "mailto:a@b.c"}, {"pageKey": "u-1"}):
+        LinkAdd.model_validate({**base, "target": ok})
+    for bad in ({"url": "javascript:alert(1)"}, {"url": "example.com"}, {"url": "https://a b"}, {"pageKey": "x"}, {}):
+        with pytest.raises(ValidationError):
+            LinkAdd.model_validate({**base, "target": bad})
+
+
+def test_one_form_set_per_field():
+    f = {"type": "form.set", "fieldName": "nama", "value": "x"}
+    ExportRequest.model_validate({"ops": [{**f, "id": "a"}, {**f, "id": "b", "fieldName": "lain", "value": False}]})
+    with pytest.raises(ValidationError):
+        ExportRequest.model_validate({"ops": [{**f, "id": "a"}, {**f, "id": "b"}]})
+    with pytest.raises(ValidationError):  # form.set is not page content
+        FormSet.model_validate({**f, "id": "a", "pageKey": "o0"})
+    with pytest.raises(ValidationError):
+        FormSet.model_validate({**f, "id": "a", "value": 3})

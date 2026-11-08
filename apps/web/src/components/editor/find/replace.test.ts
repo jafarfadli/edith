@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
 import { fontStore, metricsFromBuffer } from "@/lib/fonts";
+import { noticeStore } from "@/lib/notices";
 import { findMatches, nextMatchIndex } from "@/lib/search";
+import { t } from "@/lib/strings";
 import { buildTargets } from "@/lib/targets";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
@@ -100,5 +102,27 @@ describe("applyReplacements", () => {
     expect(after.past.length).toBe(before + 2); // only the two edits made meanwhile
     expect((after.doc.objects.t as TextAdd).box.paragraphs[0][0].text).toBe("diketik");
     expect(Object.values(after.doc.objects).filter((o) => o.type === "text.edit")).toHaveLength(1);
+  });
+});
+
+describe("Replace All and markup", () => {
+  it("deletes the markup on a replaced original paragraph in the same undo step", async () => {
+    noticeStore.setState({ notice: null });
+    const st = editorStore.getState();
+    st.addObject({ id: "h", type: "annot.add", pageKey: "o0", kind: "highlight", quads: [{ x: 100, y: 89.2, w: 40, h: 13.8 }], color: "#ffeb3b" } as ContentOp);
+    st.addObject({ id: "far", type: "annot.add", pageKey: "o0", kind: "underline", quads: [{ x: 100, y: 400, w: 40, h: 13.8 }], color: "#ffeb3b" } as ContentOp);
+    st.addObject({ id: "n", type: "annot.add", pageKey: "o0", kind: "note", point: [100, 92], color: "#facc15", content: "x" } as ContentOp);
+    const matches = findMatches(buildTargets(editorStore.getState().doc, textStore.getState().pages), "lama", true);
+    const before = editorStore.getState().past.length;
+    await applyReplacements(matches, "baru");
+    const after = editorStore.getState();
+    expect(after.past.length).toBe(before + 1);
+    expect(after.doc.objects.h).toBeUndefined();
+    expect(after.doc.objects.far && after.doc.objects.n).toBeDefined();
+    expect(noticeStore.getState().notice).toEqual({ kind: "info", text: t.text.markupRemoved });
+    editorStore.getState().undo();
+    const undone = editorStore.getState().doc;
+    expect(undone.objects.h).toBeDefined();
+    expect(Object.values(undone.objects).some((o) => o.type === "text.edit")).toBe(false);
   });
 });

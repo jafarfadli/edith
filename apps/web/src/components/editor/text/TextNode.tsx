@@ -7,6 +7,9 @@ import { charOffsets, cssFamily, fontKey, fontStore, textWidth } from "@/lib/fon
 import { decorBands } from "@/lib/textDecor";
 import { boxFonts } from "@/lib/textbox";
 import { fontsReady } from "./textEdit";
+import { useOverflow } from "./useOverflow";
+
+const OVERFLOW = "#ea580c";
 
 /** Draws a text box glyph-by-glyph at the PDF-quantized offsets — the same positions the API bakes —
  *  with backgrounds under and underline/strike over the glyphs, as the bake does. */
@@ -26,11 +29,17 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys, ready]);
 
+  const overflow = useOverflow(op);
   const runs = box.paragraphs.flat();
   const { x, y, w, h } = box.rect;
   return (
     <>
       <Rect x={x} y={y} width={w} height={h} fill="transparent" />
+      {overflow && !hidden && (
+        // Owner decision (M2 backlog): longer text is not pushed down; show that it may cover what follows.
+        <Rect name="overflow" x={x - 2} y={y - 2} width={w + 4} height={h + 4} stroke={OVERFLOW} strokeWidth={1.5}
+          strokeScaleEnabled={false} dash={[6, 3]} listening={false} />
+      )}
       {ready && !hidden && (
         <Shape
           listening={false}

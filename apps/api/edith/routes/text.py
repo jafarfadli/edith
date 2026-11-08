@@ -2,8 +2,9 @@ import re
 
 from fastapi import APIRouter, Request, Response
 
+from edith.chars import page_chars
 from edith.doc_fonts import font_bytes
-from edith.errors import DocExpired, FontNotFound
+from edith.errors import DocExpired, FontNotFound, PageNotFound
 from edith.extract import extract_text, open_pdf
 
 router = APIRouter()
@@ -24,6 +25,17 @@ def get_text(request: Request, doc_id: str) -> dict:
     doc = _open_source(request, doc_id)
     try:
         return {"doc_id": doc_id, **extract_text(doc, request.app.state.fonts)}
+    finally:
+        doc.close()
+
+
+@router.get("/documents/{doc_id}/pages/{index}/chars")
+def get_chars(request: Request, doc_id: str, index: int) -> dict:
+    doc = _open_source(request, doc_id)
+    try:
+        if not 0 <= index < doc.page_count:
+            raise PageNotFound(f"no page {index}")
+        return {"doc_id": doc_id, "index": index, "lines": page_chars(doc[index])}
     finally:
         doc.close()
 

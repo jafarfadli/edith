@@ -6,12 +6,16 @@ import pymupdf
 from edith.bake.context import BakeContext
 from edith.bake.pages import build_pages
 from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
+from edith.bake.scrub import scrub_page, under_redaction
 from edith.bake.source import SourcePages
+from edith.bake.text import links_under_redactions, restore_links
+from edith.bake.util import to_rect
 from edith.errors import BakeFailed, EdithError, InvalidOp
-from edith.ops import DocSrc, LayoutPage, PagesLayout
+from edith.forms import FieldValueError, drop_xfa, fill_forms
+from edith.ops import DocSrc, LayoutPage, PageTarget, PagesLayout
 
 # Handler modules register themselves on import (later tasks add more, e.g. text):
-from edith.bake import draw, text  # noqa: F401,E402  (registers handlers)
+from edith.bake import annots, draw, stamps, symbols, text  # noqa: F401,E402  (registers handlers)
 
 # text.edit removes only the glyphs of the edited lines; images and vector art stay.
 TEXT_ONLY = dict(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
@@ -36,7 +40,23 @@ def _run(handler, page, op, ctx) -> None:
         raise BakeFailed(str(exc), op_id=op.id) from exc
 
 
-def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
+def _fill(doc: pymupdf.Document, forms: list, flatten: bool, widgets_removed: bool) -> None:
+    if forms or flatten or widgets_removed:
+        drop_xfa(doc)
+    try:
+        fill_forms(doc, forms)
+    except FieldValueError as exc:
+        raise BakeFailed(str(exc), op_id=exc.op_id) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise BakeFailed(f"cannot fill the form: {exc}") from exc
+    if flatten:
+        try:
+            doc.bake(annots=False, widgets=True)  # widgets become page content; other annotations stay
+        except Exception as exc:  # noqa: BLE001
+            raise BakeFailed(f"cannot flatten the form: {exc}") from exc
+
+
+def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False) -> pymupdf.Document:
     doc = pymupdf.open(stream=source, filetype="pdf")
     pages_src = None
     try:
@@ -55,7 +75,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
         ctx = replace(ctx, source=pages_src)
 
         keys = {p.pageKey for p in layout.pages}
-        content = [(i, op) for i, op in enumerate(ops) if op.type != "pages.layout"]
+        content = [(i, op) for i, op in enumerate(ops) if op.type not in ("pages.layout", "form.set")]
         for i, op in content:
             if op.pageKey not in keys:
                 raise InvalidOp(f"unknown pageKey {op.pageKey}", op_index=i)
@@ -63,26 +83,41 @@ def bake(source: bytes, ops: list, ctx: BakeContext) -> pymupdf.Document:
                 raise BakeFailed(f"no handler for {op.type}", op_id=op.id)
             if op.type == "text.edit" and pages_src.paragraph(op.pageKey, op.paragraphId) is None:
                 raise InvalidOp(f"no paragraph {op.paragraphId} on {op.pageKey}", op_index=i)
+            if op.type == "link.add" and isinstance(op.target, PageTarget) and op.target.pageKey not in keys:
+                raise InvalidOp(f"link to unknown pageKey {op.target.pageKey}", op_index=i)
 
         key_to_index, base_rotation = build_pages(doc, layout, layout_index, ctx)
+        ctx = replace(ctx, page_index=key_to_index)
 
         by_page: dict[int, list] = defaultdict(list)
         for _, op in content:
             by_page[key_to_index[op.pageKey]].append(op)
 
+        widgets_removed = False
+        redact_handlers = {t: HANDLERS[t] for t, phase in PHASE.items() if phase == "redact"}
         for page_index, page_ops in by_page.items():
             page = doc[page_index]
             # Two passes: one apply_redactions() call has a single images/graphics mode.
-            redact_handlers = {t: HANDLERS[t] for t, phase in PHASE.items() if phase == "redact"}
             for handlers, mode in ((TEXT_REDACTIONS, TEXT_ONLY), (redact_handlers, EVERYTHING)):
                 marked = [op for op in page_ops if op.type in handlers]
                 for op in marked:
                     _run(handlers[op.type], page, op, ctx)
                 if marked:
+                    kept = links_under_redactions(page) if mode is TEXT_ONLY else []
                     page.apply_redactions(**mode)
-            for op in page_ops:
-                if PHASE[op.type] == "draw":
-                    _run(HANDLERS[op.type], page, op, ctx)
+                    restore_links(page, kept)  # text.edit replaces glyphs, not the links over them
+            # What apply_redactions() leaves under a redaction box: annotations, links, form fields.
+            boxes = [to_rect(op.rect) for op in page_ops if op.type == "redact.add"]
+            if boxes:
+                widgets_removed |= scrub_page(page, boxes) > 0
+            # Drawn content in stacking order, then native annotations over it, then links (none under
+            # a redaction box: it would show — or carry — what the box hides).
+            for phase in ("draw", "annot", "link"):
+                for op in page_ops:
+                    if PHASE[op.type] == phase and not (phase != "draw" and under_redaction(op, boxes)):
+                        _run(HANDLERS[op.type], page, op, ctx)
+
+        _fill(doc, [op for op in ops if op.type == "form.set"], flatten_forms, widgets_removed)
 
         for i, entry in enumerate(layout.pages):
             doc[i].set_rotation((base_rotation[i] + entry.rotate) % 360)

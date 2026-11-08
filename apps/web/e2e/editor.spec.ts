@@ -73,3 +73,35 @@ test("rejects a non-PDF upload with an Indonesian message", async ({ page }) => 
   // Next.js also renders its own route-announcer role=alert, so filter by text.
   await expect(page.getByRole("alert").filter({ hasText: "bukan PDF" })).toBeVisible();
 });
+
+test("place an Indonesian preset stamp and a custom stamp with date", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("file-input").setInputFiles(SAMPLE);
+  await expect(page.getByTestId("page")).toHaveCount(3);
+
+  await page.getByRole("button", { name: "Gambar pilihan" }).click();
+  await page.getByRole("menuitem", { name: "Stamp" }).click();
+  const dialog = page.getByRole("dialog", { name: "Pilih stamp" });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("button", { name: "Gambar pilihan" }).click();
+  await page.getByRole("menuitem", { name: "Stamp" }).click();
+  await expect(dialog.getByRole("button", { name: "TANDA TANGAN DI SINI", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("radio", { name: "Indonesia" })).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.getByRole("button", { name: "DISETUJUI", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "APPROVED", exact: true })).toHaveCount(0);
+  await dialog.getByRole("radio", { name: "English" }).click();
+  await expect(dialog.getByRole("button", { name: "APPROVED", exact: true })).toBeVisible();
+  await dialog.getByRole("radio", { name: "Indonesia" }).click();
+  await dialog.getByRole("button", { name: "DISETUJUI", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("radiogroup", { name: "Warna" })).toBeVisible(); // stamp selected: color swatches
+
+  await page.getByRole("button", { name: "Gambar pilihan" }).click();
+  await page.getByRole("menuitem", { name: "Stamp" }).click();
+  await page.getByRole("tab", { name: "Kustom" }).click();
+  await page.getByRole("textbox", { name: "Teks stamp" }).fill("DIPERIKSA");
+  await page.getByRole("button", { name: "Tambahkan stamp" }).click();
+  await expect(page.getByRole("dialog", { name: "Pilih stamp" })).toHaveCount(0);
+  await expect(page.getByRole("radiogroup", { name: "Warna" })).toBeVisible();
+});

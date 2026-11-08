@@ -110,3 +110,18 @@ def test_original_subset_font_is_reused(ctx):
     assert "Tinos" in span["font"]
     sizes = {len(out.extract_font(x[0])[3]) for x in out[0].get_fonts(full=True)}
     assert len(SUBSET_TTF.read_bytes()) in sizes  # the 8 KB subset, not the 500 KB bundled Tinos
+
+
+def test_links_over_the_edited_paragraph_survive(ctx):
+    """The text-only redaction of the old lines also deletes links touching them: they are put back."""
+    src = pymupdf.open(stream=make_edit_pdf(), filetype="pdf")
+    src[0].insert_link({"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(72, 88, 250, 104), "uri": "https://contoh.id/a(b)"})
+    src[0].insert_link({"kind": pymupdf.LINK_GOTO, "from": pymupdf.Rect(72, 104, 120, 116), "page": 0,
+                        "to": pymupdf.Point(0, 0), "zoom": 0})
+    src[0].insert_link({"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(400, 700, 450, 720), "uri": "https://lain.id"})
+    out = reload(bake(src.tobytes(), ops(edit()), ctx))
+    got = sorted((ln["kind"], ln.get("uri"), ln.get("page"), tuple(round(v, 1) for v in ln["from"])) for ln in out[0].get_links())
+    assert got == [(pymupdf.LINK_GOTO, None, 0, (72, 104, 120, 116)),
+                   (pymupdf.LINK_URI, "https://contoh.id/a(b)", None, (72, 88, 250, 104)),
+                   (pymupdf.LINK_URI, "https://lain.id", None, (400, 700, 450, 720))]
+    assert "Teks baru" in text(out[0])

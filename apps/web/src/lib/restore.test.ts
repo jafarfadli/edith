@@ -32,3 +32,14 @@ describe("restoreDraft", () => {
     expect(bad([{ pageKey: "u-b", src: { blank: { width: "1", height: 1 } }, rotate: 0 }])).toBeNull();
   });
 });
+
+describe("restoreDraft forms", () => {
+  const pages = [{ pageKey: "o0", src: { doc: "OLD", index: 0 }, rotate: 0 as const }];
+  it("keeps string/boolean form values and drops anything else", () => {
+    const draft = { pages, objects: {}, order: [], forms: { nama: "Budi", setuju: true, bad: 3 } } as never;
+    expect(restoreDraft(draft, "NEW", 1)!.forms).toEqual({ nama: "Budi", setuju: true });
+  });
+  it("gives M1/M2 drafts an empty form", () => {
+    expect(restoreDraft({ pages, objects: {}, order: [] }, "NEW", 1)!.forms).toEqual({});
+  });
+});

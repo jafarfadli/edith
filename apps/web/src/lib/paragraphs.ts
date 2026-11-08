@@ -151,9 +151,48 @@ export async function prepareRuns(paragraphs: Run[][], fonts: FontTable, store: 
   return out;
 }
 
+/** Loads the fonts of the whole fallback chain the paragraphs may need (original -> substitute -> Arimo
+ *  -> Noto Sans, in the runs' bold/italic styles) so `resolveLoadedRuns` can answer synchronously.
+ *  Never rejects: a font that fails to load just stays unresolved. */
+export async function preloadFallback(paragraphs: Run[][], fonts: FontTable, store: Loader = fontStore): Promise<void> {
+  let out = paragraphs;
+  for (let step = 0; step <= FALLBACK_STEPS; step++) {
+    await Promise.allSettled(fontsOf(out).map((f) => store.load(f)));
+    const next = fallbackStep(out, fonts, (f) => store.peek(f));
+    if (!next) return;
+    out = next;
+  }
+  await Promise.allSettled(fontsOf(out).map((f) => store.load(f)));
+}
+
 /** White covers hiding an edited paragraph's original lines on screen (the bake redacts them). */
 export function maskRects(p: Paragraph): Rect[] {
   return p.lines.map((l) => ({
     x: l.rect.x - 0.5, y: l.baseline - MASK_ASCENT * l.size, w: l.rect.w + 1, h: (MASK_ASCENT + MASK_DESCENT) * l.size,
   }));
+}
+
+/** Slack (pt) before an edited paragraph counts as taller than the original. */
+const OVERFLOW_SLACK = 0.5;
+
+/** True when the edited paragraph's laid-out height (first to last baseline) exceeds the original
+ *  paragraph's: it may run into the text below, which is not moved (owner decision, M2 backlog). */
+export function overflowsOriginal(box: TextBox, p: Paragraph): boolean {
+  const lines = box.layout;
+  if (lines.length < 2 || !p.lines.length) return false;
+  const height = lines[lines.length - 1].baseline - lines[0].baseline;
+  const original = p.lines[p.lines.length - 1].baseline - p.lines[0].baseline;
+  return height > original + OVERFLOW_SLACK;
+}
+
+/** True when some character has no glyph even after the whole font fallback (original -> substitute ->
+ *  Arimo -> Noto Sans) with the loaded fonts: the bake draws it with a builtin font or as a box (CJK,
+ *  emoji, check marks ...). False while a font of the chain is not loaded yet. */
+export function hasUnsupportedChars(paragraphs: Run[][], fonts: FontTable, peek: (f: FontRef) => FontMetrics | null): boolean {
+  const resolved = resolveLoadedRuns(paragraphs, fonts, peek);
+  if (!resolved) return false;
+  return resolved.flat().some((r) => {
+    const m = peek(r.font);
+    return !!m && !covers(m, r.text.replace(/[\n\r\t]/g, ""));
+  });
 }

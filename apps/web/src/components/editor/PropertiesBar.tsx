@@ -1,16 +1,22 @@
 "use client";
 
 import type { ContentOp } from "@edith/ops";
+import { useEffect, useRef } from "react";
 import { useStore } from "zustand";
-import { inkWidth, isTextOp } from "@/lib/objects";
+import { inkWidth, isMarkup, isTextOp, MARKUP_TOOLS } from "@/lib/objects";
 import { t } from "@/lib/strings";
-import { editorStore, useEditor, type ToolStyle } from "@/store/editor";
+import { useChars } from "@/store/chars";
+import { editorStore, useEditor, type MarkupTool, type ToolStyle } from "@/store/editor";
+import type { LinkTarget } from "@/lib/links";
+import { STAMP_COLORS } from "@/lib/stamps";
 import { ColorField } from "./ColorField";
+import { LinkTargetFields } from "./marks/LinkTargetFields";
+import { linkStore } from "./marks/linkStore";
 import { textEditStore } from "./text/textEdit";
 
 export const textPropsSlot: { render?: () => React.ReactNode } = {};
 
-type Kind = "shape" | "line" | "ink" | "redact" | "text" | null;
+type Kind = "shape" | "line" | "ink" | "redact" | "text" | "markup" | "symbol" | "note" | "link" | "stamp" | null;
 
 function kindOf(op: ContentOp | undefined, tool: string): Kind {
   if (op) {
@@ -18,8 +24,16 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
     if (op.type === "ink.add") return "ink";
     if (op.type === "redact.add") return "redact";
     if (isTextOp(op)) return "text";
+    if (isMarkup(op)) return "markup";
+    if (op.type === "symbol.add") return "symbol";
+    if (op.type === "annot.add") return "note";
+    if (op.type === "link.add") return "link";
+    if (op.type === "stamp.add") return "stamp";
     return null;
   }
+  if (MARKUP_TOOLS.has(tool)) return "markup";
+  if (tool === "check" || tool === "cross") return "symbol";
+  if (tool === "note") return "note";
   if (tool === "rect" || tool === "ellipse") return "shape";
   if (tool === "line" || tool === "arrow") return "line";
   if (tool === "ink") return "ink";
@@ -40,8 +54,33 @@ export function PropertiesBar() {
     const entry = st.doc.pages.find((p) => p.pageKey === st.currentPage);
     return tool === "text" && !!entry && "doc" in entry.src && st.info?.pages[entry.src.index]?.hasText === false;
   });
+  // The markup tools on a page without original text (or only rotated text): nothing to mark.
+  const currentSrc = useEditor((st) => {
+    const entry = st.doc.pages.find((p) => p.pageKey === st.currentPage);
+    return entry && "doc" in entry.src ? entry.src.index : -1;
+  });
+  const currentLines = useChars((cs) => cs.pages[currentSrc]);
+  const noText = MARKUP_TOOLS.has(tool) && Array.isArray(currentLines) && currentLines.length === 0;
+  const noteField = useRef<HTMLTextAreaElement>(null);
+  const focusNote = useStore(linkStore, (st) => st.focusNote);
+  // Only a note just created takes focus; selecting an existing note must leave Delete/Backspace to the editor.
+  useEffect(() => {
+    if (!focusNote || focusNote !== selection || !noteField.current) return;
+    // Past the pointerdown that created the note: its mousedown default action would blur the field again.
+    const el = noteField.current;
+    linkStore.getState().setFocusNote(null);
+    requestAnimationFrame(() => setTimeout(() => el.focus(), 0)); // not cancelled: clearing the flag re-runs this effect
+  }, [focusNote, selection]);
   const o = op as (ContentOp & Record<string, unknown>) | undefined;
   const s = editorStore.getState();
+
+  /** Color of the selected object (its `color` field), or of what the tool makes next. */
+  function setColor(v: string) {
+    if (o) s.updateObject(o.id, { color: v } as Partial<ContentOp>, { coalesce: `props:${o.id}` });
+    else if (MARKUP_TOOLS.has(tool)) s.setStyle({ markup: { ...style.markup, [tool]: v } });
+    else if (kind === "symbol") s.setStyle({ symbolColor: v });
+    else if (kind === "note") s.setStyle({ noteColor: v });
+  }
 
   const stroke = (o?.type === "ink.add" ? (o.color as string) : (o?.stroke as string | undefined)) ?? style.stroke;
   const rawWidth = (o?.width as number | undefined) ?? style.width;
@@ -95,6 +134,31 @@ export function PropertiesBar() {
             <option value="white">{t.editor.white}</option>
           </select>
         </label>
+      )}
+      {kind === "markup" && (
+        <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.markup[tool as MarkupTool] ?? style.markup.highlight}
+          onChange={(v) => setColor(v)} />
+      )}
+      {kind === "markup" && noText && <span className="text-xs text-muted">{t.annot.noText}</span>}
+      {kind === "symbol" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.symbolColor} onChange={setColor} />}
+      {kind === "note" && <ColorField label={t.editor.color} value={(o?.color as string | undefined) ?? style.noteColor} onChange={setColor} />}
+      {kind === "note" && o && (
+        <textarea key={o.id} aria-label={t.annot.noteContent} placeholder={t.annot.noteContent} ref={noteField} rows={1}
+          value={(o.content as string | null | undefined) ?? ""}
+          onChange={(e) => s.updateObject(o.id, { content: e.target.value } as Partial<ContentOp>, { coalesce: `note:${o.id}` })}
+          className="h-8 w-80 resize-none rounded border border-line px-1.5 py-1 text-ink" />
+      )}
+      {kind === "link" && o && (
+        <LinkTargetFields key={o.id} target={o.target as LinkTarget}
+          onChange={(target) => { if (target) s.updateObject(o.id, { target } as Partial<ContentOp>, { coalesce: `link:${o.id}` }); }} />
+      )}
+      {kind === "stamp" && o && (
+        <div role="radiogroup" aria-label={t.editor.color} className="flex items-center gap-1">
+          {STAMP_COLORS.map((c) => (
+            <button key={c} role="radio" aria-checked={o.color === c} aria-label={`${t.editor.color} ${c}`} onClick={() => setColor(c)}
+              className={`h-5 w-5 rounded-full ring-1 ring-line ${o.color === c ? "outline outline-2 outline-accent" : ""}`} style={{ background: c }} />
+          ))}
+        </div>
       )}
       {kind === "text" && textPropsSlot.render?.()}
       {kind === "text" && scanned && <span className="text-xs text-muted">{t.text.scanned}</span>}
