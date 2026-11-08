@@ -98,3 +98,49 @@ def test_crop_non_finite_is_invalid(ctx, x, y, w, h):
     with pytest.raises(InvalidOp) as e:
         bake(make_pdf(pages=1), req, ctx)
     assert e.value.extra["op_index"] == 0
+
+
+def annotated_pdf(xfa: bool = False) -> bytes:
+    """A4 page: a note, a highlight, a link and a text field inside (100–200) and outside (450–550) the
+    crop (60, 40, 300, 300); a second highlight straddles the crop's right edge (340–380)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    for y, name in ((100, "inside"), (450, "outside")):
+        page.add_text_annot((100, y), name)
+        page.add_highlight_annot(pymupdf.Rect(100, y + 20, 180, y + 34))
+        page.insert_link({"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(100, y + 40, 180, y + 54), "uri": f"https://{name}.example"})
+        w = pymupdf.Widget()
+        w.field_type, w.field_name, w.rect = pymupdf.PDF_WIDGET_TYPE_TEXT, name, pymupdf.Rect(100, y + 60, 250, y + 76)
+        page.add_widget(w)
+    page.add_highlight_annot(pymupdf.Rect(340, 120, 380, 134))
+    if xfa:
+        stream = doc.get_new_xref()
+        doc.update_object(stream, "<<>>")
+        doc.update_stream(stream, b"<xdp:xdp/>")
+        doc.xref_set_key(doc.pdf_catalog(), "AcroForm/XFA", f"{stream} 0 R")
+    return doc.tobytes()
+
+
+def test_crop_removes_what_it_hides_entirely(ctx):
+    out = reopened(bake(annotated_pdf(), ops(layout(page("o0", 0, crop=(60, 40, 300, 300)))), ctx))
+    p = out[0]
+    assert sorted(a.type[1] for a in p.annots()) == ["Highlight", "Highlight", "Text"]  # inside + straddling
+    assert [ln["uri"] for ln in p.get_links()] == ["https://inside.example"]
+    assert [w.field_name for w in p.widgets()] == ["inside"]
+    assert out.is_form_pdf
+
+
+def test_uncropped_pages_keep_everything(ctx):
+    out = reopened(bake(annotated_pdf(), ops(layout(page("o0", 0), page("u-d", 0, crop=(60, 40, 300, 300)))), ctx))
+    assert len(list(out[0].widgets())) == 2 and len(out[0].get_links()) == 2
+    assert len(list(out[1].widgets())) == 1
+
+
+def test_crop_that_removes_widgets_drops_xfa(ctx):
+    def xfa(data: bytes) -> str:
+        d = pymupdf.open(stream=data, filetype="pdf")
+        return d.xref_get_key(d.pdf_catalog(), "AcroForm/XFA")[0]
+    src = annotated_pdf(xfa=True)
+    assert xfa(src) == "xref"
+    assert xfa(bake(src, ops(layout(page("o0", 0, crop=(60, 40, 300, 300)))), ctx).tobytes()) == "null"
+    assert xfa(bake(src, ops(layout(page("o0", 0, crop=(60, 40, 500, 700)))), ctx).tobytes()) == "xref"  # nothing removed

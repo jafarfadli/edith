@@ -7,7 +7,7 @@ import pymupdf
 from edith.bake.context import BakeContext
 from edith.bake.pages import build_pages
 from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
-from edith.bake.scrub import scrub_page, under_redaction
+from edith.bake.scrub import scrub_outside, scrub_page, under_redaction
 from edith.bake.source import SourcePages
 from edith.bake.text import links_under_redactions, restore_links
 from edith.bake.transform import draw_transformed
@@ -136,12 +136,17 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
 
         _fill(doc, [op for op in ops if op.type == "form.set"], flatten_forms, widgets_removed)
 
-        # Crop and rotation last: neither moves the content (spec: Urutan bake 7).
+        # Crop and rotation last: neither moves the content (spec: Urutan bake 7). Annotations, links and
+        # widgets the crop hides entirely go (owner decision); a removed widget makes the XFA stale.
+        cropped_widgets = 0
         for i, entry in enumerate(layout.pages):
             if crops[i] is not None:
+                cropped_widgets += scrub_outside(doc[i], crops[i])
                 cb = doc[i].cropbox  # MediaBox coordinates, top-left origin
                 doc[i].set_cropbox(crops[i] + (cb.x0, cb.y0, cb.x0, cb.y0))
             doc[i].set_rotation((base_rotation[i] + entry.rotate) % 360)
+        if cropped_widgets:
+            drop_xfa(doc)
         return doc
     except BaseException:
         doc.close()

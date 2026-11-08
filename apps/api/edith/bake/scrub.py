@@ -18,6 +18,16 @@ def _hits(rect: pymupdf.Rect, boxes: list[pymupdf.Rect]) -> bool:
 def scrub_page(page: pymupdf.Page, boxes: list[pymupdf.Rect]) -> int:
     """Deletes every annotation, form widget and link of `page` that touches one of `boxes`; returns how
     many widgets went."""
+    return _scrub(page, lambda r: _hits(r, boxes))
+
+
+def scrub_outside(page: pymupdf.Page, crop: pymupdf.Rect) -> int:
+    """Deletes every annotation, form widget and link of `page` lying entirely outside `crop` (owner decision:
+    a crop removes what it hides; what it cuts through stays); returns how many widgets went."""
+    return _scrub(page, lambda r: not r.intersects(crop))
+
+
+def _scrub(page: pymupdf.Page, doomed) -> int:
     widgets = 0
     for xref, kind, *_ in page.annot_xrefs():
         if kind == pymupdf.PDF_ANNOT_POPUP:
@@ -27,7 +37,7 @@ def scrub_page(page: pymupdf.Page, boxes: list[pymupdf.Rect]) -> int:
         except Exception as exc:  # noqa: BLE001
             log.warning("cannot load annotation %s on page %s: %s", xref, page.number, exc)
             continue
-        if annot is None or not _hits(annot.rect, boxes):
+        if annot is None or not doomed(annot.rect):
             continue
         if kind == pymupdf.PDF_ANNOT_WIDGET:
             page.delete_widget(annot)
@@ -35,7 +45,7 @@ def scrub_page(page: pymupdf.Page, boxes: list[pymupdf.Rect]) -> int:
         else:
             page.delete_annot(annot)
     for link in page.get_links():
-        if _hits(link["from"], boxes):
+        if doomed(link["from"]):
             page.delete_link(link)
     return widgets
 
