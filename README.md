@@ -26,7 +26,11 @@ Prasyarat: Node 22+, uv.
 
     npm run test:api
     npm test -w apps/web
-    E2E_WEB_PORT=3000 E2E_API_PORT=8000 npm run e2e -w apps/web   # port bawaan; pakai port lain bila 3000/8000 sudah dipakai
+    npm run e2e -w apps/web                                        # menyalakan API :8000 dan web :3000 baru; gagal bila port sudah dipakai
+    E2E_WEB_PORT=3100 E2E_API_PORT=8100 npm run e2e -w apps/web    # port lain bila 3000/8000 sudah dipakai
+    E2E_REUSE=1 npm run e2e -w apps/web                            # pakai server yang sudah jalan di port itu (dev server sendiri)
+
+`E2E_API_PORT` dan `E2E_WEB_PORT` memilih port server tes (bawaan 8000 dan 3000). Tanpa `E2E_REUSE=1` Playwright selalu menyalakan server sendiri, jadi tidak diam-diam menguji server lain yang kebetulan menjawab di port itu.
 
 Fixture yang dihasilkan dari kode API (jalankan ulang setelah mengubah ekstraksi atau fixture-nya):
 
@@ -47,6 +51,10 @@ Setelah mengubah `apps/api/edith/ops.py`:
 ## Docker
 
     docker compose up --build
+
+## Deploy
+
+API dan web dirilis terpisah; rilis API lebih dulu, baru web. Web sejak M5 mengirim `paragraphs_version` saat ekspor dan pratinjau, dan API lama menolak field yang tidak dikenalnya (422), jadi web baru di atas API lama membuat unduhan gagal. Sebaliknya aman: API baru menerima permintaan web lama (tanpa field itu dianggap versi 1); hanya edit teks yang id paragrafnya dari versi lama ditolak (409 `text_outdated`) dan perlu muat ulang dokumen.
 
 ## Lisensi
 

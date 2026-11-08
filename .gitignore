@@ -17,4 +17,7 @@ apps/web/AGENTS.md
 # Owner reference PDFs (not ours to publish)
 references/
 # Optional CJK font pack: node packages/fonts/scripts/fetch-cjk.mjs
-packages/fonts/files/cjk/
+packages/fonts/files/cjk
+# Local agent/tooling state
+.claude/
+.superpowers/
