@@ -98,6 +98,22 @@ describe("FontStore", () => {
     await expect(new FontStore("/fonts").load(sub)).rejects.toThrow("unknown font family Noto Sans KR");
   });
 
+  it("fetches and parses a font file once for every style that resolves to it", async () => {
+    // The CJK pack has no italics: italic uses the regular file, bold italic the bold one (6–15 MB each).
+    const cjk = { "Noto Sans KR": { category: "sans", script: "kr", files: { regular: "cjk/NotoSansKR-Regular.ttf", bold: "cjk/NotoSansKR-Bold.ttf" } } };
+    const fetchMock = vi.fn(async (url: string) => (url.endsWith("manifest.json") ? json({ ...manifest, cjk }) : new Response(bytes(), { status: 200 })));
+    vi.stubGlobal("fetch", fetchMock);
+    const store = new FontStore("/fonts");
+    const kr = (bold: boolean, italic: boolean) => ({ kind: "bundled" as const, family: "Noto Sans KR", bold, italic });
+    const [regular, italic] = await Promise.all([store.load(kr(false, false)), store.load(kr(false, true))]);
+    const [bold, boldItalic] = [await store.load(kr(true, false)), await store.load(kr(true, true))];
+    const files = fetchMock.mock.calls.map(([u]) => u).filter((u) => !u.endsWith("manifest.json"));
+    expect(files).toEqual(["/fonts/cjk/NotoSansKR-Regular.ttf", "/fonts/cjk/NotoSansKR-Bold.ttf"]);
+    expect(italic).toBe(regular); // one parse
+    expect(boldItalic).toBe(bold);
+    expect(store.peek(kr(false, true))).toBe(regular);
+  });
+
   it("rejects a failed TTF fetch and retries later", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.endsWith("manifest.json")) return json(manifest);

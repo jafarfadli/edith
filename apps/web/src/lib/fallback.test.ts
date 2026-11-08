@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FontRef, Run } from "@edith/ops";
 import type { DocFont } from "@/lib/api";
 import { cjkScript, documentScript, fallbackChain, hasUnsupportedChars, preloadFallback, prepareRuns, resolveLoadedRuns, type CjkScript, type FallbackFonts } from "@/lib/fallback";
@@ -39,6 +39,13 @@ describe("cjkScript / documentScript", () => {
   it("knows Hangul, kana and Han (Han and CJK punctuation follow the document)", () => {
     expect(["한", "ㄱ", "か", "カ", "漢", "。", "Ａ", "a"].map((c) => cjkScript(c.codePointAt(0)!, "sc"))).toEqual(["kr", "kr", "jp", "jp", "sc", "sc", "sc", null]);
   });
+  it("counts enclosed, compatibility and half-width Hangul as Korean and Bopomofo as Chinese", () => {
+    const of = (cps: number[], han: CjkScript = "jp") => cps.map((cp) => cjkScript(cp, han));
+    expect(of([0x3131, 0x318e, 0x3200, 0x321e, 0x3260, 0x327e, 0x327f, 0xffa0, 0xffdc])).toEqual(Array(9).fill("kr"));
+    expect(of([0x3220, 0x3280, 0x3290])).toEqual(["jp", "jp", "jp"]); // enclosed ideographs: the document's script
+    expect(of([0x3100, 0x3105, 0x312f, 0x31a0], "kr")).toEqual(["sc", "sc", "sc", "sc"]); // Bopomofo
+    expect(documentScript(["㉠㈀ 漢字"])).toBe("kr");
+  });
   it("picks the document's script for Han characters", () => {
     expect(documentScript(["사증발급신청서 漢字姓名"])).toBe("kr");
     expect(documentScript(["漢字かな"])).toBe("jp");
@@ -70,6 +77,19 @@ describe("resolveLoadedRuns", () => {
   it("keeps a character no font has in the last font of its chain", () => {
     expect(texts(resolveLoadedRuns([[run("a😀", bundled("Lato"))]], fonts, (f) => (fontKey(f) === "Lato-regular" ? has("a") : peekAll(f)), lookup())))
       .toEqual([["a", "Lato"], ["😀", "Noto Sans"]]);
+  });
+  it("keeps a combining mark or variation selector with its base's font when that font has it", () => {
+    // "café" with a combining acute (e + U+0301): Lato lacks "e", so "e" goes to Arimo, and the accent follows it there
+    // although Lato (first in the accent's own chain) has it.
+    const peek = (marks: string) => (f: FontRef) => ({ "Lato-regular": has("caf́̂"), "Arimo-regular": has(LATIN + marks) } as Record<string, FontMetrics>)[fontKey(f)] ?? peekAll(f);
+    const lato = (text: string) => [[run(text, bundled("Lato"))]];
+    expect(texts(resolveLoadedRuns(lato("café"), fonts, peek("́"), lookup()))).toEqual([["caf", "Lato"], ["é", "Arimo"]]);
+    // The base's font lacks the mark: it takes the first font of its own chain.
+    expect(texts(resolveLoadedRuns(lato("cafê"), fonts, peek(""), lookup()))).toEqual([["caf", "Lato"], ["e", "Arimo"], ["̂", "Lato"]]);
+    expect(texts(resolveLoadedRuns(lato("cá"), fonts, peek(""), lookup()))).toEqual([["cá", "Lato"]]); // same font anyway
+    // Variation selector / ZWJ after a fallback character stay with it, though the original has them too.
+    const vs = (f: FontRef) => (fontKey(f) === "Noto Sans-regular" ? has(LATIN + "✓️‍") : isOriginal(f) ? has("ab️‍") : peekAll(f));
+    expect(texts(resolveLoadedRuns([[run("ab✓️‍")]], fonts, vs, lookup()))).toEqual([["ab", "orig"], ["✓️‍", "Noto Sans"]]);
   });
   it("is null while a font the decision needs is not loaded", () => {
     expect(resolveLoadedRuns([[run("변")]], fonts, (f) => (isOriginal(f) ? peekAll(f) : null), lookup())).toBeNull();
@@ -115,8 +135,28 @@ describe("prepareRuns", () => {
     expect(texts(await prepareRuns([[run("신청서 변경")]], fonts, new Store(), lookup()))).toEqual([["신청서 ", "orig"], ["변경", "Noto Sans KR"]]);
   });
 
-  it("rejects when a bundled font the result uses cannot load", async () => {
+  it("rejects when a font the user picked cannot load", async () => {
     await expect(prepareRuns([[run("a", bundled("Lato"))]], fonts, store(), lookup())).rejects.toThrow();
+  });
+
+  it("skips a fallback font that fails to load (once), and the warning shows for what nothing else draws", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const s = store((f) => fontKey(f) === "Noto Sans KR-regular"); // 404, timeout or a font the browser rejects
+    const attempts = vi.spyOn(s, "load");
+    const l = lookup();
+    const p = [[run("신청서 변경 ab")]];
+    expect(texts(await prepareRuns(p, fonts, s, l))).toEqual([["신청서 ", "orig"], ["변경", "Noto Sans"], [" ab", "orig"]]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(hasUnsupportedChars(p, fonts, s.peek, l)).toBe(true); // Noto Sans lacks Hangul
+    expect(texts(resolveLoadedRuns(p, fonts, s.peek, l))).toEqual([["신청서 ", "orig"], ["변경", "Noto Sans"], [" ab", "orig"]]);
+    await prepareRuns(p, fonts, s, l);
+    await preloadFallback(p, fonts, s, l);
+    expect(attempts.mock.calls.filter(([f]) => fontKey(f) === "Noto Sans KR-regular")).toHaveLength(1); // not retried
+    // A substitute the system chose is skipped the same way; the user's own pick still rejects.
+    const t = store((f) => fontKey(f) === "Arimo-regular");
+    expect(texts(await prepareRuns([[run("x 변")]], fonts, t, lookup()))).toEqual([["x", "Noto Sans"], [" ", "orig"], ["변", "Noto Sans KR"]]);
+    await expect(prepareRuns([[run("x", bundled("Arimo"))]], fonts, t, lookup())).rejects.toThrow();
+    warn.mockRestore();
   });
 });
 

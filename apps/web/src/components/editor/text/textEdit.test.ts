@@ -207,6 +207,31 @@ describe("font fallback on commit", () => {
     await commit;
     expect(committed()).toEqual([["Halo ", orig], ["ꙮ", noto]]);
   });
+
+  it("commits when a CJK pack font the fallback chose cannot load (the next fallback draws), not when the user's font can't", async () => {
+    gate.resolve();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(fontStore, "cjkFamily").mockReturnValue("Noto Serif KR"); // a family no other test uses: failures are remembered
+    const failing = (f: FontRef) => !isOriginal(f) && (f.family === "Noto Serif KR" || f.family === "Lato");
+    const load = vi.mocked(fontStore.load).getMockImplementation()!;
+    const peek = vi.mocked(fontStore.peek).getMockImplementation()!;
+    const tried: string[] = [];
+    vi.mocked(fontStore.load).mockImplementation(async (f) => {
+      if (failing(f)) { tried.push(f.kind === "bundled" ? f.family : ""); throw new Error("404"); }
+      return load(f);
+    });
+    vi.mocked(fontStore.peek).mockImplementation((f) => (failing(f) ? null : peek(f)));
+    openParagraph("Halo", orig);
+    await commitEditing(runs("Halo 변", orig));
+    expect(committed()).toEqual([["Halo ", orig], ["변", noto]]);
+    expect(textEditStore.getState().editing).toBeNull();
+    expect(tried).toEqual(["Noto Serif KR"]);
+    const lato = { kind: "bundled" as const, family: "Lato", bold: false, italic: false };
+    openSession();
+    await commitEditing(runs("Halo", lato));
+    expect(editorStore.getState().doc.objects.t1).toBeUndefined();
+    expect(textEditStore.getState().editing).not.toBeNull(); // kept editable
+  });
 });
 
 describe("session start", () => {

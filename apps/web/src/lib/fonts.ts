@@ -110,6 +110,8 @@ export class FontStore implements FallbackFonts {
   private han: CjkScript = "sc";
   private loaded = new Map<string, FontMetrics>();
   private pending = new Map<string, Promise<FontMetrics>>();
+  /** Bundled font files by URL (see file()). */
+  private files = new Map<string, Promise<{ buf: ArrayBuffer; metrics: FontMetrics }>>();
   private originalUrl: ((f: OriginalFont) => string) | null = null;
 
   constructor(private baseUrl = "/fonts") {}
@@ -176,6 +178,25 @@ export class FontStore implements FallbackFonts {
     return `${this.baseUrl}/${pickFile(fam.files, style(f))}`;
   }
 
+  /** Downloads and parses a font file. Bundled files are shared by URL (`shared`): a family without italics (the CJK
+   *  pack) serves italic from its regular file and bold italic from its bold one, fetched and parsed once. A failed
+   *  file is forgotten, so a later load retries it. */
+  private file(url: string, shared: boolean): Promise<{ buf: ArrayBuffer; metrics: FontMetrics }> {
+    const cached = shared ? this.files.get(url) : undefined;
+    if (cached) return cached;
+    const p = (async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`font fetch failed: ${url} (${res.status})`);
+      const buf = await res.arrayBuffer();
+      return { buf, metrics: metricsFromBuffer(buf) };
+    })();
+    if (shared) {
+      this.files.set(url, p);
+      p.catch(() => { if (this.files.get(url) === p) this.files.delete(url); });
+    }
+    return p;
+  }
+
   load(f: FontRef): Promise<FontMetrics> {
     const key = fontKey(f);
     const done = this.loaded.get(key);
@@ -184,11 +205,9 @@ export class FontStore implements FallbackFonts {
     if (!p) {
       p = (async () => {
         const url = await this.url(f);
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`font fetch failed: ${url} (${res.status})`);
-        const buf = await res.arrayBuffer();
-        const metrics = metricsFromBuffer(buf);
+        const { buf, metrics } = await this.file(url, !isOriginal(f));
         if (typeof document !== "undefined") {
+          // One face per CSS family name (cssFamily), made from the shared bytes: no second download or fontkit parse.
           const face = new FontFace(cssFamily(f), buf);
           await face.load();
           document.fonts.add(face);
