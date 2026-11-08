@@ -45,7 +45,7 @@ Derived with the `hallmark` skill ("dark design app"): neutral grey canvas, dark
 | `--canvas` | oklch 32 % | the grey area the pages sit on |
 | `--line` / `--line-strong` | oklch 31 % / 40 % | hairlines / control borders |
 | `--ink` / `--muted` / `--faint` | oklch 95 % / 72 % / 65 % (faint was 57 %, below 4.5:1; raised in Task 13) | text levels |
-| `--accent` (+ `-hover`, `-text`, `-ink`) | oklch 57 % 0.22 262 | the one accent: primary button (Unduh), selection, focus, active tool |
+| `--accent` (+ `-hover`, `-text`, `-ink`) | oklch 57 % 0.22 262; `-hover` oklch 51 % 0.2 262 (darker: white text 5.8:1; was 62 %, 3.7:1, fixed in the final review) | the one accent: primary button (Unduh), selection, focus, active tool |
 | `--danger` / `--warn` | oklch 65 % 0.2 22 / 80 % 0.15 75 | errors / warnings |
 | `--paper` / `--paper-ink` | white / oklch 20 % | the PDF page and what is drawn on it |
 

@@ -22,7 +22,7 @@
 
   /* The one accent: fills (white text on it ≥ 4.5:1), text and icons on dark, selection on the white page. */
   --accent: oklch(57% 0.22 262);
-  --accent-hover: oklch(62% 0.21 262);
+  --accent-hover: oklch(51% 0.2 262);    /* darker on hover: white on it 5.8:1 (on --accent 4.5:1) */
   --accent-text: oklch(76% 0.13 258);
   --accent-ink: oklch(99% 0.003 260);
 
