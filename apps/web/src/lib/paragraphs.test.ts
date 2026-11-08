@@ -5,7 +5,7 @@ import type { FontRef, Run } from "@edith/ops";
 import type { DocFont, Paragraph, TextData } from "@/lib/api";
 import { fontKey, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
 import { runsText } from "@/lib/runs";
-import { hardBreaks, maskRects, paragraphBox, paragraphRuns, prepareRuns, rawToBox, resolveLoadedRuns, resolveRunFonts } from "@/lib/paragraphs";
+import { hardBreaks, hasUnsupportedChars, maskRects, overflowsOriginal, paragraphBox, paragraphRuns, prepareRuns, rawToBox, resolveLoadedRuns, resolveRunFonts } from "@/lib/paragraphs";
 
 const FONTS = path.resolve(__dirname, "../../../../packages/fonts/files");
 const metrics = new Map<string, FontMetrics>();
@@ -148,5 +148,35 @@ describe("maskRects", () => {
     const [m] = maskRects(p);
     expect(m.y).toBeCloseTo(p.lines[0].baseline - 0.95 * p.lines[0].size);
     expect(m.h).toBeCloseTo(1.2 * p.lines[0].size);
+  });
+});
+
+describe("overflowsOriginal", () => {
+  const p = paragraphs[0];
+  it("is false for the unchanged paragraph and true when the text needs another line", () => {
+    const box = paragraphBox(p, bundled);
+    expect(overflowsOriginal(box, p)).toBe(false);
+    const longer = paragraphBox(p, bundled, (ps) => [[...ps[0], { ...ps[0][0], text: " tambahan kalimat yang cukup panjang untuk satu baris lagi" }], ...ps.slice(1)]);
+    expect(longer.layout.length).toBeGreaterThan(box.layout.length);
+    expect(overflowsOriginal(longer, p)).toBe(true);
+  });
+  it("is false when the edit got shorter", () => {
+    const shorter = paragraphBox(p, bundled, (ps) => [[{ ...ps[0][0], text: "Pendek." }]]);
+    expect(overflowsOriginal(shorter, p)).toBe(false);
+  });
+});
+
+describe("hasUnsupportedChars", () => {
+  const notoAbcz: FontMetrics = { ...onlyAbc, hasGlyph: (cp) => "abcz ".includes(String.fromCodePoint(cp)) };
+  const peek = (f: FontRef) => (!isOriginal(f) && f.family === "Noto Sans" ? notoAbcz : onlyAbc);
+  it("is false when the fallback chain covers every character", () => {
+    expect(hasUnsupportedChars([[run("abz")]], fonts, peek)).toBe(false); // z: Noto Sans has it
+    expect(hasUnsupportedChars([[run("ab c\n")]], fonts, peek)).toBe(false);
+  });
+  it("is true when even the last fallback lacks a glyph", () => {
+    expect(hasUnsupportedChars([[run("ab✓")]], fonts, peek)).toBe(true);
+  });
+  it("waits for the fonts of the chain", () => {
+    expect(hasUnsupportedChars([[run("ab✓")]], fonts, (f) => (isOriginal(f) ? onlyAbc : null))).toBe(false);
   });
 });

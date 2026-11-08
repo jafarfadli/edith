@@ -5,13 +5,14 @@ import { useStore } from "zustand";
 import type { TextAdd } from "@edith/ops";
 import { fontStore } from "@/lib/fonts";
 import { isTextOp } from "@/lib/objects";
-import { prepareRuns } from "@/lib/paragraphs";
+import { hasUnsupportedChars, prepareRuns } from "@/lib/paragraphs";
 import { applyPatch, attrsOf, docToRuns, fontStyle, type RunAttrs } from "@/lib/richtext";
 import { t } from "@/lib/strings";
 import { boxFonts, relayout, withStyle, type BoxPatch } from "@/lib/textbox";
 import { editorStore, useEditor, type ToolStyle } from "@/store/editor";
 import { textStore, useText } from "@/store/text";
 import { ColorField } from "../ColorField";
+import { useOverflow } from "./useOverflow";
 import { session, textEditStore } from "./textEdit";
 
 /** Restyles the whole selected text op (no session open). Repeated changes within a second are one undo step. */
@@ -92,6 +93,10 @@ export function TextProps() {
   useEffect(() => { fontStore.families().then(setFamilies).catch(() => {}); }, []);
 
   const box = editing?.box ?? (isTextOp(selected) ? selected.box : null);
+  const overflow = useOverflow(!editing && isTextOp(selected) ? selected : undefined);
+  // TextProps re-renders on every editor transaction (`current`), so the session's runs are fresh here.
+  const shown = editing ? session.paragraphs ?? editing.box.paragraphs : box?.paragraphs;
+  const unsupported = !!shown && hasUnsupportedChars(shown, fonts, (f) => fontStore.peek(f));
   const attrs: RunAttrs = (editing && current) ?? (box ? attrsOf(box.paragraphs[0][0]) : toolAttrs(style));
   const fs = fontStyle(attrs.font, fonts);
   const align = box?.align ?? style.align;
@@ -138,6 +143,8 @@ export function TextProps() {
         <button key={a} type="button" aria-label={alignLabel[a]} aria-pressed={align === a}
           className={toggle(align === a)} onClick={() => set({ align: a })}>{ALIGN_ICON[a]}</button>
       ))}
+      {unsupported && <span role="status" className="whitespace-nowrap text-xs text-danger">⚠ {t.text.unsupported}</span>}
+      {overflow && <span role="status" className="whitespace-nowrap text-xs text-[#ea580c]">⚠ {t.text.overflow}</span>}
     </div>
   );
 }
