@@ -147,3 +147,15 @@ def test_font_bytes_headers_and_rejects_bad_refs(client):
     for bad in ("f", "f0x1", "F1", "f1234567890", "f１"):
         r = client.get(f"/documents/{body['doc_id']}/fonts/{bad}")
         assert r.status_code == 404 and r.json()["error"]["code"] == "font_not_found", bad
+
+
+def test_cjk_fonts_substitute_with_the_pack(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from edith.main import create_app
+    from edith.settings import Settings
+    from tests.pdfs import fake_cjk_pack
+    settings = Settings(data_dir=tmp_path / "data", fonts_dir=fake_cjk_pack(tmp_path / "fonts"))
+    with TestClient(create_app(settings)) as c:
+        f = by_name(text_of(c, make_cid_subset_pdf()))
+    assert (f["Dotum"]["substitute"]["family"], f["Batang"]["substitute"]["family"]) == ("Noto Sans KR", "Noto Serif KR")

@@ -355,6 +355,19 @@ def make_cid_subset_pdf() -> bytes:
     return doc.tobytes(garbage=3, deflate=True)
 
 
+def fake_cjk_pack(root: Path, files: tuple[str, ...] = ("NotoSansKR-Regular.ttf", "NotoSerifKR-Regular.ttf")) -> Path:
+    """A fonts dir at `root`: the real manifest and bundled files (symlinked) plus a fake CJK pack — the given pack
+    files, each a copy of Droid Sans Fallback (built into MuPDF: Hangul, kana, Han). Tests don't need the real pack."""
+    (root / "files" / "cjk").mkdir(parents=True)
+    (root / "manifest.json").write_bytes((FONT_FILES.parent / "manifest.json").read_bytes())
+    for f in FONT_FILES.glob("*.ttf"):
+        (root / "files" / f.name).symlink_to(f)
+    droid = pymupdf.Font("korea").buffer
+    for name in files:
+        (root / "files" / "cjk" / name).write_bytes(droid)
+    return root
+
+
 # Damage FreeType accepts but fontTools can't read (the rebuild must fall back to "not reusable").
 BROKEN_TABLES: dict[str, tuple[bytes, Callable[[bytes], bytes]]] = {
     "glyf garbage": (b"glyf", lambda t: b"\xff" * len(t)),

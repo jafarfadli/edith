@@ -3,8 +3,9 @@ import json
 import pymupdf
 import pytest
 
-from edith.fonts import STYLES, FontRegistry, UnknownFont, base_font_name, parse_font_name
+from edith.fonts import STYLES, FontRegistry, UnknownFont, base_font_name, cjk_style, parse_font_name
 from edith.settings import Settings
+from tests.pdfs import fake_cjk_pack
 
 
 @pytest.fixture
@@ -82,3 +83,48 @@ def test_name_parsing():
 ])
 def test_substitute(registry, name, flags, family, bold, italic):
     assert registry.substitute(name, flags) == {"kind": "bundled", "family": family, "bold": bold, "italic": italic}
+
+
+def test_cjk_manifest_entries():
+    manifest = json.loads((Settings().fonts_dir / "manifest.json").read_text())
+    assert set(manifest["cjk"]) == {f"Noto {d} {s}" for d in ("Sans", "Serif") for s in ("KR", "JP", "SC")}
+    for family, info in manifest["cjk"].items():
+        assert (info["category"], info["script"]) == ("serif" if "Serif" in family else "sans", family[-2:].lower())
+        assert set(info["files"]) == {"regular", "bold"}
+        assert all(f.startswith("cjk/") and f.endswith(".ttf") for f in info["files"].values())
+
+
+@pytest.mark.parametrize("name,style", [
+    ("INPILL+Dotum", ("kr", "sans")), ("DotumChe", ("kr", "sans")), ("Gulim", ("kr", "sans")),
+    ("Malgun Gothic,Bold", ("kr", "sans")), ("Haansoft Batang", ("kr", "serif")), ("HYMyeongJo-Medium", ("kr", "serif")),
+    ("MS-Mincho", ("jp", "serif")), ("MS PGothic", ("jp", "sans")), ("KozMinPr6N-Regular", ("jp", "serif")),
+    ("SimSun", ("sc", "serif")), ("Microsoft YaHei", ("sc", "sans")), ("PMingLiU", ("sc", "serif")),
+    ("NotoSansCJKjp-Regular", ("jp", "sans")), ("NotoSerifKR-Bold", ("kr", "serif")),
+    ("Arial", None), ("Century Gothic", None), ("Wingdings", None), ("TimesNewRomanPSMT", None),
+])
+def test_cjk_style(name, style):
+    assert cjk_style(name) == style
+
+
+def test_cjk_pack_present(tmp_path):
+    reg = FontRegistry(fake_cjk_pack(tmp_path / "fonts"))
+    assert (reg.cjk("kr", "sans"), reg.cjk("kr", "serif"), reg.cjk("kr", "mono")) == ("Noto Sans KR", "Noto Serif KR", "Noto Sans KR")
+    assert reg.cjk("jp", "sans") is None  # only the Korean files are there
+    assert reg.path("Noto Sans KR", True, False).name == "NotoSansKR-Regular.ttf"  # no bold file: regular
+    assert reg.font("Noto Serif KR", False, False).has_glyph(ord("한"))
+    assert reg.category("Noto Serif KR") == "serif"
+    assert reg.substitute("EDITHA+Dotum") == {"kind": "bundled", "family": "Noto Sans KR", "bold": False, "italic": False}
+    assert reg.substitute("Haansoft Batang", 4)["family"] == "Noto Serif KR"
+    assert reg.substitute("MS-Mincho", 4)["family"] == "Tinos"  # Japanese files missing: by flags as before
+    assert "Noto Sans KR" not in reg.families()  # pack families are fallbacks, not choices in the font picker
+
+
+def test_cjk_pack_absent(tmp_path):
+    root = tmp_path / "fonts"
+    (root / "files").mkdir(parents=True)
+    (root / "manifest.json").write_bytes((Settings().fonts_dir / "manifest.json").read_bytes())
+    reg = FontRegistry(root)
+    assert reg.cjk("kr", "sans") is None
+    assert reg.substitute("EDITHA+Dotum")["family"] == "Arimo"
+    with pytest.raises(UnknownFont):
+        reg.path("Noto Sans KR", False, False)

@@ -82,7 +82,7 @@ test("edit an original paragraph, find & replace, download", async ({ page }) =>
   expect(bold.font).toMatch(/Arimo.*Bold/);
   expect(bold.text.trim()).toBe("penting");
   expect(spans.find((s) => s.text.includes("Paragraf pertama"))!.font).toMatch(/Arimo/);
-  expect(spans.find((s) => s.text.includes("Paragraf kedua"))!.font).toBe("EdithDoc-Regular");
+  expect(spans.find((s) => s.text.includes("Paragraf kedua"))!.font).toContain("EdithDoc"); // subset at export: MuPDF names it after the family
 
   // Unchanged text keeps its lines: every original line still starts at the same place with the same word.
   for (const s of pdfSpans(TEXT_PDF)[0]) {

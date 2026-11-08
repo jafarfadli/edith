@@ -69,7 +69,7 @@ def _page_index(ops: list, page_key: str, page_count: int) -> int:
 @router.post("/documents/{doc_id}/export")
 def export(request: Request, doc_id: str, body: ExportRequest) -> Response:
     source = _read_source(request, doc_id)
-    doc = bake(source, body.ops, _ctx(request, doc_id), flatten_forms=body.flatten_forms)
+    doc = bake(source, body.ops, _ctx(request, doc_id), flatten_forms=body.flatten_forms, subset_fonts=True)
     try:
         data = doc.tobytes(garbage=3, deflate=True)
     finally:

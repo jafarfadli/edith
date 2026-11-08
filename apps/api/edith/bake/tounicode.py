@@ -9,7 +9,12 @@ and fonts reused from the uploaded PDF can't be edited at all, so the bake rewri
 font it embeds: same mapping, except a printable ASCII code point wins over the others of its glyph.
 """
 
+import io
+
 import pymupdf
+from fontTools.ttLib import TTFont
+
+from edith.cid_fonts import parse_to_unicode
 
 _MARK = b"%edith-tounicode\n"
 _HEADER = b"""/CIDInit /ProcSet findresource begin
@@ -74,3 +79,27 @@ def fix_to_unicode(doc: pymupdf.Document, font_xref: int) -> None:
     if not buffer:
         return
     doc.update_stream(cmap_xref, to_unicode_cmap(glyph_to_unicode(pymupdf.Font(fontbuffer=buffer))))
+
+
+def trim_to_unicode(doc: pymupdf.Document, font_xref: int) -> None:
+    """After Document.subset_fonts(): drop the entries of glyphs the subset emptied from a CMap fix_to_unicode()
+    wrote (it maps every glyph of the font: ~20 000 for a CJK fallback, ~100 KB compressed). Subsets keep glyph
+    ids, so a dropped glyph is one whose `loca` range is empty. No-op for other CMaps and for CFF fonts."""
+    if doc.xref_get_key(font_xref, "Subtype")[1] != "/Type0":
+        return
+    kind, value = doc.xref_get_key(font_xref, "ToUnicode")
+    if kind != "xref":
+        return
+    cmap_xref = int(value.split()[0])
+    data = doc.xref_stream(cmap_xref)
+    buffer = doc.extract_font(font_xref)[3]
+    if not data.startswith(_MARK) or not buffer:
+        return
+    try:
+        font = TTFont(io.BytesIO(buffer))
+        loca = font["loca"]
+    except Exception:  # noqa: BLE001 - not a TrueType program with glyf/loca
+        return
+    kept = {gid: ord(text) for gid, text in parse_to_unicode(data).items()
+            if gid + 1 < len(loca) and (loca[gid] != loca[gid + 1] or text.isspace())}
+    doc.update_stream(cmap_xref, to_unicode_cmap(kept))

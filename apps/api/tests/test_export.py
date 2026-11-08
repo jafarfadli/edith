@@ -160,3 +160,39 @@ def test_export_with_expired_import(client):
     r = client.post(f"/documents/{doc_id}/export", json={"ops": [layout]})
     assert r.status_code == 410
     assert r.json()["error"]["code"] == "doc_expired" and r.json()["error"]["doc_id"] == imported
+
+
+def text_add(text: str, family: str) -> dict:
+    run = {"text": text, "font": {"kind": "bundled", "family": family, "bold": False, "italic": False}, "size": 12,
+           "color": "#000000"}
+    return {"id": "t", "type": "text.add", "pageKey": "o0", "box": {
+        "rect": R(100, 200, 300, 20), "align": "left", "lineHeight": 14.4, "paragraphs": [[run]],
+        "layout": [{"baseline": 12, "segments": [{"x": 0, "text": text, "runIndex": 0}]}]}}
+
+
+def embedded(out: pymupdf.Document, name: str) -> bytes:
+    return next(out.extract_font(e[0])[3] for e in out[0].get_fonts(full=True) if name in e[3])
+
+
+def test_export_embeds_only_the_glyphs_it_uses(client):
+    doc_id = new_doc(client, pages=1)
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [text_add("Halo dunia", "Arimo")]})
+    out = pymupdf.open(stream=r.content, filetype="pdf")
+    assert "Halo dunia" in out[0].get_text()
+    assert len(embedded(out, "Arimo")) < 50_000  # Arimo-Regular.ttf is 316 KB
+
+
+def test_export_with_a_cjk_fallback_font_stays_small(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from edith.main import create_app
+    from edith.settings import Settings
+    from tests.pdfs import fake_cjk_pack
+    settings = Settings(data_dir=tmp_path / "data", fonts_dir=fake_cjk_pack(tmp_path / "fonts"))
+    with TestClient(create_app(settings)) as c:
+        doc_id = new_doc(c, pages=1)
+        r = c.post(f"/documents/{doc_id}/export", json={"ops": [text_add("한국어 텍스트", "Noto Sans KR")]})
+    assert r.status_code == 200, r.text
+    out = pymupdf.open(stream=r.content, filetype="pdf")
+    assert "한국어 텍스트" in out[0].get_text()
+    assert len(r.content) < 100_000  # the fallback file is 4 MB
