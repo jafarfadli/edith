@@ -22,7 +22,7 @@ const store = (): KV | null => {
 function valid(v: unknown): v is SavedSignature {
   const s = v as SavedSignature;
   return typeof s === "object" && s !== null && typeof s.id === "string" && typeof s.dataUrl === "string"
-    && s.dataUrl.startsWith("data:image/") && Number.isFinite(s.width) && Number.isFinite(s.height) && s.width > 0 && s.height > 0;
+    && /^data:image\/(png|jpeg)[;,]/.test(s.dataUrl) && Number.isFinite(s.width) && Number.isFinite(s.height) && s.width > 0 && s.height > 0;
 }
 
 export function loadSignatures(kv: KV | null = store()): SavedSignature[] {

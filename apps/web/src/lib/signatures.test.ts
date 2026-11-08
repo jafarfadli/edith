@@ -32,6 +32,13 @@ describe("signature library", () => {
     kv.data.set(SIGNATURE_KEY, JSON.stringify([sig("ok"), { id: "x", dataUrl: "javascript:1", width: 1, height: 1 }, null]));
     expect(loadSignatures(kv).map((s) => s.id)).toEqual(["ok"]);
   });
+
+  it("keeps only PNG and JPEG images", () => {
+    const kv = memory();
+    kv.data.set(SIGNATURE_KEY, JSON.stringify([sig("png"), sig("jpg", "data:image/jpeg;base64,/9j/"),
+      sig("svg", "data:image/svg+xml;base64,PHN2Zz4="), sig("gif", "data:image/gif;base64,R0lG"), sig("pngx", "data:image/pngx;base64,AA")]));
+    expect(loadSignatures(kv).map((s) => s.id)).toEqual(["png", "jpg"]);
+  });
 });
 
 describe("signatureRect", () => {
