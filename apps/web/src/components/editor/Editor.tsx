@@ -8,7 +8,7 @@ import { ApiError, fileUrl, getStructure } from "@/lib/api";
 import { toPage } from "@/lib/coords";
 import { fontStore } from "@/lib/fonts";
 import { loadDraft, saveDraft } from "@/lib/draft";
-import { noticeStore } from "@/lib/notices";
+import { noticeStore, type NoticeMsg } from "@/lib/notices";
 import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { resolveImports, restoreDraft } from "@/lib/restore";
@@ -44,7 +44,7 @@ const INFO_NOTICE_MS = 5000;
 export function Editor({ docId, initialName }: { docId: string; initialName: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ kind: "error" | "info"; text: string } | null>(null);
+  const [notice, setNotice] = useState<NoticeMsg | null>(null);
   const info = useEditor((s) => s.info);
   const tool = useEditor((s) => s.tool);
   const initialDoc = useRef<EditorDoc | null>(null);
@@ -182,7 +182,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       </div>
       <FindBar />
       <ZoomPill />
-      {notice && <Notice kind={notice.kind} onClose={() => setNotice(null)}>{notice.text}</Notice>}
+      {notice && <Notice kind={notice.kind} action={notice.action} onClose={() => setNotice(null)}>{notice.text}</Notice>}
     </div>
   );
 }

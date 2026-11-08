@@ -45,8 +45,8 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, init);
-  } catch {
-    throw new ApiError("network", 0);
+  } catch (e) {
+    throw new ApiError(e instanceof DOMException && e.name === "TimeoutError" ? "timeout" : "network", 0);
   }
   if (!res.ok) {
     let err: Record<string, unknown> = {};
@@ -94,8 +94,16 @@ export function assetUrl(docId: string, assetId: string): string {
   return `${API_URL}/documents/${docId}/assets/${assetId}`;
 }
 
+/** A bake of a large document takes seconds; past this the server or the connection is stuck. */
+export const EXPORT_TIMEOUT_MS = 120_000;
+
 export async function exportPdf(docId: string, body: ExportRequest): Promise<Blob> {
-  return (await request(`/documents/${docId}/export`, json(body))).blob();
+  const res = await request(`/documents/${docId}/export`, { ...json(body), signal: AbortSignal.timeout(EXPORT_TIMEOUT_MS) });
+  try {
+    return await res.blob();
+  } catch (e) {
+    throw new ApiError(e instanceof DOMException && e.name === "TimeoutError" ? "timeout" : "network", 0);
+  }
 }
 
 export async function renderPage(docId: string, body: RenderPageRequest): Promise<Blob> {

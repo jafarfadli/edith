@@ -183,7 +183,20 @@ export const t = {
     asset_not_found: "Gambar tidak ditemukan. Tambahkan ulang gambarnya.",
     invalid_op: "Ada perubahan yang tidak valid.",
     bake_failed: "Gagal menyimpan salah satu objek. Hapus objek yang disorot lalu coba lagi.",
-    network: "Tidak dapat terhubung ke server.",
+    network: "Tidak dapat terhubung ke server. Periksa koneksi Anda.",
+    timeout: "Server terlalu lama membuat PDF.",
+    internal: "Server mengalami kesalahan saat membuat PDF.",
+    bad_response: "Server tidak mengirim file PDF.",
+    not_found: "Server Edith tidak ditemukan di alamat ini (404).",
+    invalid_request: "Permintaan ke server tidak valid. Muat ulang halaman lalu coba lagi.",
+  },
+  download: {
+    started: (name: string) => `Mengunduh ${name}`,
+    openTab: "Buka di tab baru",
+    retry: "Coba lagi",
+    blocked: "Browser memblokir unduhan. Buka PDF di tab baru lalu simpan dari sana.",
+    server: (status: number) => `Server sedang bermasalah (${status}). Coba lagi sebentar lagi.`,
+    refused: (status: number) => `Server menolak permintaan (${status}).`,
   },
 } as const;
 

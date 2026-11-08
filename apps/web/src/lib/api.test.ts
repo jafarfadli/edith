@@ -41,6 +41,16 @@ describe("api client", () => {
     await expect(getStructure("x")).rejects.toMatchObject({ code: "network", status: 0 });
   });
 
+  it("gives the export a time limit and maps it to a timeout error", async () => {
+    const fn = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      throw new DOMException("The operation timed out.", "TimeoutError");
+    });
+    vi.stubGlobal("fetch", fn);
+    await expect(exportPdf("x", { ops: [], flatten_forms: false, filename: "a.pdf" })).rejects.toMatchObject({ code: "timeout", status: 0 });
+    expect(fn).toHaveBeenCalledOnce();
+  });
+
   it("returns blob for export", async () => {
     mockFetch(200, "%PDF-1.7", "application/pdf");
     const blob = await exportPdf("x", { ops: [], flatten_forms: false, filename: "a.pdf" });
