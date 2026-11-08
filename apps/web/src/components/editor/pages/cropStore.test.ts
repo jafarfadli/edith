@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { editorStore, type DocInfo } from "@/store/editor";
-import { applyCrop, clearCrop, cropStore } from "./cropStore";
+import { applyCrop, clearCrop, cropStore, fitRect } from "./cropStore";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "s", fileName: "a.pdf",
@@ -32,5 +32,17 @@ describe("crop editing", () => {
     cropStore.getState().open("o0");
     clearCrop();
     expect(editorStore.getState().doc.pages[0].crop).toBeUndefined();
+  });
+});
+
+describe("fitRect", () => {
+  const size = { width: 600, height: 800 };
+  const prev = { x: 30, y: 40, w: 540, h: 720 };
+  it("clamps into the page", () => {
+    expect(fitRect({ x: -20, y: 40, w: 300, h: 100 }, prev, size)).toEqual({ x: 0, y: 40, w: 280, h: 100 });
+  });
+  it("keeps the previous rect when too small or outside", () => {
+    expect(fitRect({ x: 100, y: 40, w: 3, h: 100 }, prev, size)).toBe(prev);
+    expect(fitRect({ x: 700, y: 40, w: 50, h: 100 }, prev, size)).toBe(prev);
   });
 });

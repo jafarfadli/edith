@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { CropBox } from "@/lib/coords";
 import { pageBounds } from "@/lib/coords";
+import { clampCrop } from "@/lib/pages";
 import { editorStore, pageGeom } from "@/store/editor";
 
 /** The crop being edited: the page shows whole, with the crop rect over it, until applied or cancelled. */
@@ -46,4 +47,9 @@ export function clearCrop(): void {
   const { pageKey } = cropStore.getState();
   if (pageKey) editorStore.getState().setCrop([pageKey], null);
   cropStore.getState().close();
+}
+
+/** `next` clamped to the page; the previous rect when nothing valid (smaller than the minimum) is left. */
+export function fitRect(next: CropBox, prev: CropBox, size: { width: number; height: number }): CropBox {
+  return clampCrop(next, size) ?? prev;
 }

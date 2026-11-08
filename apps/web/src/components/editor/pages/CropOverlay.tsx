@@ -5,10 +5,10 @@ import type Konva from "konva";
 import { Group, Layer, Rect, Stage, Transformer } from "react-konva";
 import { useStore } from "zustand";
 import { groupTransform, screenSize, type CropBox, type PageGeom } from "@/lib/coords";
-import { clampCrop } from "@/lib/pages";
+import { MIN_CROP } from "@/lib/pages";
 import { t } from "@/lib/strings";
 import { useEditor } from "@/store/editor";
-import { applyCrop, clearCrop, cropStore } from "./cropStore";
+import { applyCrop, clearCrop, cropStore, fitRect } from "./cropStore";
 
 const SHADE = "rgba(15,23,42,0.45)";
 
@@ -41,7 +41,13 @@ export default function CropOverlay({ pageKey, geom, scale }: { pageKey: string;
   const size = screenSize(geom, scale);
   const g = groupTransform(geom, scale);
   const W = geom.width, H = geom.height;
-  const put = (r: CropBox) => { const c = clampCrop(r, { width: W, height: H }); if (c) cropStore.getState().setRect(c); };
+  // Commits `r` (or keeps the current rect when it is invalid) and always writes the node back from the result.
+  const put = (n: Konva.Node, r: CropBox) => {
+    const c = fitRect(r, rect, { width: W, height: H });
+    cropStore.getState().setRect(c);
+    n.setAttrs({ x: c.x, y: c.y, width: c.w, height: c.h, scaleX: 1, scaleY: 1 });
+    n.getLayer()?.batchDraw();
+  };
 
   return (
     <div className="absolute inset-0" style={{ zIndex: 20 }} data-testid="crop-overlay">
@@ -60,14 +66,15 @@ export default function CropOverlay({ pageKey, geom, scale }: { pageKey: string;
                 n.position({ x, y });
                 cropStore.getState().setRect({ ...rect, x, y });
               }}
+              onDragEnd={(e) => put(e.target, { ...rect, x: e.target.x(), y: e.target.y() })}
               onTransformEnd={(e) => {
                 const n = e.target;
                 const next = { x: n.x(), y: n.y(), w: n.width() * n.scaleX(), h: n.height() * n.scaleY() };
-                n.setAttrs({ scaleX: 1, scaleY: 1 });
-                put(next);
+                put(n, next);
               }} />
           </Group>
           <Transformer ref={tr} rotateEnabled={false} flipEnabled={false} keepRatio={false} ignoreStroke
+            boundBoxFunc={(old, box) => (box.width < MIN_CROP * scale || box.height < MIN_CROP * scale ? old : box)}
             borderStroke="#0f766e" anchorStroke="#0f766e" anchorSize={9} />
         </Layer>
       </Stage>
