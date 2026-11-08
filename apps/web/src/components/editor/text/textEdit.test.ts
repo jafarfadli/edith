@@ -284,6 +284,20 @@ describe("markup over an edited paragraph", () => {
     expect(Object.keys(undone.objects).sort()).toEqual(["h1", "h4", "n", "s3", "u2"]);
   });
 
+  it("also when the paragraph is only moved (materialized), in one undo step", async () => {
+    gate.resolve();
+    const before = editorStore.getState().past.length;
+    await materializeParagraph("o0", g3, (b) => ({ ...b, rect: { ...b.rect, x: b.rect.x + 10 } }));
+    const after = editorStore.getState();
+    const moved = Object.values(after.doc.objects).find((o) => o.type === "text.edit") as TextEdit;
+    expect(moved).toMatchObject({ paragraphId: "g3" });
+    expect(Object.keys(after.doc.objects).sort()).toEqual([moved.id, "h4", "n", "s3"].sort());
+    expect(after.past.length).toBe(before + 1);
+    expect(noticeStore.getState().notice).toEqual({ kind: "info", text: t.text.markupRemoved });
+    editorStore.getState().undo();
+    expect(Object.keys(editorStore.getState().doc.objects).sort()).toEqual(["h1", "h4", "n", "s3", "u2"]);
+  });
+
   it("also when an existing text.edit is edited again, and no notice when nothing was removed", async () => {
     openParagraph("Halo lama");
     await commitEditing(runs("Halo baru"));

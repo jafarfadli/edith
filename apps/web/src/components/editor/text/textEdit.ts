@@ -154,7 +154,11 @@ export async function materializeParagraph(pageKey: string, p: Paragraph, change
   const st = editorStore.getState();
   if (textEditFor(st.doc, pageKey, p.id) || !st.doc.pages.some((pg) => pg.pageKey === pageKey)) return;
   const id = newId();
-  st.addObject({ id, type: "text.edit", pageKey, paragraphId: p.id, box: relayout(change(box), (f) => fontStore.get(f)) } as ContentOp);
+  const op = { id, type: "text.edit", pageKey, paragraphId: p.id, box: relayout(change(box), (f) => fontStore.get(f)) } as TextEdit;
+  // Moving the paragraph also removes its original glyphs: their marks go in the same undo step.
+  const removed = markupUnderEdits(st.doc, [op]);
+  st.putObjects([op], removed);
+  noteMarkupRemoved(removed);
   textEditStore.getState().selectParagraph(null);
   if (!textEditStore.getState().editing) st.select(id);
 }
