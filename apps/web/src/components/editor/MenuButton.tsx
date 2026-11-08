@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 export interface MenuItem { label: string; run: () => void; disabled?: boolean; danger?: boolean }
 
 const MENU_WIDTH = 176; // w-44
+const ITEM_HEIGHT = 32; // py-1.5 + text-sm line
 
 /** A button that opens a menu. The menu renders in a portal with fixed positioning so a narrow, scrolling
  *  parent (the sidebar) cannot clip it; it closes on an outside press, Escape, scroll or resize. */
@@ -39,7 +40,10 @@ export function MenuButton({ label, items, children, className }: { label: strin
   function toggle() {
     if (open) { setAt(null); return; }
     const r = button.current!.getBoundingClientRect();
-    setAt({ top: r.bottom + 4, left: Math.max(8, Math.min(r.left, window.innerWidth - MENU_WIDTH - 8)) });
+    // Open upwards when the menu would run past the bottom of the window (an anchor near the bottom edge).
+    const height = items.length * ITEM_HEIGHT + 8;
+    const below = r.bottom + 4 + height <= window.innerHeight - 8;
+    setAt({ top: below ? r.bottom + 4 : Math.max(8, r.top - 4 - height), left: Math.max(8, Math.min(r.left, window.innerWidth - MENU_WIDTH - 8)) });
   }
 
   return (
