@@ -4,6 +4,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useState } from "react";
+import { listedCount } from "@/lib/objectLabels";
 import { t } from "@/lib/strings";
 import { editorStore, pageGeom, useEditor, type PageEntry } from "@/store/editor";
 import { AnnotationsPanel } from "./AnnotationsPanel";
@@ -49,7 +50,7 @@ function SortableThumb({ entry, index, count, active }: { entry: PageEntry; inde
 
 export function Sidebar() {
   const [tab, setTab] = useState<"pages" | "annotations">("pages");
-  const count = useEditor((s) => s.doc.order.length);
+  const count = useEditor((s) => listedCount(s.doc));
   const tabBtn = (k: typeof tab, label: string) => (
     <button role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
       className={`flex-1 rounded-md px-2 py-1 text-xs ${tab === k ? "bg-accent/10 font-medium text-accent" : "text-muted hover:bg-bg"}`}>{label}</button>

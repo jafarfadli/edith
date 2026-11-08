@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
-import { objectLabel } from "@/lib/objectLabels";
+import { listedCount, listedObjects, objectLabel } from "@/lib/objectLabels";
 
 const base = { id: "x", pageKey: "o0" };
 const op = (o: object) => ({ ...base, ...o }) as ContentOp;
@@ -22,5 +22,17 @@ describe("objectLabel", () => {
     const d = objectLabel(op({ type: "text.add", box: box("x".repeat(100)) })).detail!;
     expect(d).toHaveLength(40);
     expect(d.endsWith("…")).toBe(true);
+  });
+});
+
+describe("listedObjects", () => {
+  const a = op({ id: "a", pageKey: "o0", type: "image.add" });
+  const b = op({ id: "b", pageKey: "o1", type: "image.add" });
+  const gone = op({ id: "c", pageKey: "o9", type: "image.add" });
+  const doc = { pages: [{ pageKey: "o1" }, { pageKey: "o0" }], order: ["a", "b", "c"], objects: { a, b, c: gone } };
+
+  it("groups by page order and skips objects of deleted pages", () => {
+    expect(listedObjects(doc).map((g) => [g.pageKey, g.n, g.ops.map((o) => o.id)])).toEqual([["o1", 1, ["b"]], ["o0", 2, ["a"]]]);
+    expect(listedCount(doc)).toBe(2);
   });
 });

@@ -31,3 +31,15 @@ export function objectLabel(op: ContentOp): { icon: string; label: string; detai
       : { icon: "🖍", label: L.markup[op.kind] };
   }
 }
+
+/** Objects the Anotasi panel lists, grouped by page in page order. Objects of deleted pages stay in the doc but are not listed (or counted). */
+export function listedObjects(doc: { pages: { pageKey: string }[]; order: string[]; objects: Record<string, ContentOp | undefined> }): { pageKey: string; n: number; ops: ContentOp[] }[] {
+  const all = doc.order.map((id) => doc.objects[id]).filter((op): op is ContentOp => !!op);
+  return doc.pages
+    .map((p, i) => ({ pageKey: p.pageKey, n: i + 1, ops: all.filter((op) => op.pageKey === p.pageKey) }))
+    .filter((g) => g.ops.length);
+}
+
+export function listedCount(doc: Parameters<typeof listedObjects>[0]): number {
+  return listedObjects(doc).reduce((n, g) => n + g.ops.length, 0);
+}
