@@ -24,3 +24,8 @@ Items deliberately left out of M5 (see README.md, Deviations):
 - Cache `font_bytes` rebuild (LRU keyed by doc hash + xref); `_doc_font` parses the result twice.
 - Bake does not reject `text.edit` on an `editable: false` paragraph (also true for vertical text).
 - Word lists with a non-embedded Symbol bullet lock the whole list item.
+
+## Task 5 review (deferred)
+- `FontRegistry._cache` keeps CJK `pymupdf.Font` objects resident (~113–226 MB worst case), duplicated per italic key: key by resolved path or add an LRU.
+- Docker builds and the Playwright text.spec change were not run in Task 5 (E2E ports arrive in Task 7).
+- Until Task 15 the web `FontStore.url()` throws for a CJK substitute family returned by the API (only matters on a machine with the pack fetched).
