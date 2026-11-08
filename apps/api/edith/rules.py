@@ -17,6 +17,8 @@ class Segment:
 
 
 def _sorted(segments: list[Segment]) -> tuple[list[Segment], list[float]]:
+    # Shared cell borders are drawn by every neighbour: keep one of each (compared to 0.01 pt).
+    segments = list({(round(s.at, 2), round(s.lo, 2), round(s.hi, 2)): s for s in reversed(segments)}.values())
     segments.sort(key=lambda s: s.at)
     return segments, [s.at for s in segments]
 
@@ -64,6 +66,29 @@ def _add_rect(rules: tuple[list, list], r: pymupdf.Rect) -> None:
             _add_segment(rules, tuple(a), tuple(b))
 
 
+AREA_TOL = 0.02    # a filled polygon is a rectangle when its area is within 2 % of its bounding box
+
+
+def _filled_rect(items: list) -> pymupdf.Rect | None:
+    """The rectangle a filled path draws, or None: one rect/quad item, or 3–5 straight edges that are all
+    axis-aligned and enclose (nearly) their whole bounding box (a triangle, arrow or pentagon does not)."""
+    if len(items) == 1 and items[0][0] == "re":
+        return pymupdf.Rect(items[0][1])
+    if len(items) == 1 and items[0][0] == "qu":
+        quad = pymupdf.Quad(items[0][1])
+        return quad.rect if quad.is_rectangular else None
+    if not 3 <= len(items) <= 5 or any(it[0] != "l" for it in items):
+        return None
+    if any(abs(it[1][0] - it[2][0]) > AXIS_TOL and abs(it[1][1] - it[2][1]) > AXIS_TOL for it in items):
+        return None  # a slanted edge
+    pts = [it[1] for it in items]
+    area = abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(pts, pts[1:] + pts[:1]))) / 2
+    box = pymupdf.Rect(min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts))
+    if box.width * box.height == 0:
+        return box if area == 0 else None
+    return box if abs(area - box.width * box.height) <= AREA_TOL * box.width * box.height else None
+
+
 def page_rules(page: pymupdf.Page) -> Rules:
     """Rules from the page's vector drawings: stroked straight lines, the sides of rectangles and thin filled
     bars. Paths with curves and filled polygons that are not rectangles (vector glyphs, logos) are ignored."""
@@ -74,9 +99,13 @@ def page_rules(page: pymupdf.Page) -> Rules:
             continue  # curves: glyph outlines, logos, rounded shapes
         if "f" in path["type"]:
             # A filled shape counts only as a rectangle (cell shading, a bar): letters drawn as polygons don't.
-            if len(items) == 1 and items[0][0] in ("re", "qu") or 3 <= len(items) <= 5 and all(it[0] == "l" for it in items):
-                _add_rect(rules, pymupdf.Rect(path["rect"]))
-            continue
+            rect = _filled_rect(items)
+            if rect is not None:
+                _add_rect(rules, rect)
+                continue
+            if "s" not in path["type"]:
+                continue
+            # filled and stroked but not a rectangle: its stroke is still a border, so fall through
         for it in items:
             if it[0] == "l":
                 _add_segment(rules, it[1], it[2])
