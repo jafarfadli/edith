@@ -297,6 +297,18 @@
           "maxLength": 200,
           "title": "Filename",
           "type": "string"
+        },
+        "paragraphs_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Paragraphs Version"
         }
       },
       "required": [
@@ -825,6 +837,18 @@
           "maxItems": 5000,
           "title": "Ops",
           "type": "array"
+        },
+        "paragraphs_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Paragraphs Version"
         }
       },
       "required": [

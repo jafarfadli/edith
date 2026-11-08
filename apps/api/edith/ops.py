@@ -333,6 +333,8 @@ class ExportRequest(Model):
     ops: list[Op] = Field(max_length=MAX_OPS)
     flatten_forms: bool = False
     filename: str = Field(default="document.pdf", max_length=200)
+    # Paragraph segmentation the client's text.edit ids come from (GET /text paragraphsVersion); None = before M5 (1).
+    paragraphs_version: int | None = None
 
     @model_validator(mode="after")
     def _ops(self):
@@ -343,6 +345,7 @@ class ExportRequest(Model):
 class RenderPageRequest(Model):
     pageKey: PageKey
     ops: list[Op] = Field(max_length=MAX_OPS)
+    paragraphs_version: int | None = None  # as ExportRequest.paragraphs_version
 
     @model_validator(mode="after")
     def _ops(self):

@@ -8,6 +8,9 @@ import pymupdf
 
 from edith.rules import Rules, page_rules
 
+# Version of the segmentation: paragraph ids (g0, g1, …) of a page change when it does. Shared contract with
+# apps/web/src/lib/paragraphs.ts (drafts and exports carry it; 1 = M1–M4, 2 = rule/hard-break aware, M5).
+PARAGRAPHS_VERSION = 2
 # No TEXT_PRESERVE_LIGATURES: "ﬁ" comes out as "fi", which every font can draw.
 FLAGS = pymupdf.TEXT_PRESERVE_WHITESPACE | pymupdf.TEXT_MEDIABOX_CLIP
 GAP_FACTOR = 1.5     # a gap larger than this × the block's usual line spacing starts a paragraph

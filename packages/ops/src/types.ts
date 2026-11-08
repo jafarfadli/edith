@@ -188,6 +188,7 @@ export type Ops = (
 )[];
 export type FlattenForms = boolean;
 export type Filename = string;
+export type ParagraphsVersion = number | null;
 export type Pagekey14 = string;
 /**
  * @maxItems 5000
@@ -208,6 +209,7 @@ export type Ops1 = (
   | FormSet
   | PagesLayout
 )[];
+export type ParagraphsVersion1 = number | null;
 
 export interface EdithSchema {
   export: ExportRequest;
@@ -221,6 +223,7 @@ export interface ExportRequest {
   ops: Ops;
   flatten_forms?: FlattenForms;
   filename?: Filename;
+  paragraphs_version?: ParagraphsVersion;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
@@ -562,4 +565,5 @@ export interface CropRect {
 export interface RenderPageRequest {
   pageKey: Pagekey14;
   ops: Ops1;
+  paragraphs_version?: ParagraphsVersion1;
 }

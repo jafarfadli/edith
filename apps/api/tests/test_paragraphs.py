@@ -113,6 +113,11 @@ def test_line_ending_in_space_excludes_it_from_end():
     assert [(ln["start"], ln["end"]) for ln in p["lines"]] == [(0, 8), (9, 13)]
 
 
+def test_paragraphs_version_is_pinned():
+    from edith.paragraphs import PARAGRAPHS_VERSION
+    assert PARAGRAPHS_VERSION == 2  # shared with apps/web/src/lib/paragraphs.ts; bump both when ids can change
+
+
 def test_form_table_segments_like_a_form():
     assert [text(p) for p in paragraphs(make_form_table_pdf())] == [
         "<How to fill out this form>",                    # ended early: a hard break

@@ -126,11 +126,11 @@ def test_export_text_edit(client):
     edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
         "rect": R(72, 88, 300, 16), "lineHeight": 12, "paragraphs": [[run]],
         "layout": [{"baseline": 12, "segments": [{"x": 0, "text": "Diganti", "runIndex": 0}]}]}}
-    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit]})
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": 2})
     assert r.status_code == 200, r.text
     text = pymupdf.open(stream=r.content, filetype="pdf")[0].get_text()
     assert "Diganti" in text and "diedit" not in text and "tetangga" in text
-    r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}]})
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}], "paragraphs_version": 2})
     assert r.status_code == 422 and r.json()["error"] == {"code": "invalid_op", "message": "no paragraph g9 on o0", "op_index": 0}
 
 
