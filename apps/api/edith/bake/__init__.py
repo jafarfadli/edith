@@ -8,6 +8,7 @@ from edith.bake.pages import build_pages
 from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
 from edith.bake.scrub import scrub_page, under_redaction
 from edith.bake.source import SourcePages
+from edith.bake.text import links_under_redactions, restore_links
 from edith.bake.util import to_rect
 from edith.errors import BakeFailed, EdithError, InvalidOp
 from edith.forms import FieldValueError, drop_xfa, fill_forms
@@ -102,7 +103,9 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                 for op in marked:
                     _run(handlers[op.type], page, op, ctx)
                 if marked:
+                    kept = links_under_redactions(page) if mode is TEXT_ONLY else []
                     page.apply_redactions(**mode)
+                    restore_links(page, kept)  # text.edit replaces glyphs, not the links over them
             # What apply_redactions() leaves under a redaction box: annotations, links, form fields.
             boxes = [to_rect(op.rect) for op in page_ops if op.type == "redact.add"]
             if boxes:

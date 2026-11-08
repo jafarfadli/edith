@@ -116,3 +116,31 @@ def text_edit_redact(page: pymupdf.Page, op: TextEdit, ctx) -> None:
 @register("text.edit")
 def text_edit(page: pymupdf.Page, op: TextEdit, ctx) -> None:
     draw_text_box(page, op.box, ctx)
+
+
+def links_under_redactions(page: pymupdf.Page) -> list[str]:
+    """The link annotations touching a pending redaction of `page`, as PDF source: apply_redactions()
+    deletes them, even in the text-only mode of text.edit, which must keep them."""
+    bands = [a.rect for a in page.annots(types=[pymupdf.PDF_ANNOT_REDACT])]
+    doc = page.parent
+    return [doc.xref_object(ln["xref"], compressed=True) for ln in page.get_links()
+            if ln.get("xref") and any(ln["from"].intersects(b) for b in bands)]
+
+
+def restore_links(page: pymupdf.Page, objects: list[str]) -> None:
+    """Puts link annotations saved by links_under_redactions() back on `page`, unchanged."""
+    if not objects:
+        return
+    doc = page.parent
+    refs = []
+    for obj in objects:
+        xref = doc.get_new_xref()
+        doc.update_object(xref, obj)
+        refs.append(f"{xref} 0 R")
+    kind, value = doc.xref_get_key(page.xref, "Annots")
+    if kind == "xref":  # an indirect /Annots array
+        arr = int(value.split()[0])
+        doc.update_object(arr, doc.xref_object(arr, compressed=True).rstrip()[:-1] + " " + " ".join(refs) + "]")
+        return
+    current = value.strip()[1:-1] if kind == "array" else ""
+    doc.xref_set_key(page.xref, "Annots", "[" + current + " " + " ".join(refs) + "]")
