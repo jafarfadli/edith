@@ -81,7 +81,22 @@ class _Content(Model):
     pageKey: PageKey
 
 
-class TextAdd(_Content):
+Opacity = Annotated[float, Field(ge=0, le=1)]
+Rotation = Annotated[float, Field(ge=-360, le=360)]
+
+
+class _Drawn(_Content):
+    """Drawn objects can be translucent (`opacity`, 0–1)."""
+    opacity: Opacity = 1
+
+
+class _Rotatable(_Drawn):
+    """Drawn objects placed by a rect also turn by `rotation` degrees (clockwise on screen) around the
+    centre of that rect. Objects made of points (ink, lines, polygons) are rotated by moving their points."""
+    rotation: Rotation = 0
+
+
+class TextAdd(_Rotatable):
     type: Literal["text.add"]
     box: TextBox
 
@@ -93,31 +108,47 @@ class TextEdit(_Content):
     box: TextBox
 
 
-class ImageAdd(_Content):
+class ImageAdd(_Rotatable):
     type: Literal["image.add"]
     rect: Rect
     assetId: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
 
 
-class ShapeAdd(_Content):
+RECT_SHAPES = ("rect", "ellipse")
+# Fewest points per point-based kind; line/arrow take exactly 2.
+MIN_POINTS = {"line": 2, "arrow": 2, "polyline": 2, "polygon": 3, "cloud": 3}
+MAX_SHAPE_POINTS = 1000
+
+
+class ShapeAdd(_Rotatable):
+    """rect/ellipse use `rect` (and may be rotated); the other kinds use `points` (closed for polygon and
+    cloud; a cloud's border is scalloped, see bake/geometry.py) and keep `rotation` 0."""
     type: Literal["shape.add"]
-    kind: Literal["rect", "ellipse", "line", "arrow"]
+    kind: Literal["rect", "ellipse", "line", "arrow", "polygon", "polyline", "cloud"]
     rect: Rect | None = None
-    points: list[Point] | None = None
+    points: list[Point] | None = Field(default=None, max_length=MAX_SHAPE_POINTS)
     stroke: HexColor
     fill: HexColor | None = None
     width: float = Field(ge=0, le=100)
+    dash: Literal["solid", "dashed", "dotted"] = "solid"
 
     @model_validator(mode="after")
     def _geometry(self):
-        if self.kind in ("rect", "ellipse") and self.rect is None:
-            raise ValueError(f"{self.kind} needs rect")
-        if self.kind in ("line", "arrow") and (self.points is None or len(self.points) != 2):
-            raise ValueError(f"{self.kind} needs exactly 2 points")
+        if self.kind in RECT_SHAPES:
+            if self.rect is None or self.points is not None:
+                raise ValueError(f"{self.kind} needs rect (and no points)")
+            return self
+        if self.points is None or self.rect is not None:
+            raise ValueError(f"{self.kind} needs points (and no rect)")
+        n = MIN_POINTS[self.kind]
+        if len(self.points) < n or (self.kind in ("line", "arrow") and len(self.points) != n):
+            raise ValueError(f"{self.kind} needs {'exactly' if self.kind in ('line', 'arrow') else 'at least'} {n} points")
+        if self.rotation:
+            raise ValueError(f"{self.kind} is rotated by its points (rotation must be 0)")
         return self
 
 
-class InkAdd(_Content):
+class InkAdd(_Drawn):
     type: Literal["ink.add"]
     paths: list[Annotated[list[Point], Field(min_length=1)]] = Field(min_length=1)
     color: HexColor
@@ -135,7 +166,7 @@ class RedactAdd(_Content):
     fill: Literal["black", "white"] = "black"
 
 
-class SignatureAdd(_Content):
+class SignatureAdd(_Rotatable):
     """A signature image (drawn, typed or uploaded; always a PNG/JPEG asset)."""
     type: Literal["signature.add"]
     rect: Rect
@@ -160,7 +191,7 @@ class StampCustom(Model):
     time: str | None = Field(default=None, max_length=20)
 
 
-class StampAdd(_Content):
+class StampAdd(_Rotatable):
     type: Literal["stamp.add"]
     rect: Rect
     preset: StampPreset | None = None
@@ -174,7 +205,7 @@ class StampAdd(_Content):
         return self
 
 
-class SymbolAdd(_Content):
+class SymbolAdd(_Rotatable):
     type: Literal["symbol.add"]
     kind: Literal["check", "cross"]
     rect: Rect
@@ -238,10 +269,20 @@ class BlankSrc(Model):
     blank: BlankSize
 
 
+class CropRect(Model):
+    """Visible part of a page, in the page's own coordinates (unrotated, relative to its source CropBox)."""
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+    w: float = Field(ge=1)
+    h: float = Field(ge=1)
+
+
 class LayoutPage(Model):
+    """`src.doc` is the edited document or another uploaded one (an imported PDF)."""
     pageKey: PageKey
     src: DocSrc | BlankSrc
     rotate: Literal[0, 90, 180, 270] = 0
+    crop: CropRect | None = None
 
 
 class PagesLayout(Model):

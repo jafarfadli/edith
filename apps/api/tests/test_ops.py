@@ -164,3 +164,48 @@ def test_one_form_set_per_field():
         FormSet.model_validate({**f, "id": "a", "pageKey": "o0"})
     with pytest.raises(ValidationError):
         FormSet.model_validate({**f, "id": "a", "value": 3})
+
+
+def _shape(**kw) -> dict:
+    return {"id": "s", "type": "shape.add", "pageKey": "o0", "stroke": "#000000", "width": 1, **kw}
+
+
+def test_pages_example_validates():
+    data = json.loads((OPS_DIR / "examples" / "pages.json").read_text())
+    req = ExportRequest.model_validate(data)
+    layout = req.ops[0]
+    assert layout.pages[0].crop.w == 523 and layout.pages[1].crop is None
+    assert [op.kind for op in req.ops[1:5]] == ["rect", "polygon", "cloud", "polyline"]
+    assert req.ops[1].dash == "dashed" and req.ops[1].rotation == 30 and req.ops[1].opacity == 0.5
+    assert req.ops[2].dash == "solid" and req.ops[2].opacity == 1 and req.ops[2].rotation == 0
+    assert req.ops[5].rotation == -45 and req.ops[6].opacity == 0.4
+
+
+def test_point_shapes_need_enough_points_and_no_rect():
+    tri = [[0, 0], [10, 0], [5, 8]]
+    for kind, pts in (("polygon", tri), ("cloud", tri), ("polyline", tri[:2]), ("line", tri[:2])):
+        ShapeAdd.model_validate(_shape(kind=kind, points=pts))
+    for bad in (_shape(kind="polygon", points=tri[:2]), _shape(kind="cloud", points=tri[:2]), _shape(kind="polyline", points=tri[:1]),
+                _shape(kind="line", points=tri), _shape(kind="polygon", points=tri, rect=QUAD),
+                _shape(kind="rect", rect=QUAD, points=tri[:2]), _shape(kind="polygon", points=tri, rotation=10),
+                _shape(kind="rect", rect=QUAD, dash="dashdot")):
+        with pytest.raises(ValidationError):
+            ShapeAdd.model_validate(bad)
+
+
+def test_opacity_and_rotation_ranges():
+    ShapeAdd.model_validate(_shape(kind="rect", rect=QUAD, rotation=-360, opacity=0))
+    for bad in (_shape(kind="rect", rect=QUAD, opacity=1.5), _shape(kind="rect", rect=QUAD, rotation=400)):
+        with pytest.raises(ValidationError):
+            ShapeAdd.model_validate(bad)
+    # Only drawn objects carry them: a link has neither.
+    with pytest.raises(ValidationError):
+        LinkAdd.model_validate({"id": "l", "type": "link.add", "pageKey": "o0", "rect": QUAD, "target": {"url": "https://a.b"}, "opacity": 0.5})
+
+
+def test_layout_crop_needs_positive_size():
+    page = {"pageKey": "o0", "src": {"doc": "d", "index": 0}}
+    PagesLayout.model_validate({"id": "L", "type": "pages.layout", "pages": [{**page, "crop": {"x": 0, "y": 0, "w": 10, "h": 10}}]})
+    for crop in ({"x": 0, "y": 0, "w": 0, "h": 10}, {"x": -1, "y": 0, "w": 10, "h": 10}):
+        with pytest.raises(ValidationError):
+            PagesLayout.model_validate({"id": "L", "type": "pages.layout", "pages": [{**page, "crop": crop}]})

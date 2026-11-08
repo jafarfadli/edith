@@ -159,6 +159,40 @@
       "title": "BundledFont",
       "type": "object"
     },
+    "CropRect": {
+      "additionalProperties": false,
+      "description": "Visible part of a page, in the page's own coordinates (unrotated, relative to its source CropBox).",
+      "properties": {
+        "x": {
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "w": {
+          "minimum": 1,
+          "title": "W",
+          "type": "number"
+        },
+        "h": {
+          "minimum": 1,
+          "title": "H",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "CropRect",
+      "type": "object"
+    },
     "DocSrc": {
       "additionalProperties": false,
       "properties": {
@@ -326,6 +360,20 @@
           "title": "Pagekey",
           "type": "string"
         },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        },
+        "rotation": {
+          "default": 0,
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Rotation",
+          "type": "number"
+        },
         "type": {
           "const": "image.add",
           "title": "Type",
@@ -363,6 +411,13 @@
           "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
           "title": "Pagekey",
           "type": "string"
+        },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
         },
         "type": {
           "const": "ink.add",
@@ -433,6 +488,7 @@
     },
     "LayoutPage": {
       "additionalProperties": false,
+      "description": "`src.doc` is the edited document or another uploaded one (an imported PDF).",
       "properties": {
         "pageKey": {
           "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
@@ -460,6 +516,17 @@
           ],
           "title": "Rotate",
           "type": "integer"
+        },
+        "crop": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CropRect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -829,6 +896,7 @@
     },
     "ShapeAdd": {
       "additionalProperties": false,
+      "description": "rect/ellipse use `rect` (and may be rotated); the other kinds use `points` (closed for polygon and\ncloud; a cloud's border is scalloped, see bake/geometry.py) and keep `rotation` 0.",
       "properties": {
         "id": {
           "maxLength": 64,
@@ -841,6 +909,20 @@
           "title": "Pagekey",
           "type": "string"
         },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        },
+        "rotation": {
+          "default": 0,
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Rotation",
+          "type": "number"
+        },
         "type": {
           "const": "shape.add",
           "title": "Type",
@@ -851,7 +933,10 @@
             "rect",
             "ellipse",
             "line",
-            "arrow"
+            "arrow",
+            "polygon",
+            "polyline",
+            "cloud"
           ],
           "title": "Kind",
           "type": "string"
@@ -878,6 +963,7 @@
                 "minItems": 2,
                 "type": "array"
               },
+              "maxItems": 1000,
               "type": "array"
             },
             {
@@ -910,6 +996,16 @@
           "minimum": 0,
           "title": "Width",
           "type": "number"
+        },
+        "dash": {
+          "default": "solid",
+          "enum": [
+            "solid",
+            "dashed",
+            "dotted"
+          ],
+          "title": "Dash",
+          "type": "string"
         }
       },
       "required": [
@@ -937,6 +1033,20 @@
           "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
           "title": "Pagekey",
           "type": "string"
+        },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        },
+        "rotation": {
+          "default": 0,
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Rotation",
+          "type": "number"
         },
         "type": {
           "const": "signature.add",
@@ -975,6 +1085,20 @@
           "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
           "title": "Pagekey",
           "type": "string"
+        },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        },
+        "rotation": {
+          "default": 0,
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Rotation",
+          "type": "number"
         },
         "type": {
           "const": "stamp.add",
@@ -1115,6 +1239,20 @@
           "title": "Pagekey",
           "type": "string"
         },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        },
+        "rotation": {
+          "default": 0,
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Rotation",
+          "type": "number"
+        },
         "type": {
           "const": "symbol.add",
           "title": "Type",
@@ -1161,6 +1299,20 @@
           "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
           "title": "Pagekey",
           "type": "string"
+        },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        },
+        "rotation": {
+          "default": 0,
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Rotation",
+          "type": "number"
         },
         "type": {
           "const": "text.add",

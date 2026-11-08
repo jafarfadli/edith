@@ -1,0 +1,16 @@
+{
+  "ops": [
+    { "id": "layout", "type": "pages.layout", "pages": [
+      { "pageKey": "o0", "src": { "doc": "MAINDOCMAINDOCMAINDOC0", "index": 0 }, "rotate": 0, "crop": { "x": 36, "y": 36, "w": 523, "h": 770 } },
+      { "pageKey": "u-dup-1", "src": { "doc": "MAINDOCMAINDOCMAINDOC0", "index": 0 } },
+      { "pageKey": "u-imp-1", "src": { "doc": "IMPORTEDIMPORTEDIMPOR1", "index": 0 }, "rotate": 90 }
+    ] },
+    { "id": "sh1", "type": "shape.add", "pageKey": "o0", "kind": "rect", "rect": { "x": 100, "y": 100, "w": 120, "h": 60 }, "stroke": "#e11d48", "fill": null, "width": 2, "dash": "dashed", "opacity": 0.5, "rotation": 30 },
+    { "id": "sh2", "type": "shape.add", "pageKey": "o0", "kind": "polygon", "points": [[100, 300], [200, 300], [150, 380]], "stroke": "#1d4ed8", "fill": "#bfdbfe", "width": 1.5 },
+    { "id": "sh3", "type": "shape.add", "pageKey": "u-dup-1", "kind": "cloud", "points": [[300, 300], [420, 300], [420, 380], [300, 380]], "stroke": "#e11d48", "fill": null, "width": 2, "dash": "dotted" },
+    { "id": "sh4", "type": "shape.add", "pageKey": "u-imp-1", "kind": "polyline", "points": [[50, 50], [90, 80], [130, 50]], "stroke": "#111111", "width": 1 },
+    { "id": "im1", "type": "image.add", "pageKey": "u-imp-1", "rect": { "x": 200, "y": 200, "w": 80, "h": 40 }, "assetId": "a1", "rotation": -45, "opacity": 0.8 },
+    { "id": "in1", "type": "ink.add", "pageKey": "o0", "paths": [[[10, 10], [20, 25]]], "color": "#0000ff", "width": 3, "opacity": 0.4 }
+  ],
+  "filename": "pages.pdf"
+}
