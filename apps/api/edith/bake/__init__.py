@@ -42,6 +42,25 @@ def _run(handler, page, op, ctx) -> None:
         raise BakeFailed(str(exc), op_id=op.id) from exc
 
 
+MAX_IMPORT_DOCS = 20  # distinct imported PDFs one export may reference
+
+
+def _check_import_docs(ops: list, layout, main_id: str) -> None:
+    """Imported documents are loaded and parsed per request: cap how many distinct ones a request names."""
+    ids: set[str] = {p.src.doc for p in layout.pages if isinstance(p.src, DocSrc)}
+    for op in ops:
+        if op.type == "form.set" and op.doc:
+            ids.add(op.doc)
+        box = getattr(op, "box", None)
+        for para in getattr(box, "paragraphs", None) or []:
+            for run in para:
+                if getattr(run.font, "kind", None) == "original" and run.font.doc:
+                    ids.add(run.font.doc)
+    ids.discard(main_id)
+    if len(ids) > MAX_IMPORT_DOCS:
+        raise InvalidOp(f"more than {MAX_IMPORT_DOCS} imported documents", op_index=None)
+
+
 def _memo(load):
     cache: dict[str, bytes] = {}
 
@@ -93,6 +112,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
         if layout is None:
             layout = _default_layout(doc.page_count, ctx.doc_id)
 
+        _check_import_docs(ops, layout, ctx.doc_id)
         # Each imported PDF is read once, by SourcePages (text.edit, original fonts) and build_pages alike.
         if ctx.load_source is not None:
             ctx = replace(ctx, load_source=_memo(ctx.load_source))

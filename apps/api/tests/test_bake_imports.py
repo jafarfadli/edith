@@ -212,3 +212,26 @@ def test_filling_an_imported_form_drops_the_main_xfa():
     assert xfa(bake(main, ops(pages), ctx)) != "null"  # untouched without a fill
     filled = {"id": "f2", "type": "form.set", "fieldName": "name", "value": "Impor", "doc": IMP}
     assert xfa(bake(main, ops(pages, filled), ctx)) == "null"
+
+
+def test_corrupt_import_fails_naming_its_document():
+    with pytest.raises(BakeFailed) as e:
+        bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0))), ctx_with({IMP: b"not a pdf at all"}))
+    assert IMP in str(e.value)
+    with pytest.raises(BakeFailed) as e:
+        bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0)), edit("u-a", "g0", "x")), ctx_with({IMP: b"junk"}))
+    assert IMP in str(e.value)
+
+
+def test_too_many_imported_documents_is_invalid():
+    from edith.bake import MAX_IMPORT_DOCS
+    ids = [f"D{i:021d}" for i in range(MAX_IMPORT_DOCS + 1)]
+    pages = [page("o0", MAIN, 0)] + [page(f"u{i}", d, 0) for i, d in enumerate(ids)]
+    with pytest.raises(InvalidOp):
+        bake(make_pdf(pages=1), ops(layout(*pages)), ctx_with({d: make_pdf(pages=1) for d in ids}))
+    # form docs and the main id do not push a request with exactly MAX imports over the cap
+    ok = [page("o0", MAIN, 0)] + [page(f"u{i}", d, 0) for i, d in enumerate(ids[:MAX_IMPORT_DOCS])]
+    bake(make_pdf(pages=1), ops(layout(*ok)), ctx_with({d: make_pdf(pages=1) for d in ids})).close()
+    extra = {"id": "F", "type": "form.set", "fieldName": "a", "value": "x", "doc": ids[-1]}
+    with pytest.raises(InvalidOp):
+        bake(make_pdf(pages=1), ops(layout(*ok), extra), ctx_with({d: make_pdf(pages=1) for d in ids}))

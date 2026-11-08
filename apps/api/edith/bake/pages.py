@@ -25,7 +25,10 @@ def _insert_imports(doc: pymupdf.Document, layout: PagesLayout, layout_index: in
             raise InvalidOp(f"unknown document {doc_id} for {entry.pageKey}", op_index=layout_index) from None
         except DocExpired:
             raise DocExpired(f"imported document {doc_id} expired", doc_id=doc_id) from None
-        src = pymupdf.open(stream=data, filetype="pdf")
+        try:
+            src = pymupdf.open(stream=data, filetype="pdf")
+        except Exception as exc:  # noqa: BLE001
+            raise BakeFailed(f"cannot read imported document {doc_id}: {exc}") from exc
         try:
             if forms and forms.get(doc_id):
                 drop_xfa(src)

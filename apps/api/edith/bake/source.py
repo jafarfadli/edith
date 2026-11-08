@@ -3,7 +3,7 @@ from collections.abc import Callable
 import pymupdf
 
 from edith.doc_fonts import load_font
-from edith.errors import DocExpired, DocNotFound
+from edith.errors import BakeFailed, DocExpired, DocNotFound
 from edith.paragraphs import extract_paragraphs
 
 
@@ -28,7 +28,11 @@ class SourcePages:
             doc = None
             if self._load is not None:
                 try:
-                    doc = pymupdf.open(stream=self._load(doc_id), filetype="pdf")
+                    data = self._load(doc_id)
+                    try:
+                        doc = pymupdf.open(stream=data, filetype="pdf")
+                    except Exception as exc:  # noqa: BLE001
+                        raise BakeFailed(f"cannot read imported document {doc_id}: {exc}") from exc
                 except DocNotFound:
                     doc = None
                 except DocExpired:
