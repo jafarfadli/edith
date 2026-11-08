@@ -19,6 +19,7 @@ export type Bold = boolean;
 export type Italic = boolean;
 export type Kind1 = "original";
 export type Ref = string;
+export type Doc = string | null;
 export type Size = number;
 export type Color = string;
 export type Bgcolor = string | null;
@@ -147,6 +148,7 @@ export type Id12 = string;
 export type Type12 = "form.set";
 export type Fieldname = string;
 export type Value = string | boolean;
+export type Doc1 = string | null;
 export type Id13 = string;
 export type Type13 = "pages.layout";
 /**
@@ -156,7 +158,7 @@ export type Type13 = "pages.layout";
 export type Pages = [LayoutPage, ...LayoutPage[]];
 export type Pagekey13 = string;
 export type Src = DocSrc | BlankSrc;
-export type Doc = string;
+export type Doc2 = string;
 export type Index = number;
 export type Width2 = number;
 export type Height = number;
@@ -277,7 +279,8 @@ export interface BundledFont {
   italic?: Italic;
 }
 /**
- * A font embedded in the uploaded PDF (`ref` from GET /documents/{id}/text), reused as is.
+ * A font embedded in an uploaded PDF (`ref` from GET /documents/{id}/text), reused as is. `doc`: the
+ * imported PDF it comes from (xref-based refs are only unique per document); none = the edited PDF.
  *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "OriginalFont".
@@ -285,6 +288,7 @@ export interface BundledFont {
 export interface OriginalFont {
   kind: Kind1;
   ref: Ref;
+  doc?: Doc;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
@@ -481,7 +485,9 @@ export interface AnnotAdd {
 }
 /**
  * Value of AcroForm field `fieldName` (every widget of that name): text/combo/list -> the string,
- * checkbox -> bool, radio -> the on-state name of the chosen button (or "Off").
+ * checkbox -> bool, radio -> the on-state name of the chosen button (or "Off"). `doc`: a field of that
+ * imported PDF, named as in its own structure (the export may rename it when the name is taken); none =
+ * the edited PDF.
  *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "FormSet".
@@ -491,6 +497,7 @@ export interface FormSet {
   type: Type12;
   fieldName: Fieldname;
   value: Value;
+  doc?: Doc1;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema
@@ -518,7 +525,7 @@ export interface LayoutPage {
  * via the `definition` "DocSrc".
  */
 export interface DocSrc {
-  doc: Doc;
+  doc: Doc2;
   index: Index;
 }
 /**

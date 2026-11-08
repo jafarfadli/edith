@@ -29,10 +29,15 @@ class BundledFont(Model):
     italic: bool = False
 
 
+DocId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")]
+
+
 class OriginalFont(Model):
-    """A font embedded in the uploaded PDF (`ref` from GET /documents/{id}/text), reused as is."""
+    """A font embedded in an uploaded PDF (`ref` from GET /documents/{id}/text), reused as is. `doc`: the
+    imported PDF it comes from (xref-based refs are only unique per document); none = the edited PDF."""
     kind: Literal["original"]
     ref: str = Field(pattern=r"^f\d+$")
+    doc: DocId | None = None
 
 
 FontRef = Union[BundledFont, OriginalFont]
@@ -248,11 +253,14 @@ class AnnotAdd(_Content):
 
 class FormSet(Model):
     """Value of AcroForm field `fieldName` (every widget of that name): text/combo/list -> the string,
-    checkbox -> bool, radio -> the on-state name of the chosen button (or "Off")."""
+    checkbox -> bool, radio -> the on-state name of the chosen button (or "Off"). `doc`: a field of that
+    imported PDF, named as in its own structure (the export may rename it when the name is taken); none =
+    the edited PDF."""
     id: OpId
     type: Literal["form.set"]
     fieldName: str = Field(min_length=1, max_length=500)
     value: str | bool
+    doc: DocId | None = None
 
 
 class DocSrc(Model):
@@ -316,9 +324,9 @@ def _check_ops(ops: list) -> None:
     edited = [(op.pageKey, op.paragraphId) for op in ops if op.type == "text.edit"]
     if len(edited) != len(set(edited)):
         raise ValueError("at most one text.edit per (pageKey, paragraphId)")
-    fields = [op.fieldName for op in ops if op.type == "form.set"]
+    fields = [(op.doc, op.fieldName) for op in ops if op.type == "form.set"]
     if len(fields) != len(set(fields)):
-        raise ValueError("at most one form.set per fieldName")
+        raise ValueError("at most one form.set per (doc, fieldName)")
 
 
 class ExportRequest(Model):

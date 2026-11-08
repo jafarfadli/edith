@@ -209,3 +209,15 @@ def test_layout_crop_needs_positive_size():
     for crop in ({"x": 0, "y": 0, "w": 0, "h": 10}, {"x": -1, "y": 0, "w": 10, "h": 10}):
         with pytest.raises(ValidationError):
             PagesLayout.model_validate({"id": "L", "type": "pages.layout", "pages": [{**page, "crop": crop}]})
+
+
+def test_form_set_and_original_fonts_may_name_a_document():
+    ok = [{"id": "a", "type": "form.set", "fieldName": "n", "value": "x"},
+          {"id": "b", "type": "form.set", "fieldName": "n", "value": "y", "doc": "IMPORTED"}]
+    ExportRequest.model_validate({"ops": ok})
+    with pytest.raises(ValidationError):
+        ExportRequest.model_validate({"ops": [*ok, {"id": "c", "type": "form.set", "fieldName": "n", "value": "z", "doc": "IMPORTED"}]})
+    run = {"text": "x", "size": 10, "color": "#000000"}
+    assert Run.model_validate({**run, "font": {"kind": "original", "ref": "f3", "doc": "IMPORTED"}}).font.doc == "IMPORTED"
+    with pytest.raises(ValidationError):
+        Run.model_validate({**run, "font": {"kind": "original", "ref": "f3", "doc": "../x"}})

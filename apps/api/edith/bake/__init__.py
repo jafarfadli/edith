@@ -42,6 +42,16 @@ def _run(handler, page, op, ctx) -> None:
         raise BakeFailed(str(exc), op_id=op.id) from exc
 
 
+def _memo(load):
+    cache: dict[str, bytes] = {}
+
+    def cached(doc_id: str) -> bytes:
+        if doc_id not in cache:
+            cache[doc_id] = load(doc_id)
+        return cache[doc_id]
+    return cached
+
+
 CROP_SLACK = 0.01  # pt: a crop this far past the page edge is clamped, not rejected
 
 
@@ -83,12 +93,19 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
         if layout is None:
             layout = _default_layout(doc.page_count, ctx.doc_id)
 
-        pages_src = SourcePages(source, {
-            p.pageKey: (p.src.index if isinstance(p.src, DocSrc) and p.src.doc == ctx.doc_id
-                        and p.src.index < doc.page_count else None)
-            for p in layout.pages
-        })
+        # Each imported PDF is read once, by SourcePages (text.edit, original fonts) and build_pages alike.
+        if ctx.load_source is not None:
+            ctx = replace(ctx, load_source=_memo(ctx.load_source))
+        pages_src = SourcePages(ctx.doc_id, source, {
+            p.pageKey: (p.src.doc, p.src.index) if isinstance(p.src, DocSrc) else None for p in layout.pages
+        }, ctx.load_source)
         ctx = replace(ctx, source=pages_src)
+        forms = [op for op in ops if op.type == "form.set"]
+        main_forms = [op for op in forms if op.doc in (None, ctx.doc_id)]
+        import_forms: dict[str, list] = defaultdict(list)
+        for op in forms:
+            if op.doc not in (None, ctx.doc_id):
+                import_forms[op.doc].append(op)
 
         keys = {p.pageKey for p in layout.pages}
         content = [(i, op) for i, op in enumerate(ops) if op.type not in ("pages.layout", "form.set")]
@@ -102,7 +119,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             if op.type == "link.add" and isinstance(op.target, PageTarget) and op.target.pageKey not in keys:
                 raise InvalidOp(f"link to unknown pageKey {op.target.pageKey}", op_index=i)
 
-        key_to_index, base_rotation = build_pages(doc, layout, layout_index, ctx)
+        key_to_index, base_rotation = build_pages(doc, layout, layout_index, ctx, import_forms)
         ctx = replace(ctx, page_index=key_to_index)
         crops = [_crop_rect(doc[i], entry.crop, layout_index) if entry.crop else None for i, entry in enumerate(layout.pages)]
 
@@ -134,7 +151,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                     if PHASE[op.type] == phase and not (phase != "draw" and under_redaction(op, boxes)):
                         _run(HANDLERS[op.type], page, op, ctx)
 
-        _fill(doc, [op for op in ops if op.type == "form.set"], flatten_forms, widgets_removed)
+        _fill(doc, main_forms, flatten_forms, widgets_removed)
 
         # Crop and rotation last: neither moves the content (spec: Urutan bake 7). Annotations, links and
         # widgets the crop hides entirely go (owner decision); a removed widget makes the XFA stale.

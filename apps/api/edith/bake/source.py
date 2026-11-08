@@ -1,38 +1,68 @@
+from collections.abc import Callable
+
 import pymupdf
 
 from edith.doc_fonts import load_font
+from edith.errors import DocExpired, DocNotFound
 from edith.paragraphs import extract_paragraphs
 
 
 class SourcePages:
-    """Read-only view of the uploaded PDF, for ops that refer to its original content: paragraphs
-    (`text.edit`) and embedded fonts (`FontRef` kind "original"). Paragraph ids come from the same
-    extraction GET /documents/{id}/text uses, run on the untouched source file."""
+    """Read-only views of the uploaded PDFs a layout uses — the edited one and imported ones — for ops that
+    refer to their original content: paragraphs (`text.edit`) and embedded fonts (`FontRef` kind "original",
+    whose `doc` names an imported PDF; none = the edited one). Paragraph ids come from the same extraction
+    GET /documents/{id}/text uses, run on the untouched source file."""
 
-    def __init__(self, source: bytes, page_src: dict[str, int | None]):
-        self._doc = pymupdf.open(stream=source, filetype="pdf")
-        self._page_src = page_src  # pageKey → source page index (None for blank pages)
-        self._paragraphs: dict[int, dict[str, dict]] = {}
-        self._fonts: dict[str, pymupdf.Font] = {}
+    def __init__(self, main_id: str, source: bytes, page_src: dict[str, tuple[str, int] | None],
+                 load: Callable[[str], bytes] | None = None):
+        self._main = main_id
+        self._docs: dict[str, pymupdf.Document | None] = {main_id: pymupdf.open(stream=source, filetype="pdf")}
+        self._load = load
+        self._page_src = page_src  # pageKey → (doc id, source page index); None for blank pages
+        self._paragraphs: dict[tuple[str, int], dict[str, dict]] = {}
+        self._fonts: dict[tuple[str, str], pymupdf.Font] = {}
+
+    def _doc(self, doc_id: str) -> pymupdf.Document | None:
+        """The document, opened on first use; None when it is unknown. An expired one raises DocExpired naming it."""
+        if doc_id not in self._docs:
+            doc = None
+            if self._load is not None:
+                try:
+                    doc = pymupdf.open(stream=self._load(doc_id), filetype="pdf")
+                except DocNotFound:
+                    doc = None
+                except DocExpired:
+                    raise DocExpired(f"imported document {doc_id} expired", doc_id=doc_id) from None
+            self._docs[doc_id] = doc
+        return self._docs[doc_id]
 
     def paragraph(self, page_key: str, paragraph_id: str) -> dict | None:
-        index = self._page_src.get(page_key)
-        if index is None:
+        src = self._page_src.get(page_key)
+        if src is None:
             return None
-        if index not in self._paragraphs:
-            self._paragraphs[index] = {p["id"]: p for p in extract_paragraphs(self._doc[index])}
-        return self._paragraphs[index].get(paragraph_id)
+        doc = self._doc(src[0])
+        if doc is None or src[1] >= doc.page_count:
+            return None
+        if src not in self._paragraphs:
+            self._paragraphs[src] = {p["id"]: p for p in extract_paragraphs(doc[src[1]])}
+        return self._paragraphs[src].get(paragraph_id)
 
-    def font(self, ref: str) -> pymupdf.Font:
-        if ref not in self._fonts:
-            font = load_font(self._doc, int(ref[1:])) if self._is_font(int(ref[1:])) else None
+    def font(self, ref: str, doc_id: str | None = None) -> pymupdf.Font:
+        key = (doc_id or self._main, ref)
+        if key not in self._fonts:
+            doc = self._doc(key[0])
+            xref = int(ref[1:])
+            font = load_font(doc, xref) if doc is not None and self._is_font(doc, xref) else None
             if font is None:
-                raise ValueError(f"font {ref} is not a reusable font of this document")
-            self._fonts[ref] = font
-        return self._fonts[ref]
+                raise ValueError(f"font {ref} is not a reusable font of document {key[0]}")
+            self._fonts[key] = font
+        return self._fonts[key]
 
-    def _is_font(self, xref: int) -> bool:
-        return any(entry[0] == xref for page in self._doc for entry in page.get_fonts(full=True))
+    @staticmethod
+    def _is_font(doc: pymupdf.Document, xref: int) -> bool:
+        return any(entry[0] == xref for page in doc for entry in page.get_fonts(full=True))
 
     def close(self) -> None:
-        self._doc.close()
+        for doc in self._docs.values():
+            if doc is not None:
+                doc.close()

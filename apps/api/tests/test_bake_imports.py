@@ -3,12 +3,12 @@ import pytest
 
 from edith.bake import bake
 from edith.bake.context import BakeContext
-from edith.errors import DocExpired, DocNotFound, InvalidOp
+from edith.errors import BakeFailed, DocExpired, DocNotFound, InvalidOp
 from edith.fonts import FontRegistry
 from edith.forms import extract_fields
 from edith.ops import ExportRequest
 from edith.settings import Settings
-from tests.pdfs import make_pdf
+from tests.pdfs import make_fonts_pdf, make_pdf
 
 MAIN, IMP = "M" * 22, "I" * 22
 
@@ -101,13 +101,69 @@ def test_link_to_a_duplicated_page_goes_to_the_duplicate():
     assert [ln["page"] for ln in saved[0].get_links()] == [2]
 
 
-def test_text_edit_on_an_imported_page_is_invalid():
-    ctx = ctx_with({IMP: make_pdf(pages=1)})
-    box = {"rect": {"x": 72, "y": 60, "w": 100, "h": 14}, "lineHeight": 14, "paragraphs": [[]], "layout": []}
+ARIMO = {"kind": "bundled", "family": "Arimo", "bold": False, "italic": False}
+
+
+def edit(page_key: str, paragraph: str, text: str, font=ARIMO, op_id: str = "e") -> dict:
+    box = {"rect": {"x": 72, "y": 57, "w": 200, "h": 17}, "lineHeight": 16.8,
+           "paragraphs": [[{"text": text, "font": font, "size": 14, "color": "#111111"}]],
+           "layout": [{"baseline": 15, "segments": [{"x": 0, "text": text, "runIndex": 0}]}]}
+    return {"id": op_id, "type": "text.edit", "pageKey": page_key, "paragraphId": paragraph, "box": box}
+
+
+def test_text_edit_on_imported_pages():
+    ctx = ctx_with({IMP: make_pdf(pages=2)})
+    out = bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 1), page("u-b", IMP, 1)),
+                                      edit("u-a", "g0", "Diganti")), ctx)
+    assert texts(out) == ["Page 0", "Diganti", "Page 1"]  # only the edited copy; the main page is untouched
+
+
+def test_text_edit_of_an_unknown_paragraph_on_an_imported_page_is_invalid():
     with pytest.raises(InvalidOp) as e:
-        bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0)),
-                                    {"id": "e", "type": "text.edit", "pageKey": "u-a", "paragraphId": "g0", "box": box}), ctx)
+        bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0)), edit("u-a", "g9", "x")),
+             ctx_with({IMP: make_pdf(pages=1)}))
     assert e.value.extra["op_index"] == 1
+
+
+def test_original_fonts_name_their_document():
+    imported = make_fonts_pdf()
+    src = pymupdf.open(stream=imported, filetype="pdf")
+    ref = next(f"f{f[0]}" for f in src[0].get_fonts(full=True) if "Arimo" in f[3])
+    font = {"kind": "original", "ref": ref, "doc": IMP}
+    out = bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0)), edit("u-a", "g2", "Arimo asli", font)),
+               ctx_with({IMP: imported}))
+    assert "Arimo asli" in out[1].get_text()
+    assert any("Arimo" in f[3] for f in out[1].get_fonts(full=True))
+    with pytest.raises(BakeFailed):  # the same ref without `doc` means the edited PDF, which has no such font
+        bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0)), edit("u-a", "g2", "x", {**font, "doc": None})),
+             ctx_with({IMP: imported}))
+
+
+def test_expired_import_named_while_checking_text_edits():
+    with pytest.raises(DocExpired) as e:
+        bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0)), edit("u-a", "g0", "x")), ctx_with({IMP: None}))
+    assert e.value.extra["doc_id"] == IMP
+
+
+def test_form_set_of_an_imported_field_survives_the_rename():
+    ctx = ctx_with({IMP: form_pdf("name", "IMPORTED", "Import")})
+    out = bake(form_pdf("name", "MAIN", "Main"), ops(
+        layout(page("o0", MAIN, 0), page("u-a", IMP, 0), page("u-b", IMP, 0)),
+        {"id": "f1", "type": "form.set", "fieldName": "name", "value": "Utama"},
+        {"id": "f2", "type": "form.set", "fieldName": "name", "value": "Impor", "doc": IMP}), ctx)
+    saved = pymupdf.open(stream=out.tobytes(), filetype="pdf")
+    fields = [(f["name"], f["value"], f["page"]) for f in extract_fields(saved)]
+    assert fields[0] == ("name", "Utama", 0)
+    assert [f[1:] for f in fields[1:]] == [("Impor", 1), ("Impor", 2)]  # both copies of the imported page
+    assert all(f[0].startswith("name [") for f in fields[1:])
+
+
+def test_form_set_of_an_imported_field_with_a_wrong_value_names_the_op():
+    with pytest.raises(BakeFailed) as e:
+        bake(make_pdf(pages=1), ops(layout(page("o0", MAIN, 0), page("u-a", IMP, 0)),
+                                    {"id": "f2", "type": "form.set", "fieldName": "name", "value": True, "doc": IMP}),
+             ctx_with({IMP: form_pdf("name", "x", "Import")}))
+    assert e.value.extra["op_id"] == "f2"
 
 
 def test_import_page_out_of_range_or_unknown_doc_is_invalid():

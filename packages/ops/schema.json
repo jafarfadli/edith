@@ -306,7 +306,7 @@
     },
     "FormSet": {
       "additionalProperties": false,
-      "description": "Value of AcroForm field `fieldName` (every widget of that name): text/combo/list -> the string,\ncheckbox -> bool, radio -> the on-state name of the chosen button (or \"Off\").",
+      "description": "Value of AcroForm field `fieldName` (every widget of that name): text/combo/list -> the string,\ncheckbox -> bool, radio -> the on-state name of the chosen button (or \"Off\"). `doc`: a field of that\nimported PDF, named as in its own structure (the export may rename it when the name is taken); none =\nthe edited PDF.",
       "properties": {
         "id": {
           "maxLength": 64,
@@ -335,6 +335,19 @@
             }
           ],
           "title": "Value"
+        },
+        "doc": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc"
         }
       },
       "required": [
@@ -582,7 +595,7 @@
     },
     "OriginalFont": {
       "additionalProperties": false,
-      "description": "A font embedded in the uploaded PDF (`ref` from GET /documents/{id}/text), reused as is.",
+      "description": "A font embedded in an uploaded PDF (`ref` from GET /documents/{id}/text), reused as is. `doc`: the\nimported PDF it comes from (xref-based refs are only unique per document); none = the edited PDF.",
       "properties": {
         "kind": {
           "const": "original",
@@ -593,6 +606,19 @@
           "pattern": "^f\\d+$",
           "title": "Ref",
           "type": "string"
+        },
+        "doc": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc"
         }
       },
       "required": [
