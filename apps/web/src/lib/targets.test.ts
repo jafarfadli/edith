@@ -33,6 +33,15 @@ describe("search targets", () => {
     expect(buildTargets(doc, pages).map((t) => t.key)).toEqual(["op:t", "para:o0:g0", "op:e", "op:u"]);
   });
 
+  it("ignores pages of imported PDFs even when their index matches a main page", () => {
+    const d: EditorDoc = { ...doc, imports: ["IMP"], pages: [...doc.pages, { pageKey: "u9", src: { doc: "IMP", index: 0 }, rotate: 0 }] };
+    const keys = buildTargets(d, pages).map((t) => t.key);
+    expect(keys).not.toContain("para:u9:g0");
+    expect(keys).toEqual(["op:t", "para:o0:g0", "op:e", "op:u"]);
+    const [m] = findMatches(buildTargets(doc, pages).filter((t) => t.key === "para:o0:g0"), "lama", true);
+    expect(highlightRects({ ...m, key: "para:u9:g0" }, d, pages, {}, () => mono)).toEqual([]);
+  });
+
   it("highlights a match in an original paragraph", () => {
     const [m] = findMatches(buildTargets(doc, pages).filter((t) => t.key === "para:o0:g0"), "lama", true);
     expect(highlightRects(m, doc, pages, {}, () => mono)).toEqual([{ x: 125, y: 100.5, w: 20, h: 12 }]);
