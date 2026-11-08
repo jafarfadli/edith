@@ -80,7 +80,7 @@ export function StampPicker({ onClose }: { onClose: () => void }) {
           <div className="flex flex-col gap-3 text-sm">
             <input aria-label={t.stamp.text} value={text} maxLength={60} autoFocus onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") addCustom(); }}
-              className="h-10 rounded-md border border-line-strong bg-paper px-2 text-base font-bold focus:border-accent focus:outline-none" style={{ color }} />
+              className="h-10 rounded-md border border-line-strong bg-paper px-2 text-base font-bold focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" style={{ color }} />
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-1.5 text-muted"><input type="checkbox" checked={withDate} onChange={(e) => setWithDate(e.target.checked)} />{t.stamp.date}</label>
               <label className="flex items-center gap-1.5 text-muted"><input type="checkbox" checked={withTime} onChange={(e) => setWithTime(e.target.checked)} />{t.stamp.time}</label>

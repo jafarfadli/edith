@@ -19,7 +19,7 @@ export const BTN_DANGER = `${BTN_BASE} font-normal text-danger-text hover:bg-dan
 export const BTN_ICON = "grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-hover hover:text-ink disabled:pointer-events-none disabled:text-faint/60";
 
 /** Text fields and selects on dark surfaces. */
-export const FIELD = "h-8 rounded-md border border-line-strong bg-base/60 px-2 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none";
+export const FIELD = "h-8 rounded-md border border-line-strong bg-base/60 px-2 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent";
 
 /** A segmented control (tabs, language, mode): the track and one segment. */
 export const SEGMENTED = "flex rounded-md bg-base/60 p-0.5 ring-1 ring-inset ring-line";

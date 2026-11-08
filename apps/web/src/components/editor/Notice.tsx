@@ -6,14 +6,14 @@ import { t } from "@/lib/strings";
 import { ICON } from "../ui/icon";
 import { POPOVER } from "../ui/styles";
 
-/** A toast at the bottom of the window: an error stays until closed, info goes away by itself (Editor). */
+/** A toast at the bottom of the canvas (Editor renders it in the canvas wrapper): an error stays until closed, info goes away by itself (Editor). */
 export function Notice({ kind, children, action, onClose }: {
   kind: "error" | "info"; children: React.ReactNode; action?: NoticeMsg["action"]; onClose?: () => void;
 }) {
   const Icon = kind === "error" ? CircleAlert : Info;
   return (
     <div role={kind === "error" ? "alert" : "status"}
-      className={`fixed bottom-16 left-1/2 z-50 flex max-w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 items-center gap-3 py-2 pl-3 pr-2 ${POPOVER}`}>
+      className={`absolute bottom-[4.25rem] left-1/2 z-50 flex w-max max-w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 py-2 pl-3 pr-2 ${POPOVER}`}>
       <Icon {...ICON} className={`shrink-0 ${kind === "error" ? "text-danger-text" : "text-accent-text"}`} />
       <span className="min-w-0 flex-1">{children}</span>
       {action && (

@@ -9,13 +9,14 @@ const HOVER_DELAY_MS = 500;
 const EDGE = 8;
 const WIDE = 288;
 
-/** Key caps of a shortcut (hidden from assistive tech: the control carries `aria-keyshortcuts`). */
+/** Key caps of a shortcut (hidden from assistive tech: the control carries `aria-keyshortcuts`). Set in Geist,
+ *  12 px medium: Geist Mono's narrow "O" (Elips) read as a zero at 11 px. */
 export function Kbd({ keys }: { keys: string }) {
   const mac = isMac();
   return (
     <span aria-hidden className="flex gap-0.5">
       {formatKeys(keys, mac).map((k, i) => (
-        <kbd key={i} className="min-w-4 rounded-sm bg-hover px-1 text-center font-mono text-2xs leading-4 text-muted">{k}</kbd>
+        <kbd key={i} className="min-w-[18px] rounded-sm bg-hover px-1 text-center font-sans text-xs font-medium leading-[18px] text-muted">{k}</kbd>
       ))}
     </span>
   );
@@ -62,6 +63,12 @@ export function Tip({ label, keys, side = "bottom", wide = false, children }: {
       {children}
       {at && createPortal(
         <div role="tooltip"
+          // Keep the whole tip inside the window: `show` guessed its width, this corrects it with the real one.
+          ref={(el) => {
+            if (!el) return;
+            const half = el.offsetWidth / 2;
+            el.style.left = `${Math.min(Math.max(at.x, EDGE + half), window.innerWidth - EDGE - half)}px`;
+          }}
           className={`pointer-events-none fixed z-[60] flex -translate-x-1/2 items-center gap-2 rounded-md bg-raised px-2 text-xs text-ink shadow-pop ${wide ? "whitespace-normal py-1.5" : "whitespace-nowrap py-1"} ${side === "top" ? "-translate-y-full" : ""}`}
           style={{ left: at.x, top: at.y, width: wide ? WIDE : undefined }}>
           {label}

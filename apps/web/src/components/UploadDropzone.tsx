@@ -41,6 +41,9 @@ export function UploadDropzone() {
     }
   }
 
+  // Secondary text on the white sheet (≥ 4.5:1 there), or on the dark drag-over fill.
+  const secondary = over ? "text-muted" : "text-paper-ink/65";
+
   return (
     // Narrower on phones so "Pilih file" stays above the fold; the error hangs under the sheet without moving it.
     <div className="relative w-full max-w-[16rem] md:max-w-[22rem]">
@@ -57,13 +60,13 @@ export function UploadDropzone() {
         </span>
         <div className="flex flex-col gap-1">
           <p className={`text-base font-medium ${over ? "text-ink" : "text-paper-ink"}`}>{t.upload.drop}</p>
-          <p className="text-xs text-faint">{t.upload.or}</p>
+          <p className={`text-xs ${secondary}`}>{t.upload.or}</p>
         </div>
         <button type="button" disabled={busy} onClick={() => input.current?.click()} className={BTN_PRIMARY}>
           {busy && <LoaderCircle size={16} strokeWidth={1.75} aria-hidden className="animate-spin" />}
           {t.upload.choose}
         </button>
-        {busy ? <p className="text-2xs text-faint" role="status">{t.upload.processing}</p> : <p className="text-2xs text-faint">{t.upload.limit}</p>}
+        {busy ? <p className={`text-2xs ${secondary}`} role="status">{t.upload.processing}</p> : <p className={`text-2xs ${secondary}`}>{t.upload.limit}</p>}
         <input ref={input} type="file" accept="application/pdf,.pdf" hidden data-testid="file-input" onChange={(e) => handle(e.target.files?.[0])} />
       </div>
       {error && <p role="alert" className="absolute inset-x-0 top-full mt-4 text-center text-sm text-danger-text">{error}</p>}

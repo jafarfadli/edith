@@ -185,10 +185,11 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
             {info && pdf ? <PageList overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><SelectionMiniBar {...a} /><CropOverlay {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
           </main>
           <ZoomPill />
+          {/* Over the canvas (centred on it, above the zoom pill), not on the window. */}
+          {notice && <Notice kind={notice.kind} action={notice.action} onClose={() => setNotice(null)}>{notice.text}</Notice>}
         </div>
       </div>
       <FindBar />
-      {notice && <Notice kind={notice.kind} action={notice.action} onClose={() => setNotice(null)}>{notice.text}</Notice>}
     </div>
   );
 }
