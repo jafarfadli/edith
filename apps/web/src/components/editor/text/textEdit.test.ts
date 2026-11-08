@@ -260,7 +260,7 @@ describe("markup over an edited paragraph", () => {
   const note = { id: "n", type: "annot.add", pageKey: "o0", kind: "note", point: [90, 95], color: "#facc15", content: "x" } as ContentOp;
 
   beforeEach(() => {
-    textStore.setState({ pages: { 0: [g3] } });
+    textStore.setState({ docId: info.docId, pages: { 0: [g3] } });
     fontsLoaded = true;
     const st = editorStore.getState();
     // On line 1, on line 2, on the next paragraph below (baseline 128), on another page; and a note.

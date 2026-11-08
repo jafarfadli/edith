@@ -47,7 +47,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   const docId = useEditor((s) => s.info?.docId ?? "");
   const srcIndex = useEditor((s) => {
     const entry = s.doc.pages.find((p) => p.pageKey === pageKey);
-    return entry && "doc" in entry.src ? entry.src.index : null;
+    return entry && "doc" in entry.src && entry.src.doc === s.info?.docId ? entry.src.index : null; // main document only
   });
   // renderText reads the editing id at render time (the edited op is hidden), so re-render when it changes.
   useStore(textEditStore, (s) => s.editing?.id);

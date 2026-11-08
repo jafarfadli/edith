@@ -11,7 +11,7 @@ type Pt = [number, number];
 export function markLines(pageKey: string): CharLine[] {
   const s = editorStore.getState();
   const entry = s.doc.pages.find((p) => p.pageKey === pageKey);
-  if (!entry || !("doc" in entry.src)) return [];
+  if (!entry || !("doc" in entry.src) || entry.src.doc !== s.info?.docId) return []; // imported pages: no character data
   const edited = new Set(Object.values(s.doc.objects)
     .filter((op): op is TextEdit => op.type === "text.edit" && op.pageKey === pageKey).map((op) => op.paragraphId));
   const hidden = paragraphsOf(entry.src).filter((p) => edited.has(p.id)).flatMap(maskRects);

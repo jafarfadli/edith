@@ -27,7 +27,7 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
       await whenTextCommitted(); // a text box whose fonts were still loading must be in the document first
       s = editorStore.getState();
       if (!s.info) return;
-      sent = compact(s.doc);
+      sent = compact(s.doc, s.info);
       const blob = await exportPdf(s.info.docId, { ops: sent, flatten_forms: hasForm && flatten, filename: fileName });
       downloadBlob(blob, fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`);
     } catch (e) {

@@ -26,6 +26,7 @@ describe("textStore", () => {
     expect(textStore.getState()).toMatchObject({ status: "ready", docId: "D", fonts: { f5: font } });
     expect(paragraphsOf({ doc: "D", index: 0 })).toEqual([para]);
     expect(paragraphsOf({ blank: { width: 1, height: 1 } })).toEqual([]);
+    expect(paragraphsOf({ doc: "IMPORTED", index: 0 })).toEqual([]); // pages of imported PDFs: no original text
     const url = source.mock.calls[0][0]!;
     expect(url("f5")).toBe("http://localhost:8000/documents/D/fonts/f5");
   });

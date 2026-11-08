@@ -2,17 +2,20 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
 import type { ContentOp, TextEdit } from "@edith/ops";
 import type { FormField } from "@/lib/api";
-import { normRotation, type PageGeom, type Rotation } from "@/lib/coords";
+import { normRotation, type CropBox, type PageGeom, type Rotation } from "@/lib/coords";
 import type { Dash } from "@/lib/geometry";
-import { newId } from "@/lib/id";
+import * as P from "@/lib/pages";
 
 export interface StructurePage { index: number; width: number; height: number; rotation: number; hasText: boolean }
-export interface DocInfo { docId: string; sha256: string; fileName: string; pages: StructurePage[]; fields?: FormField[] }
+/** `imports`: page sizes of the other PDFs imported into this one, by doc id (not undoable: a registry). */
+export interface DocInfo { docId: string; sha256: string; fileName: string; pages: StructurePage[]; fields?: FormField[]; imports?: Record<string, StructurePage[]> }
 export type PageSrc = { doc: string; index: number } | { blank: { width: number; height: number } };
-export interface PageEntry { pageKey: string; src: PageSrc; rotate: Rotation }
+/** `crop`: the visible part of the page (page coordinates), applied last at export. */
+export interface PageEntry { pageKey: string; src: PageSrc; rotate: Rotation; crop?: CropBox | null }
 export type FormValue = string | boolean;
-/** `forms`: AcroForm values the user set, by field name (sent as form.set ops); absent in M1/M2 drafts. */
-export interface EditorDoc { pages: PageEntry[]; objects: Record<string, ContentOp>; order: string[]; forms?: Record<string, FormValue> }
+/** `forms`: AcroForm values the user set, by field name (sent as form.set ops); absent in M1/M2 drafts.
+ *  `imports`: doc ids of imported PDFs whose pages the document has (had); absent before M4. */
+export interface EditorDoc { pages: PageEntry[]; objects: Record<string, ContentOp>; order: string[]; forms?: Record<string, FormValue>; imports?: string[] }
 export type MarkupTool = "highlight" | "underline" | "strike";
 export type Tool = "select" | "text" | "whiteout" | "redact" | "ink" | "image" | "rect" | "ellipse" | "line" | "arrow" | "pan"
   | MarkupTool | "check" | "cross" | "note" | "link" | "polygon" | "polyline" | "cloud";
@@ -42,6 +45,16 @@ export interface EditorState {
   deletePage(pageKey: string): void;
   insertBlankAfter(pageKey: string | null): string;
   movePage(pageKey: string, toIndex: number): void;
+  /** Copies the page (and its objects) right after it; returns the copy's key. */
+  duplicatePage(pageKey: string): string | null;
+  /** Registers the page sizes of an imported PDF (before its pages are inserted). */
+  addImport(docId: string, pages: StructurePage[]): void;
+  /** Inserts all pages of imported PDF `docId` after `pageKey` (null: at the start); returns their keys. */
+  insertImportAfter(pageKey: string | null, docId: string): string[];
+  /** Crops the pages (null removes the crop) as one undo step. */
+  setCrop(pageKeys: string[], crop: CropBox | null): void;
+  /** Replaces the whole document as one undo step (the Manage Pages modal's Simpan). */
+  replaceDoc(next: EditorDoc): void;
   undo(): void; redo(): void;
   select(id: string | null): void; setTool(t: Tool): void; setZoom(z: number): void;
   setStyle(p: Partial<ToolStyle>): void; setCurrentPage(k: string | null): void;
@@ -58,16 +71,17 @@ export const DEFAULT_STYLE: ToolStyle = {
   dash: "solid", opacity: 1,
 };
 
-export function pageGeom(entry: PageEntry, info: DocInfo): PageGeom {
-  if ("blank" in entry.src) return { ...entry.src.blank, rotation: normRotation(entry.rotate) };
-  const p = info.pages[entry.src.index];
-  return { width: p.width, height: p.height, rotation: normRotation(p.rotation + entry.rotate) };
+/** Structure of a page's source: the main document's or an imported PDF's page (undefined while unknown). */
+export function sourcePage(entry: PageEntry, info: DocInfo): StructurePage | undefined {
+  if ("blank" in entry.src) return undefined;
+  return (entry.src.doc === info.docId ? info.pages : info.imports?.[entry.src.doc])?.[entry.src.index];
 }
 
-function sizeOf(entry: PageEntry | undefined, info: DocInfo | null) {
-  if (!entry || !info) return A4;
-  const g = pageGeom(entry, info);
-  return { width: g.width, height: g.height };
+export function pageGeom(entry: PageEntry, info: DocInfo): PageGeom {
+  const crop = entry.crop ? { crop: entry.crop } : {};
+  if ("blank" in entry.src) return { ...entry.src.blank, rotation: normRotation(entry.rotate), ...crop };
+  const p = sourcePage(entry, info) ?? { width: A4.width, height: A4.height, rotation: 0 };
+  return { width: p.width, height: p.height, rotation: normRotation(p.rotation + entry.rotate), ...crop };
 }
 
 /** Fields of `s` that must change so selection/currentPage stay valid for `doc`. */
@@ -109,8 +123,6 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
       }
       last = coalesce !== undefined ? { key: coalesce, at: t } : null;
     };
-    const mapPage = (key: string, fn: (p: PageEntry) => PageEntry) =>
-      commit((d) => ({ ...d, pages: d.pages.map((p) => (p.pageKey === key ? fn(p) : p)) }));
 
     return {
       info: null, doc: EMPTY, past: [], future: [],
@@ -174,38 +186,55 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
       },
 
       rotatePage(key, delta) {
-        mapPage(key, (p) => ({ ...p, rotate: normRotation(p.rotate + delta) }));
+        commit((d) => P.rotatePages(d, [key], delta));
       },
 
       deletePage(key) {
-        commit((d) => (d.pages.length <= 1 ? d : { ...d, pages: d.pages.filter((p) => p.pageKey !== key) }));
+        commit((d) => P.deletePages(d, [key]));
         set(reconcile(get().doc, get()));
       },
 
       insertBlankAfter(key) {
-        const pageKey = newId("u");
+        const entry = P.blankPage({ width: 0, height: 0 });
         commit((d) => {
           const idx = key === null ? -1 : d.pages.findIndex((p) => p.pageKey === key);
-          const neighbor = d.pages[Math.max(idx, 0)];
-          const entry: PageEntry = { pageKey, src: { blank: sizeOf(neighbor, get().info) }, rotate: 0 };
-          const pages = [...d.pages];
-          pages.splice(idx + 1, 0, entry);
-          return { ...d, pages };
+          const size = P.blankSizeLike(d.pages[Math.max(idx, 0)], get().info);
+          return P.insertPages(d, idx + 1, [{ ...entry, src: { blank: size } }]);
         });
-        return pageKey;
+        return entry.pageKey;
       },
 
       movePage(key, toIndex) {
-        commit((d) => {
-          const from = d.pages.findIndex((p) => p.pageKey === key);
-          if (from < 0) return d;
-          const to = Math.max(0, Math.min(toIndex, d.pages.length - 1));
-          if (to === from) return d;
-          const pages = [...d.pages];
-          const [entry] = pages.splice(from, 1);
-          pages.splice(to, 0, entry);
-          return { ...d, pages };
-        });
+        commit((d) => P.movePage(d, key, toIndex));
+      },
+
+      duplicatePage(key) {
+        const before = new Set(get().doc.pages.map((p) => p.pageKey));
+        commit((d) => P.duplicatePages(d, [key]));
+        return get().doc.pages.find((p) => !before.has(p.pageKey))?.pageKey ?? null;
+      },
+
+      addImport(docId, pages) {
+        const info = get().info;
+        if (info) set({ info: { ...info, imports: { ...info.imports, [docId]: pages } } });
+      },
+
+      insertImportAfter(key, docId) {
+        const count = get().info?.imports?.[docId]?.length ?? 0;
+        if (!count) return [];
+        const before = new Set(get().doc.pages.map((p) => p.pageKey));
+        commit((d) => P.importPages(d, key === null ? 0 : d.pages.findIndex((p) => p.pageKey === key) + 1, docId, count));
+        return get().doc.pages.filter((p) => !before.has(p.pageKey)).map((p) => p.pageKey);
+      },
+
+      setCrop(keys, crop) {
+        const info = get().info;
+        if (info) commit((d) => P.setCrop(d, keys, crop, info));
+      },
+
+      replaceDoc(next) {
+        commit(() => next);
+        set(reconcile(get().doc, get()));
       },
 
       undo() {

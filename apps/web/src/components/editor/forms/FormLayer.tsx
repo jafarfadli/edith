@@ -16,7 +16,8 @@ export function FormLayer({ pageKey, geom, scale }: { pageKey: string; geom: Pag
   const fields = useEditor((s) => s.info?.fields ?? NONE);
   const forms = useEditor((s) => s.doc.forms);
   const tool = useEditor((s) => s.tool);
-  if (!src || !("doc" in src)) return null;
+  const docId = useEditor((s) => s.info?.docId);
+  if (!src || !("doc" in src) || src.doc !== docId) return null; // fields of imported PDFs are not editable (yet)
   const mine = fields.filter((f) => f.page === src.index && isEditable(f));
   if (!mine.length) return null;
 

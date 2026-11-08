@@ -39,7 +39,7 @@ export function useText<T>(selector: (s: TextState) => T): T {
 
 const NONE: Paragraph[] = [];
 
-/** Original paragraphs of a page source (none for blank pages or before loading). */
+/** Original paragraphs of a page source (none for blank pages, pages of imported PDFs or before loading). */
 export function paragraphsOf(src: PageSrc, pages: Record<number, Paragraph[]> = textStore.getState().pages): Paragraph[] {
-  return "doc" in src ? pages[src.index] ?? NONE : NONE;
+  return "doc" in src && src.doc === textStore.getState().docId ? pages[src.index] ?? NONE : NONE;
 }
