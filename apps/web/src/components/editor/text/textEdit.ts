@@ -189,7 +189,7 @@ export function commitEditing(paragraphs: Run[][]): Promise<void> {
   // Fast path: every font (after the whole fallback chain) already loaded → land synchronously.
   const ready = resolveLoadedRuns(draft.paragraphs, fonts, (f) => fontStore.peek(f));
   if (ready) {
-    land(e, relayout({ ...draft, paragraphs: ready }, (f) => fontStore.get(f)));
+    land(e, keepBaseline(e, relayout({ ...draft, paragraphs: ready }, (f) => fontStore.get(f))));
     return Promise.resolve();
   }
   const p: Promise<void> = (async () => {
@@ -201,10 +201,18 @@ export function commitEditing(paragraphs: Run[][]): Promise<void> {
       textEditStore.getState().start({ ...e, box: draft }); // keep the text editable instead of losing it
       return;
     }
-    land(e, relayout({ ...draft, paragraphs: runs }, (f) => fontStore.get(f)));
+    land(e, keepBaseline(e, relayout({ ...draft, paragraphs: runs }, (f) => fontStore.get(f))));
   })().finally(() => { if (pendingCommit === p) pendingCommit = null; });
   pendingCommit = p;
   return p;
+}
+
+/** An original paragraph keeps its first baseline where the session's box had it: a fallback font with a taller
+ *  ascent in the first line (CJK fallbacks are) would otherwise push the whole paragraph down. */
+function keepBaseline(e: Editing, box: TextBox): TextBox {
+  const before = e.box.layout[0]?.baseline, after = box.layout[0]?.baseline;
+  if (e.kind !== "text.edit" || before === undefined || after === undefined) return box;
+  return { ...box, rect: { ...box.rect, y: e.box.rect.y + before - after } };
 }
 
 function land(e: Editing, box: TextBox): void {

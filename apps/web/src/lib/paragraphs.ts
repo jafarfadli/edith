@@ -77,7 +77,9 @@ export function paragraphBox(
   p: Paragraph, metricsFor: MetricsFor,
   edit?: (paragraphs: Run[][], toBox: (offset: number) => number) => Run[][],
 ): TextBox {
-  const width = paragraphWidth(p, metricsFor);
+  // A left-aligned single line (a form label, a table cell) may grow into the room the API measured beside it.
+  const room = p.lines.length === 1 && p.align === "left" && p.maxWidth ? p.maxWidth + WIDTH_SLACK : 0;
+  const width = Math.max(paragraphWidth(p, metricsFor), room);
   const breaks = hardBreaks(p, width, metricsFor);
   const paragraphs = paragraphRuns(p, breaks);
   const box = relayout({

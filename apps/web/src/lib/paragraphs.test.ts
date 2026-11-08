@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { FontRef } from "@edith/ops";
+import type { FontRef, Run } from "@edith/ops";
 import type { Paragraph, TextData } from "@/lib/api";
 import { fontKey, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
 import { runsText } from "@/lib/runs";
@@ -40,6 +40,16 @@ describe("paragraphBox", () => {
     const texts = paragraphs.map((p) => runsText(p.runs));
     expect(texts).toContain("Jl. Merdeka Barat No. 17, Jakarta Pusat");
     expect(texts).toContain("Indonesia");
+  });
+
+  it("lets a left-aligned single line grow into its room (maxWidth) instead of wrapping", () => {
+    const label = paragraphs.find((p) => p.lines.length === 1 && p.maxWidth && p.align === "left")!;
+    const longer = (ps: Run[][]) => [[{ ...ps[0][0], text: `${runsText(ps[0])} dengan tambahan` }]];
+    const grown = paragraphBox(label, bundled, longer);
+    expect(grown.rect.w).toBeCloseTo(label.maxWidth! + 0.01);
+    expect(grown.layout).toHaveLength(1);
+    const tight = paragraphBox({ ...label, maxWidth: undefined }, bundled, longer);
+    expect(tight.layout.length).toBeGreaterThan(1); // without room it wraps at its own width
   });
 
   it("keeps wrapped lines in one logical paragraph", () => {
