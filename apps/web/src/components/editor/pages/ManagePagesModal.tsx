@@ -86,7 +86,7 @@ export function ManagePagesModal({ onClose }: { onClose: () => void }) {
     try {
       const up = await uploadDocument(file, file.name);
       const st = await getStructure(up.doc_id);
-      editorStore.getState().addImport(up.doc_id, st.pages); // the registry, not the document: Batal leaves no pages
+      editorStore.getState().addImport(up.doc_id, st.pages, st.fields); // the registry, not the document: Batal leaves no pages
       void textStore.getState().loadImport(up.doc_id);
       setDraft((d) => P.importPages(d, P.insertIndex(d, selected), up.doc_id, st.pages.length));
     } catch (e) {

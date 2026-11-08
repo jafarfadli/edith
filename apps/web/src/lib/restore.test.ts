@@ -64,8 +64,10 @@ describe("restoreDraft with imported PDFs", () => {
   it("loads the imports' page sizes and drops pages of imports that are gone", async () => {
     const r = restoreDraft(draft, "NEW", 1)!;
     const sizes = [{ index: 0, width: 300, height: 400, rotation: 0, hasText: true }];
-    const ok = await resolveImports(r, async () => sizes);
+    const field = { name: "nama", page: 0 } as never;
+    const ok = await resolveImports(r, async () => ({ pages: sizes, fields: [field] }));
     expect(ok.imports).toEqual({ [I]: sizes });
+    expect(ok.fields).toEqual({ [I]: [field] });
     expect(ok.doc!.pages.map((p) => p.pageKey)).toEqual(["o0", "u-i0"]); // index 1 no longer exists
     expect(ok.missing).toBe(true);
     const gone = await resolveImports(r, async () => { throw new Error("410"); });
@@ -73,5 +75,16 @@ describe("restoreDraft with imported PDFs", () => {
     expect(gone.imports).toEqual({});
     const onlyImported = await resolveImports({ ...r, pages: r.pages.slice(1) }, async () => { throw new Error("410"); });
     expect(onlyImported.doc).toBeNull();
+  });
+});
+
+describe("restoreDraft keeps imported field values", () => {
+  it("validates them per imported PDF", () => {
+    const I = "I".repeat(22);
+    const draft = {
+      pages: [{ pageKey: "u-i0", src: { doc: I, index: 0 }, rotate: 0 as const }], objects: {}, order: [], imports: [I],
+      importForms: { [I]: { nama: "Budi", rusak: 3 }, OTHER: { x: "y" } },
+    };
+    expect(restoreDraft(draft as never, "NEW", 1)!.importForms).toEqual({ [I]: { nama: "Budi" } });
   });
 });

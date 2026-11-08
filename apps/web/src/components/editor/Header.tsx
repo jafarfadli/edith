@@ -15,7 +15,7 @@ export function Header({ onNotice }: { onNotice: (n: { kind: "error" | "info"; t
   const [name, setName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [flatten, setFlatten] = useState(false);
-  const hasForm = useEditor((s) => (s.info?.fields?.length ?? 0) > 0);
+  const hasForm = useEditor((s) => (s.info?.fields?.length ?? 0) > 0 || Object.values(s.info?.importFields ?? {}).some((f) => f.length > 0));
   const fileName = name ?? info?.fileName ?? "document.pdf";
 
   async function download() {

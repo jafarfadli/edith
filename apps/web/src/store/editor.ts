@@ -7,15 +7,23 @@ import type { Dash } from "@/lib/geometry";
 import * as P from "@/lib/pages";
 
 export interface StructurePage { index: number; width: number; height: number; rotation: number; hasText: boolean }
-/** `imports`: page sizes of the other PDFs imported into this one, by doc id (not undoable: a registry). */
-export interface DocInfo { docId: string; sha256: string; fileName: string; pages: StructurePage[]; fields?: FormField[]; imports?: Record<string, StructurePage[]> }
+/** `imports`/`importFields`: page sizes and form fields of the other PDFs imported into this one, by doc id
+ *  (not undoable: a registry). Imported fields keep the names of their own PDF. */
+export interface DocInfo {
+  docId: string; sha256: string; fileName: string; pages: StructurePage[]; fields?: FormField[];
+  imports?: Record<string, StructurePage[]>; importFields?: Record<string, FormField[]>;
+}
 export type PageSrc = { doc: string; index: number } | { blank: { width: number; height: number } };
 /** `crop`: the visible part of the page (page coordinates), applied last at export. */
 export interface PageEntry { pageKey: string; src: PageSrc; rotate: Rotation; crop?: CropBox | null }
 export type FormValue = string | boolean;
 /** `forms`: AcroForm values the user set, by field name (sent as form.set ops); absent in M1/M2 drafts.
- *  `imports`: doc ids of imported PDFs whose pages the document has (had); absent before M4. */
-export interface EditorDoc { pages: PageEntry[]; objects: Record<string, ContentOp>; order: string[]; forms?: Record<string, FormValue>; imports?: string[] }
+ *  `imports`: doc ids of imported PDFs whose pages the document has (had); absent before M4.
+ *  `importForms`: values of imported PDFs' fields, by doc id then field name (form.set with `doc`). */
+export interface EditorDoc {
+  pages: PageEntry[]; objects: Record<string, ContentOp>; order: string[]; forms?: Record<string, FormValue>;
+  imports?: string[]; importForms?: Record<string, Record<string, FormValue>>;
+}
 export type MarkupTool = "highlight" | "underline" | "strike";
 export type Tool = "select" | "text" | "whiteout" | "redact" | "ink" | "image" | "rect" | "ellipse" | "line" | "arrow" | "pan"
   | MarkupTool | "check" | "cross" | "note" | "link" | "polygon" | "polyline" | "cloud";
@@ -40,7 +48,7 @@ export interface EditorState {
   putObjects(ops: ContentOp[], remove?: string[]): void;
   deleteObject(id: string): void;
   /** Sets AcroForm field `name` (every widget of that name); `coalesce` as in updateObject (typing). */
-  setFormValue(name: string, value: FormValue, opts?: { coalesce?: string }): void;
+  setFormValue(name: string, value: FormValue, opts?: { coalesce?: string }, doc?: string): void;
   rotatePage(pageKey: string, delta: 90 | -90): void;
   deletePage(pageKey: string): void;
   insertBlankAfter(pageKey: string | null): string;
@@ -48,7 +56,7 @@ export interface EditorState {
   /** Copies the page (and its objects) right after it; returns the copy's key. */
   duplicatePage(pageKey: string): string | null;
   /** Registers the page sizes of an imported PDF (before its pages are inserted). */
-  addImport(docId: string, pages: StructurePage[]): void;
+  addImport(docId: string, pages: StructurePage[], fields?: FormField[]): void;
   /** Inserts all pages of imported PDF `docId` after `pageKey` (null: at the start); returns their keys. */
   insertImportAfter(pageKey: string | null, docId: string): string[];
   /** Crops the pages (null removes the crop) as one undo step. */
@@ -181,7 +189,12 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
         if (get().selection === id) set({ selection: null });
       },
 
-      setFormValue(name, value, opts) {
+      setFormValue(name, value, opts, doc) {
+        if (doc && doc !== get().info?.docId) { // a field of an imported PDF
+          commit((d) => (d.importForms?.[doc]?.[name] === value ? d
+            : { ...d, importForms: { ...d.importForms, [doc]: { ...d.importForms?.[doc], [name]: value } } }), opts?.coalesce ? `${doc}:${opts.coalesce}` : undefined);
+          return;
+        }
         commit((d) => (d.forms?.[name] === value ? d : { ...d, forms: { ...d.forms, [name]: value } }), opts?.coalesce);
       },
 
@@ -214,9 +227,9 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
         return get().doc.pages.find((p) => !before.has(p.pageKey))?.pageKey ?? null;
       },
 
-      addImport(docId, pages) {
+      addImport(docId, pages, fields = []) {
         const info = get().info;
-        if (info) set({ info: { ...info, imports: { ...info.imports, [docId]: pages } } });
+        if (info) set({ info: { ...info, imports: { ...info.imports, [docId]: pages }, importFields: { ...info.importFields, [docId]: fields } } });
       },
 
       insertImportAfter(key, docId) {

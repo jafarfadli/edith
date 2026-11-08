@@ -81,3 +81,17 @@ describe("compact (M4)", () => {
     expect(compact(doc).length).toBe(4); // without info every value is sent
   });
 });
+
+describe("compact: imported fields", () => {
+  it("sends their values with the doc they belong to, only while one of their pages is left", () => {
+    const D = "D".repeat(22), I = "I".repeat(22);
+    const doc: EditorDoc = {
+      pages: [{ pageKey: "u-i0", src: { doc: I, index: 0 }, rotate: 0 }], objects: {}, order: [],
+      importForms: { [I]: { nama: "Budi", hilang: "x" } },
+    };
+    const importFields = { [I]: [{ name: "nama", page: 0 }, { name: "hilang", page: 1 }] as never[] };
+    expect(compact(doc, { docId: D, fields: [], importFields }).slice(1)).toEqual([
+      { id: "form-import-0", type: "form.set", fieldName: "nama", value: "Budi", doc: I },
+    ]);
+  });
+});

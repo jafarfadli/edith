@@ -1,3 +1,4 @@
+import type { FormField } from "@/lib/api";
 import type { EditorDoc, StructurePage } from "@/store/editor";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -38,21 +39,28 @@ export function restoreDraft(draft: EditorDoc | null, docId: string, pageCount: 
       pages.push(p);
     }
   }
-  return { ...draft, pages, forms: validForms(draft.forms), imports };
+  const importForms = Object.fromEntries(imports.map((id) => [id, validForms(draft.importForms?.[id])]));
+  return { ...draft, pages, forms: validForms(draft.forms), imports, importForms };
 }
 
-/** Page sizes of the imported PDFs a restored draft uses. Pages of imports that are gone (expired) or whose
- *  index no longer exists are dropped; `missing` says whether any were; `doc` is null when no page is left. */
+/** Page sizes and form fields of the imported PDFs a restored draft uses. Pages of imports that are gone
+ *  (expired) or whose index no longer exists are dropped; `missing` says whether any were; `doc` is null when
+ *  no page is left. */
 export async function resolveImports(
   doc: EditorDoc,
-  structure: (docId: string) => Promise<StructurePage[]>,
-): Promise<{ doc: EditorDoc | null; imports: Record<string, StructurePage[]>; missing: boolean }> {
+  structure: (docId: string) => Promise<{ pages: StructurePage[]; fields?: FormField[] }>,
+): Promise<{ doc: EditorDoc | null; imports: Record<string, StructurePage[]>; fields: Record<string, FormField[]>; missing: boolean }> {
   const used = [...new Set(doc.pages.flatMap((p) => ("doc" in p.src && doc.imports?.includes(p.src.doc) ? [p.src.doc] : [])))];
   const imports: Record<string, StructurePage[]> = {};
+  const fields: Record<string, FormField[]> = {};
   await Promise.all(used.map(async (id) => {
-    try { imports[id] = await structure(id); } catch { /* expired or unknown: its pages go */ }
+    try {
+      const st = await structure(id);
+      imports[id] = st.pages;
+      fields[id] = st.fields ?? [];
+    } catch { /* expired or unknown: its pages go */ }
   }));
   const pages = doc.pages.filter((p) => !("doc" in p.src) || !doc.imports?.includes(p.src.doc) || p.src.index < (imports[p.src.doc]?.length ?? 0));
   const missing = pages.length !== doc.pages.length;
-  return { doc: !pages.length ? null : missing ? { ...doc, pages } : doc, imports, missing };
+  return { doc: !pages.length ? null : missing ? { ...doc, pages } : doc, imports, fields, missing };
 }

@@ -13,16 +13,18 @@ const FIELD_BG = "#eef4ff";
  *  field while typing). Inputs take the pointer only with the select tool, so other tools draw over fields. */
 export function FormLayer({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const src = useEditor((s) => s.doc.pages.find((p) => p.pageKey === pageKey)?.src);
-  const fields = useEditor((s) => s.info?.fields ?? NONE);
-  const forms = useEditor((s) => s.doc.forms);
+  // Fields and values of the page's own PDF: the edited one, or an imported one (named as in that PDF).
+  const main = useEditor((s) => !!src && "doc" in src && src.doc === s.info?.docId);
+  const fields = useEditor((s) => (!src || !("doc" in src) ? NONE : main ? s.info?.fields : s.info?.importFields?.[src.doc]) ?? NONE);
+  const forms = useEditor((s) => (!src || !("doc" in src) ? undefined : main ? s.doc.forms : s.doc.importForms?.[src.doc]));
   const tool = useEditor((s) => s.tool);
-  const docId = useEditor((s) => s.info?.docId);
-  if (!src || !("doc" in src) || src.doc !== docId) return null; // fields of imported PDFs are not editable (yet)
+  if (!src || !("doc" in src)) return null;
+  const doc = main ? undefined : src.doc;
   const mine = fields.filter((f) => f.page === src.index && isEditable(f));
   if (!mine.length) return null;
 
   const set = (f: FormField, value: string | boolean) =>
-    editorStore.getState().setFormValue(f.name, value, f.type === "text" ? { coalesce: `form:${f.name}` } : undefined);
+    editorStore.getState().setFormValue(f.name, value, f.type === "text" ? { coalesce: `form:${f.name}` } : undefined, doc);
 
   return (
     <div className="absolute inset-0" style={{ pointerEvents: "none", zIndex: 5 }} data-testid="form-layer">

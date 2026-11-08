@@ -11,7 +11,7 @@ export async function importPdf(file: File, afterKey: string | null): Promise<st
     const up = await uploadDocument(file, file.name);
     const st = await getStructure(up.doc_id);
     const s = editorStore.getState();
-    s.addImport(up.doc_id, st.pages);
+    s.addImport(up.doc_id, st.pages, st.fields);
     void textStore.getState().loadImport(up.doc_id); // its paragraphs and fonts, for editing and Find
     const keys = s.insertImportAfter(afterKey, up.doc_id);
     noticeStore.getState().show({ kind: "info", text: t.pages.imported(keys.length) });

@@ -239,3 +239,19 @@ describe("page actions (M4)", () => {
     expect(s().doc.pages[0].crop).toBeUndefined();
   });
 });
+
+describe("imported form fields", () => {
+  it("keep their values apart from the edited PDF's, with undo", () => {
+    const I = "I".repeat(22);
+    s().addImport(I, [{ index: 0, width: 300, height: 400, rotation: 0, hasText: true }], [{ name: "nama" } as never]);
+    expect(s().info!.importFields).toEqual({ [I]: [{ name: "nama" }] });
+    s().setFormValue("nama", "Utama");
+    s().setFormValue("nama", "Impor", undefined, I);
+    expect(s().doc.forms).toEqual({ nama: "Utama" });
+    expect(s().doc.importForms).toEqual({ [I]: { nama: "Impor" } });
+    s().setFormValue("nama", "Main", undefined, info.docId); // the edited PDF's own id = no doc
+    expect(s().doc.forms).toEqual({ nama: "Main" });
+    s().undo(); s().undo();
+    expect(s().doc.importForms?.[I]).toBeUndefined();
+  });
+});
