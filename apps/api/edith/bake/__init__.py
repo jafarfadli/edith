@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 from dataclasses import replace
 
@@ -39,6 +40,20 @@ def _run(handler, page, op, ctx) -> None:
         raise BakeFailed(exc.message, op_id=op.id) from exc
     except Exception as exc:  # noqa: BLE001
         raise BakeFailed(str(exc), op_id=op.id) from exc
+
+
+CROP_SLACK = 0.01  # pt: a crop this far past the page edge is clamped, not rejected
+
+
+def _crop_rect(page: pymupdf.Page, crop, layout_index: int) -> pymupdf.Rect:
+    """A layout crop (page coordinates of the unrotated page) as a rect inside the page."""
+    if not all(math.isfinite(v) for v in (crop.x, crop.y, crop.w, crop.h)):
+        raise InvalidOp("crop is not finite", op_index=layout_index)
+    r = pymupdf.Rect(crop.x, crop.y, crop.x + crop.w, crop.y + crop.h)
+    bounds = page.rect
+    if r.x1 > bounds.x1 + CROP_SLACK or r.y1 > bounds.y1 + CROP_SLACK:
+        raise InvalidOp("crop outside the page", op_index=layout_index)
+    return r & bounds
 
 
 def _fill(doc: pymupdf.Document, forms: list, flatten: bool, widgets_removed: bool) -> None:
@@ -89,6 +104,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
 
         key_to_index, base_rotation = build_pages(doc, layout, layout_index, ctx)
         ctx = replace(ctx, page_index=key_to_index)
+        crops = [_crop_rect(doc[i], entry.crop, layout_index) if entry.crop else None for i, entry in enumerate(layout.pages)]
 
         by_page: dict[int, list] = defaultdict(list)
         for _, op in content:
@@ -120,7 +136,11 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
 
         _fill(doc, [op for op in ops if op.type == "form.set"], flatten_forms, widgets_removed)
 
+        # Crop and rotation last: neither moves the content (spec: Urutan bake 7).
         for i, entry in enumerate(layout.pages):
+            if crops[i] is not None:
+                cb = doc[i].cropbox  # MediaBox coordinates, top-left origin
+                doc[i].set_cropbox(crops[i] + (cb.x0, cb.y0, cb.x0, cb.y0))
             doc[i].set_rotation((base_rotation[i] + entry.rotate) % 360)
         return doc
     except BaseException:
