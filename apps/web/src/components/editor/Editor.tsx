@@ -19,6 +19,7 @@ import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor
 import { pdfStore } from "@/store/pdfs";
 import { charsStore } from "@/store/chars";
 import { textStore } from "@/store/text";
+import { BTN_PRIMARY } from "../ui/styles";
 import { FormLayer } from "./forms/FormLayer";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
@@ -150,9 +151,9 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
 
   if (fatal) {
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4 text-center">
-        <p role="alert" className="max-w-md text-lg">{errorMessage(fatal)}</p>
-        <Link href="/" className="rounded-lg bg-accent px-4 py-2 text-accent-ink">{t.upload.choose}</Link>
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-5 bg-canvas px-4 text-center">
+        <p role="alert" className="max-w-md text-base text-ink">{errorMessage(fatal)}</p>
+        <Link href="/" className={BTN_PRIMARY}>{t.upload.choose}</Link>
       </main>
     );
   }
