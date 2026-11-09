@@ -14,6 +14,7 @@ export function metricsFromBuffer(buf: ArrayBuffer | Uint8Array): FontMetrics {
   const font = fontkit.create(bytes as Buffer) as unknown as fontkit.Font;
   if (typeof font.glyphsForString !== "function") throw new Error("font collection, not a font");
   const cache = new Map<string, number>();
+  const measure = (s: string) => font.glyphsForString(s).reduce((sum, g) => sum + g.advanceWidth, 0);
   return {
     unitsPerEm: font.unitsPerEm,
     ascent: font.ascent,
@@ -21,7 +22,14 @@ export function metricsFromBuffer(buf: ArrayBuffer | Uint8Array): FontMetrics {
     advance(ch: string) {
       let w = cache.get(ch);
       if (w === undefined) {
-        w = font.glyphsForString(ch).reduce((sum, g) => sum + g.advanceWidth, 0);
+        // A no-break space is measured as a space: fontkit cannot read the U+00A0 glyph of Arimo and Carlito (it
+        // throws), and fonts give both the same advance. Any other space it cannot read: the same.
+        try {
+          w = measure(ch === " " ? " " : ch);
+        } catch (err) {
+          if (!/^\s+$/.test(ch)) throw err;
+          w = measure(" ".repeat([...ch].length));
+        }
         cache.set(ch, w);
       }
       return w;

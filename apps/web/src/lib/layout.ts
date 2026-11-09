@@ -2,10 +2,14 @@ import type { FontRef, LayoutLine, Run, Segment } from "@edith/ops";
 import { textWidth, type FontMetrics } from "@/lib/fonts";
 
 /** `breaks`: offsets in the box text (the paragraphs joined by "\n") where a line must start, ascending: an original
- *  paragraph's own line breaks (lib/keepLines.ts). A break inside a word splits the word there. */
+ *  paragraph's own line breaks (lib/keepLines.ts). A break inside a word splits the word there.
+ *  `fit` (M5d): how wide a line may get before it wraps, when that is more than `width` (the room an edited original
+ *  line may grow into); lines are still aligned in `width`, so a wider one runs past the box on its free side(s).
+ *  `squeeze` (M5d, justified text): the share by which the spaces of a line may shrink before it wraps, as Word lets
+ *  justified lines compress; such a line (also the last of its paragraph) is set tighter to fit `width`. */
 export interface LayoutInput {
   width: number; align: "left" | "center" | "right" | "justify"; lineHeight: number; paragraphs: Run[][];
-  breaks?: number[];
+  breaks?: number[]; fit?: number; squeeze?: number;
 }
 /** The box-text characters a line holds, without the spaces around it: [start, end); `last`: the last line of its
  *  paragraph. The line of an empty paragraph is empty at the paragraph's offset. */
@@ -115,12 +119,16 @@ export function layoutText(input: LayoutInput, metricsFor: (f: FontRef) => FontM
     const rawLines: Token[][] = [];
     let current: Token[] = [];
     let currentWidth = 0;
+    let currentSpaces = 0; // width of the spaces in `current`: between its words once another word follows
+    const limit = Math.max(input.width, input.fit ?? 0);
+    const squeeze = input.align === "justify" ? input.squeeze ?? 0 : 0;
     for (const unit of fitted) {
       const uw = unit.reduce((sum, t) => sum + t.width, 0);
       if (unit[0].space) {
         if (current.length === 0) continue; // drop spaces at line start
         current.push(...unit);
         currentWidth += uw;
+        currentSpaces += uw;
         continue;
       }
       const at = unit[0].start;
@@ -129,10 +137,11 @@ export function layoutText(input: LayoutInput, metricsFor: (f: FontRef) => FontM
       const force = current.length > 0 && fi < forced.length && forced[fi] <= at;
       // … or the line already holds a word and this whole word (plus the spaces before it) overflows.
       if (force || (current.length > 0 && currentWidth - trailingSpaceWidth(current) > 0
-        && currentWidth + uw - trail(unit[unit.length - 1]) > input.width + EPS)) {
+        && currentWidth + uw - trail(unit[unit.length - 1]) > limit + squeeze * currentSpaces + EPS)) {
         rawLines.push(trimEnd(current));
         current = [];
         currentWidth = 0;
+        currentSpaces = 0;
       }
       while (fi < forced.length && forced[fi] <= at) fi++;
       current.push(...unit);
@@ -191,7 +200,8 @@ function placeSegments(
     else segs.push({ x, text: t.text, runIndex: t.runIndex });
   };
   const spaces = tokens.filter((t) => t.space).length;
-  if (input.align === "justify" && !isLastLine && spaces > 0) {
+  // A justified paragraph's last line is set ragged, unless it only fits by compressing its spaces (`squeeze`).
+  if (input.align === "justify" && spaces > 0 && (!isLastLine || lineWidth > input.width + 1e-6)) {
     const extra = (input.width - lineWidth) / spaces;
     let x = 0;
     for (const t of tokens) {

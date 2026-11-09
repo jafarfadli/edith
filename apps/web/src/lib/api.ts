@@ -16,13 +16,16 @@ export class ApiError extends Error {
   }
 }
 
-/** One original line of a paragraph; `start`/`end` index the paragraph's joined run text (end excludes trailing spaces). */
-export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number }
+/** One original line of a paragraph; `start`/`end` index the paragraph's joined run text (end excludes trailing spaces).
+ *  `wordX` (M5d, horizontal left-to-right lines): the x of the first glyph of each word of the line's text (words split
+ *  at SPACE_CHARS, lib/keepLines.ts), where an edit keeps the words it leaves alone (lib/editLine.ts). */
+export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number; wordX?: number[] }
 /** `maxWidth` (single-line paragraphs, M5): how wide the paragraph may grow when edited — up to the next cell border
  *  or text on its line. Measured per `align` (M5b): from the left edge (left), around the centre (center: the whole
  *  symmetric width) or leftwards from the right edge (right). Rects are the ink since M5b (no leading/trailing spaces).
  *  Left-aligned multi-line paragraphs get it too (M5b F2): the room beside all their lines, the most the web may
- *  widen their wrap width (lib/paragraphs.ts wrapWidth). Runs of original text carry the PDF's measured hScale /
+ *  widen their wrap width (lib/paragraphs.ts wrapWidth); centred and right-aligned ones since M5d, with the same
+ *  meaning (an edited line may grow that far before it wraps). Runs of original text carry the PDF's measured hScale /
  *  charSpacing / wordSpacing (and the true size of horizontally scaled text). A paragraph that is not editable says
  *  why in `lock` (M5c). */
 export interface Paragraph {

@@ -1,5 +1,6 @@
 import type { FontRef, Rect, Run, TextBox } from "@edith/ops";
 import type { Paragraph, ParagraphLine } from "@/lib/api";
+import { prefixCut } from "@/lib/editLine";
 import { textWidth, type FontMetrics } from "@/lib/fonts";
 import { normalizeRuns, runsText, sliceRuns } from "@/lib/runs";
 import { relayout } from "@/lib/textbox";
@@ -9,7 +10,7 @@ export { hasUnsupportedChars, preloadFallback, prepareRuns, resolveLoadedRuns, s
 
 export type MetricsFor = (f: FontRef) => FontMetrics;
 /** Extra box width so a line measured at exactly the box width still fits. */
-const WIDTH_SLACK = 0.01;
+export const WIDTH_SLACK = 0.01;
 /** On-screen cover of an edited paragraph's original line (× size around the baseline). */
 export const MASK_ASCENT = 0.95;
 export const MASK_DESCENT = 0.25;
@@ -97,6 +98,17 @@ function firstWord(text: string): string {
  */
 export function wrapWidth(p: Paragraph, natural: number, metricsFor: MetricsFor): number {
   if (!p.maxWidth) return natural;
+  const soft = softBreak(p, natural, metricsFor);
+  // Halfway into the slack: a line may grow by as much as the tightest soft break may shrink (an edit that shortens
+  // that line would otherwise pull the next line's first word up).
+  const middle = soft === Infinity ? Infinity : natural + (soft - natural) / 2;
+  return Math.max(natural, Math.min(p.maxWidth + WIDTH_SLACK, middle));
+}
+
+/** Just under the narrowest "line + space + next line's first word" over `p`'s soft breaks (not its hard breaks at
+ *  `natural`): the original was wrapped narrower than that, so no line of it may get that wide. Infinity: no soft
+ *  break. */
+export function softBreak(p: Paragraph, natural: number, metricsFor: MetricsFor): number {
   const text = runsText(p.runs);
   const hard = new Set(hardBreaks(p, natural, metricsFor));
   let soft = Infinity;
@@ -106,10 +118,18 @@ export function wrapWidth(p: Paragraph, natural: number, metricsFor: MetricsFor)
     const word = firstWord(text.slice(next.start));
     soft = Math.min(soft, measureRange(p.runs, line.start, next.start + word.length, metricsFor) - BREAK_MARGIN);
   });
-  // Halfway into the slack: a line may grow by as much as the tightest soft break may shrink (an edit that shortens
-  // that line would otherwise pull the next line's first word up).
-  const middle = soft === Infinity ? Infinity : natural + (soft - natural) / 2;
-  return Math.max(natural, Math.min(p.maxWidth + WIDTH_SLACK, middle));
+  return soft;
+}
+
+/** How wide (pt) an edited line of `p` may get before it wraps (M5d): into the room the API measured beside the
+ *  paragraph (`maxWidth`: rightwards when left-aligned, around the centre when centred, leftwards when right-aligned),
+ *  but never as wide as a soft break shows the original's measure was not (softBreak), and never less than the box
+ *  `width`. Justified lines compress their spaces instead (lib/editLine.ts JUSTIFY_SQUEEZE); a single line's box
+ *  already spans its room (paragraphFrame). */
+export function growWidth(p: Paragraph, width: number, metricsFor: MetricsFor): number {
+  if (p.lines.length < 2 || !p.maxWidth || p.align === "justify") return width;
+  const soft = softBreak(p, paragraphWidth(p, metricsFor), metricsFor);
+  return Math.max(width, Math.min(p.maxWidth + WIDTH_SLACK, soft));
 }
 
 /** What paragraphBox lays `p` out in: the box left edge and width, the lines followed by a hard break and the
@@ -157,16 +177,37 @@ export function keptLines(box: TextBox | undefined): Set<number> {
   return out;
 }
 
-/** The original lines of `p` that its text.edit `box` replaces (all of them without a box). */
+/** Original line index → x where the kept prefix of that line ends (LayoutLine.prefix, M5d): the original glyphs left
+ *  of it stay, the rest of the line is redrawn. */
+export function keptPrefixes(p: Paragraph, box: TextBox | undefined): Map<number, number> {
+  const out = new Map<number, number>();
+  const text = runsText(p.runs);
+  for (const line of box?.layout ?? []) {
+    const pre = line.prefix;
+    const pl = pre ? p.lines[pre.source] : undefined;
+    if (pre && pl && line.source == null) out.set(pre.source, prefixCut(text, pl, line.segments, pre.segments));
+  }
+  return out;
+}
+
+/** What is left of original line `l` right of `cut` (its kept prefix), or null when nothing is. */
+function rightOf(l: ParagraphLine, cut: number | undefined): ParagraphLine | null {
+  if (cut === undefined) return l;
+  const end = l.rect.x + l.rect.w;
+  return cut >= end ? null : { ...l, rect: { ...l.rect, x: cut, w: end - cut } };
+}
+
+/** The original lines of `p` that its text.edit `box` replaces (all of them without a box); a line with a kept prefix
+ *  only from the prefix's end on. */
 export function replacedLines(p: Paragraph, box?: TextBox): ParagraphLine[] {
-  const kept = keptLines(box);
-  return p.lines.filter((_, i) => !kept.has(i));
+  const kept = keptLines(box), cuts = keptPrefixes(p, box);
+  return p.lines.flatMap((l, i) => (kept.has(i) ? [] : [rightOf(l, cuts.get(i))].filter((x): x is ParagraphLine => !!x)));
 }
 
 /** White covers hiding an edited paragraph's original lines on screen (the bake redacts them), except the lines its
- *  text.edit `box` keeps. */
+ *  text.edit `box` keeps and the kept prefixes of the lines it edits. */
 export function maskRects(p: Paragraph, box?: TextBox): Rect[] {
-  const kept = keptLines(box);
+  const kept = keptLines(box), cuts = keptPrefixes(p, box);
   // Next to a kept line at tight leading the bands overlap: the cover stops where the upper line's descenders
   // (MASK_DESCENT) meet the lower line's ascenders (MEET_ASCENT, ink rather than the cover's margin), split by those
   // shares, so the kept line's descenders or ascenders stay visible and the replaced line's stay covered.
@@ -180,7 +221,11 @@ export function maskRects(p: Paragraph, box?: TextBox): Rect[] {
     let top = l.baseline - MASK_ASCENT * l.size, bottom = l.baseline + MASK_DESCENT * l.size;
     if (above && kept.has(i - 1)) top = Math.max(top, Math.min(meet(above, l), above.baseline + MASK_DESCENT * above.size));
     if (below && kept.has(i + 1)) bottom = Math.min(bottom, Math.max(meet(l, below), below.baseline - MASK_ASCENT * below.size));
-    return [{ x: l.rect.x - 0.5, y: top, w: l.rect.w + 1, h: bottom - top }];
+    const rest = rightOf(l, cuts.get(i));
+    if (!rest) return [];
+    // A kept prefix shows up to its next word: the cover starts there (that word's glyph starts at its x).
+    const x0 = cuts.has(i) ? rest.rect.x : l.rect.x - 0.5;
+    return [{ x: x0, y: top, w: l.rect.x + l.rect.w + 0.5 - x0, h: bottom - top }];
   });
 }
 

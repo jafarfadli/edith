@@ -21,6 +21,15 @@ describe("fonts", () => {
     expect(textWidth("AV", arimo, 20)).toBeCloseTo(textWidth("A", arimo, 20) + textWidth("V", arimo, 20), 6);
   });
 
+  it("measures a no-break space as a space (fontkit throws on U+00A0 in Arimo and Carlito)", () => {
+    for (const name of ["Arimo-Regular.ttf", "Arimo-Bold.ttf", "Carlito-Regular.ttf"]) {
+      const m = metricsFromBuffer(ttf(name));
+      expect(m.advance(" ")).toBe(m.advance(" "));
+      expect(textWidth("a b", m, 12)).toBeCloseTo(textWidth("a b", m, 12), 6);
+      expect(charOffsets("a b", m, 12)[2]).toBeCloseTo(charOffsets("a b", m, 12)[2], 6);
+    }
+  });
+
   it("char offsets accumulate", () => {
     const o = charOffsets("AVA", arimo, 10);
     expect(o[0]).toBe(0);

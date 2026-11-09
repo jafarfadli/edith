@@ -32,8 +32,12 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
 
   const overflow = useOverflow(op);
   const runs = box.paragraphs.flat();
-  // A text.edit's kept lines (`source`) are the page's own glyphs: not drawn again (ParagraphLayer leaves them uncovered).
-  const drawn = op.type === "text.edit" ? box.layout.filter((l) => l.source === undefined || l.source === null) : box.layout;
+  // A text.edit's kept lines (`source`) and kept line prefixes (`prefix`, M5d) are the page's own glyphs: not drawn again
+  // (ParagraphLayer leaves them uncovered).
+  const drawn = op.type === "text.edit"
+    ? box.layout.filter((l) => l.source === undefined || l.source === null)
+      .map((l) => (l.prefix ? { ...l, segments: l.segments.slice(l.prefix.segments) } : l))
+    : box.layout;
   const { x, y, w, h } = box.rect;
   return (
     <>
