@@ -11,7 +11,8 @@ from edith.imagetext import image_text_regions
 from edith.ops import ExportRequest
 from edith.paragraphs import extract_paragraphs
 from edith.settings import Settings
-from tests.pdfs import (RASTER_RECT, SCAN_RECT, make_hidden_text_pdf, make_paragraphs_pdf, make_raster_text_pdf,
+from tests.pdfs import (RASTER_RECT, SCAN_RECT, make_hidden_text_pdf, make_paragraphs_pdf, make_picture_text_pdf,
+                        make_raster_text_pdf,
                         make_type3_pdf)
 from tests.test_documents import upload
 
@@ -73,6 +74,21 @@ def test_get_text_reports_locks_and_image_text(client):
     assert page["imageText"] == [rect(SCAN_RECT)]  # its only text is invisible: the picture is what shows
     doc_id = upload(client, make_raster_text_pdf()).json()["doc_id"]
     assert client.get(f"/documents/{doc_id}/text").json()["pages"][0]["imageText"] == [rect(RASTER_RECT)]
+
+
+def test_e2e_fixture_pictures_are_ccitt_and_read_as_the_reference_cases():
+    """apps/web/e2e/fixtures/picture-text.pdf (regenerate: cd apps/api && uv run python -m scripts.e2e_picture_pdf)."""
+    from pathlib import Path
+    fixture = Path(__file__).resolve().parents[2] / "web" / "e2e" / "fixtures" / "picture-text.pdf"
+    data = fixture.read_bytes()
+    assert data == make_picture_text_pdf()
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    filters = {doc.xref_get_key(x, "Filter")[1] for x in range(1, doc.xref_length())
+               if doc.xref_get_key(x, "Subtype")[1] == "/Image"}
+    assert filters == {"/CCITTFaxDecode"}
+    ps = extract_paragraphs(doc[0])
+    assert [p.get("lock") for p in ps] == [None, "hidden", "hidden"]
+    assert image_text_regions(doc[0]) == [rect(SCAN_RECT), rect(RASTER_RECT)]
 
 
 @pytest.fixture

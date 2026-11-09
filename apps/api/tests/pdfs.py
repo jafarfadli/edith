@@ -682,6 +682,57 @@ def _resources(doc: pymupdf.Document, page: pymupdf.Page) -> tuple[int, str]:
     return (int(value.split()[0]), "") if kind == "xref" else (page.xref, "Resources/")
 
 
+def _fax_image(doc: pymupdf.Document, page: pymupdf.Page, pix: pymupdf.Pixmap, rect: tuple, name: str) -> None:
+    """`pix` thresholded to a 1-bit image placed in `rect` of `page` (call _to_fax afterwards: CCITT G4, as scanners and
+    iLovePDF store such images, which pdf.js draws only with its wasm decoders)."""
+    gray = pymupdf.Pixmap(pymupdf.csGRAY, pix)
+    w, h = gray.width, gray.height
+    rows = []
+    for y in range(h):
+        bits = bytearray((w + 7) // 8)
+        for x, v in enumerate(gray.samples[y * w:(y + 1) * w]):
+            if v >= 128:
+                bits[x >> 3] |= 0x80 >> (x & 7)
+        rows.append(bytes(bits))
+    xref = doc.get_new_xref()
+    doc.update_object(xref, f"<< /Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceGray"
+                            f" /BitsPerComponent 1 >>")
+    doc.update_stream(xref, b"".join(rows))
+    res, prefix = _resources(doc, page)
+    doc.xref_set_key(res, f"{prefix}XObject/{name}", f"{xref} 0 R")
+    x0, y0, x1, y1 = rect
+    c = page.get_contents()[-1]
+    ph = page.rect.height
+    doc.update_stream(c, doc.xref_stream(c) + f"\nq {x1 - x0} 0 0 {y1 - y0} {x0} {ph - y1} cm /{name} Do Q\n".encode())
+
+
+def _to_fax(doc: pymupdf.Document) -> None:
+    """Every 1-bit image of `doc` recompressed with CCITTFaxDecode."""
+    options = pymupdf.mupdf.PdfImageRewriterOptions()
+    options.bitonal_image_recompress_method = pymupdf.mupdf.FZ_RECOMPRESS_FAX
+    options.recompress_when = pymupdf.mupdf.FZ_RECOMPRESS_WHEN_ALWAYS
+    doc.rewrite_images(options=options)
+
+
+def make_picture_text_pdf() -> bytes:
+    """apps/web/e2e/fixtures/picture-text.pdf (M5c): the two reference cases on one page, with 1-bit CCITT pictures.
+    A letterhead: SCAN_LINES pictured in SCAN_RECT under the same lines as invisible text (render mode 3); a visible
+    paragraph at (72, 200); the body of a form pictured in RASTER_RECT, with no text."""
+    x0, y0, x1, y1 = SCAN_RECT
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 200), "Paragraf biasa yang terlihat.", fontname="helv", fontsize=12)
+    _fax_image(doc, page, _text_image(SCAN_LINES, x1 - x0, y1 - y0, color=(0, 0, 0)), SCAN_RECT, "Kop")
+    rx0, ry0, rx1, ry1 = RASTER_RECT
+    _fax_image(doc, page, _text_image(RASTER_LINES, rx1 - rx0, ry1 - ry0, size=11, color=(0, 0, 0)), RASTER_RECT, "Isi")
+    writer = pymupdf.TextWriter(page.rect)
+    for i, line in enumerate(SCAN_LINES):
+        writer.append((x0 + 4, y0 + 17.5 * (i + 1)), line, font=pymupdf.Font("tiro"), fontsize=13)
+    writer.write_text(page, render_mode=3)
+    _to_fax(doc)
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
 def make_hidden_text_pdf(hide: str = "mode3") -> bytes:
     """SCAN_LINES as a grey picture in SCAN_RECT and, laid over it, the same lines as invisible black text (`hide`:
     "mode3", render mode 3; "opacity", a fill opacity of 0) in Times, narrower than the picture's print; below, a
