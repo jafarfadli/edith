@@ -20,6 +20,19 @@ async function open(page: Page) {
   return (await page.getByTestId("page").first().boundingBox())!; // zoom 100 %: 1 pt = 1 px
 }
 
+/** Puts the caret of the rich text editor after its last character (focus alone may leave it at the start). */
+async function caretAtEnd(page: Page) {
+  const editor = page.getByTestId("text-editor");
+  await editor.evaluate((el) => {
+    (el as HTMLElement).focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+  });
+}
+
 /** Share of dark pixels pdf.js drew in `r` (page points) of the page canvas. */
 function inkIn(page: Page, r: { x: number; y: number; w: number; h: number }) {
   return page.getByTestId("page").first().locator("canvas").first().evaluate((c: HTMLCanvasElement, r) => {
@@ -39,20 +52,40 @@ test("a pictured letterhead shows, its invisible text is locked, and a pictured 
   await expect.poll(() => inkIn(page, SCAN)).toBeGreaterThan(0.05);
   expect(await inkIn(page, RASTER)).toBeGreaterThan(0.03);
 
-  // The letterhead's invisible text: no editor opens, a notice says why and how to replace it.
+  // The letterhead's invisible text: a double-click opens no editor; a notice says why and how to replace it.
   const status = page.getByRole("status").filter({ hasText: "sebenarnya gambar" });
   await expect(async () => {
     await page.mouse.move(box.x + 150, box.y + 75);
-    await page.mouse.click(box.x + 150, box.y + 75);
+    await page.mouse.dblclick(box.x + 150, box.y + 75);
     await expect(status).toBeVisible({ timeout: 1000 });
   }).toPass();
   await expect(status).toContainText("Whiteout");
-  await page.mouse.dblclick(box.x + 150, box.y + 75);
   await expect(page.getByTestId("text-editor")).toHaveCount(0);
 
-  // The pictured form body.
+  // A single click on text that is a picture is a click on the empty page: it deselects, and explains nothing.
+  const miniBar = page.getByTestId("mini-bar");
+  await page.getByRole("button", { name: "Centang", exact: true }).click();
+  await page.mouse.click(box.x + 540, box.y + 600);
+  await page.getByRole("button", { name: "Pilih", exact: true }).click();
+  await page.mouse.click(box.x + 540, box.y + 600);
+  await expect(miniBar).toBeVisible();
   await page.mouse.click(box.x + 300, box.y + 400);
-  await expect(page.getByRole("status").filter({ hasText: "hasil pindai" })).toBeVisible();
+  await expect(miniBar).toHaveCount(0);
+  const scan = page.getByRole("status").filter({ hasText: "hasil pindai" });
+  await expect(scan).toHaveCount(0);
+  // The pictured form body explains itself on a double-click.
+  await page.mouse.dblclick(box.x + 300, box.y + 400);
+  await expect(scan).toBeVisible();
+
+  // Under the text tool a click there still adds a text box (Whiteout, then new text) and explains once.
+  await scan.getByRole("button", { name: "Tutup" }).click();
+  await expect(scan).toHaveCount(0);
+  await page.getByRole("button", { name: "Teks", exact: true }).click();
+  await page.mouse.click(box.x + 300, box.y + 330);
+  await expect(scan).toBeVisible();
+  await expect(page.getByTestId("text-editor")).toBeVisible();
+  await page.getByRole("button", { name: "Pilih", exact: true }).click(); // the empty new box goes away
+  await expect(page.getByTestId("text-editor")).toHaveCount(0);
 
   // The visible paragraph is still editable; the export keeps both pictures and does not draw the letterhead twice.
   const editor = page.getByTestId("text-editor");
@@ -61,9 +94,10 @@ test("a pictured letterhead shows, its invisible text is locked, and a pictured 
     await expect(editor).toBeVisible({ timeout: 1000 });
   }).toPass();
   await expect(editor).toContainText("Paragraf biasa yang terlihat.");
-  await page.keyboard.press("End");
+  await caretAtEnd(page);
   await page.keyboard.type(" Diubah.");
-  await page.mouse.click(box.x + 500, box.y + 700);
+  await expect(editor).toContainText("terlihat. Diubah.");
+  await page.mouse.click(box.x + 450, box.y + 560);
   await expect(editor).toHaveCount(0);
 
   const download = page.waitForEvent("download");
@@ -73,4 +107,40 @@ test("a pictured letterhead shows, its invisible text is locked, and a pictured 
   const text = (await pdfInfo(file)).pages[0].text;
   expect(text).toContain("Paragraf biasa yang terlihat. Diubah.");
   expect(text.split("SEKRETARIAT JENDERAL").length - 1).toBe(1); // the invisible layer once, nothing drawn over it
+});
+
+type DraftOp = { type: string; paragraphId?: string };
+const draftOps = (page: Page) => page.evaluate(() => {
+  const key = Object.keys(localStorage).find((k) => k.startsWith("edith:draft:"));
+  return Object.values((key ? JSON.parse(localStorage.getItem(key)!) : { objects: {} }).objects as Record<string, DraftOp>);
+});
+
+test("a draft's edit of text that turned out to be a picture is dropped on load, and the export works", async ({ page }) => {
+  const box = await open(page);
+  const editor = page.getByTestId("text-editor");
+  await expect(async () => {
+    await page.mouse.dblclick(box.x + 120, box.y + 196);
+    await expect(editor).toBeVisible({ timeout: 1000 });
+  }).toPass();
+  await caretAtEnd(page);
+  await page.keyboard.type(" Diubah.");
+  await expect(editor).toContainText("terlihat. Diubah.");
+  await page.mouse.click(box.x + 450, box.y + 560);
+  await expect.poll(() => draftOps(page)).toEqual([expect.objectContaining({ type: "text.edit", paragraphId: "g0" })]);
+
+  // As a draft made before M5c could hold it: the same edit aimed at the letterhead's invisible text (g1).
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => k.startsWith("edith:draft:"))!;
+    const draft = JSON.parse(localStorage.getItem(key)!);
+    for (const op of Object.values(draft.objects) as DraftOp[]) op.paragraphId = "g1";
+    localStorage.setItem(key, JSON.stringify(draft));
+  });
+  await page.reload();
+  await expect(page.getByRole("alert").filter({ hasText: "ternyata gambar dihapus" })).toBeVisible();
+  await expect.poll(() => draftOps(page)).toEqual([]); // the autosave keeps the draft without it
+  await expect(page.getByRole("button", { name: "Urungkan" })).toBeDisabled(); // no undo step brings it back
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Unduh" }).click();
+  await (await download).saveAs(path.join(test.info().outputDir, "dropped.pdf"));
 });

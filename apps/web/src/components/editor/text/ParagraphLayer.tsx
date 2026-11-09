@@ -8,6 +8,7 @@ import type { Rect as Box, TextBox, TextEdit } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
 import { noticeStore } from "@/lib/notices";
 import { maskRects } from "@/lib/paragraphs";
+import { srcKey } from "@/lib/sources";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
 import { imageTextOf, paragraphsOf, useText } from "@/store/text";
@@ -26,8 +27,9 @@ function setCursor(e: Konva.KonvaEventObject<unknown>, cursor: string) {
 /** Text that can't be edited (a locked paragraph, an image of print): its key and the notice that says why. */
 interface Locked { key: string; rect: Box; why: string }
 
-/** Keys of the locked targets explained under the text tool once already: there a click still adds a text box (the
- *  way to replace such text is a whiteout and new text over it), so the notice is not repeated on every click. */
+/** Locked targets (source page `srcKey` / target key) explained under the text tool once already: there a click still
+ *  adds a text box (the way to replace such text is a whiteout and new text over it), so the notice is not repeated on
+ *  every click. Keyed by source page, so another document's page 1 is explained again. */
 const explained = new Set<string>();
 
 /** Under the page's objects: white covers over the lines edited paragraphs replace (the bake redacts them) and, for
@@ -75,13 +77,20 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
     editorStore.getState().select(null);
     textEditStore.getState().selectParagraph({ pageKey, id: p.id });
   };
-  // Under the select tool every click explains; under the text tool the click still adds a text box (no cancelBubble)
-  // and the notice shows once per target.
-  const explain = (l: Locked) => {
-    const once = `${pageKey}/${l.key}`;
-    if (tool === "text" && explained.has(once)) return;
+  const explain = (l: Locked) => noticeStore.getState().show({ kind: "info", text: l.why });
+  // Select tool: a press is a press on the empty page (it clears the selection: Delete must not remove an object the
+  // user sees as deselected); a double-click explains. Text tool: the press still adds a text box (the way to replace
+  // such text is a whiteout and new text over it) and explains once per target of a source page.
+  const press = (l: Locked) => {
+    if (tool === "select") {
+      editorStore.getState().select(null);
+      textEditStore.getState().selectParagraph(null);
+      return;
+    }
+    const once = `${entry && "doc" in entry.src ? srcKey(entry.src.doc, entry.src.index) : pageKey}/${l.key}`;
+    if (explained.has(once)) return;
     explained.add(once);
-    noticeStore.getState().show({ kind: "info", text: l.why });
+    explain(l);
   };
 
   return (
@@ -100,7 +109,9 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
           listening={interactive}
           onMouseEnter={(e) => { setHover(l.key); if (tool === "select") setCursor(e, "help"); }}
           onMouseLeave={(e) => { setHover((h) => (h === l.key ? null : h)); if (tool === "select") setCursor(e, ""); }}
-          onPointerDown={() => explain(l)}
+          onPointerDown={() => press(l)}
+          onDblClick={() => { if (tool === "select") explain(l); }}
+          onDblTap={() => { if (tool === "select") explain(l); }}
         />
       ))}
       {paragraphs.filter((p) => p.editable && !edited.has(p.id)).map((p) => (
