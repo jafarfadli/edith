@@ -118,6 +118,12 @@ def redaction_rects(paragraph: dict, keep: frozenset[int] | set[int] = frozenset
 KEEP_X_TOL = 0.5
 KEEP_Y_TOL, KEEP_Y_EM = 1.0, 0.4
 SIZE_TOL = 0.05
+# The whitespace a kept line is compared without: exactly what JavaScript's \s matches (ECMAScript WhiteSpace and
+# LineTerminator), which the client's layout drops at line ends and between justified words. Shared contract with
+# SPACE_CHARS in apps/web/src/lib/keepLines.ts. Not str.isspace(): that also takes U+001C–U+001F and U+0085, and
+# not U+FEFF.
+SPACE_CHARS = frozenset("\t\n\x0b\x0c\r \xa0 " + "".join(map(chr, range(0x2000, 0x200B)))
+                        + "    　﻿")
 
 
 def _anchor_offset(box: TextBox, paragraph: dict) -> float:
@@ -151,8 +157,8 @@ def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
         orig = lines[j]
         if abs(box.rect.y + line.baseline - orig["baseline"]) > max(KEEP_Y_TOL, KEEP_Y_EM * orig["size"]):
             continue
-        want = [(text[i], styles[i]) for i in range(orig["start"], orig["end"]) if not text[i].isspace()]
-        got = [(c, runs[seg.runIndex]) for seg in line.segments for c in seg.text if not c.isspace()]
+        want = [(text[i], styles[i]) for i in range(orig["start"], orig["end"]) if text[i] not in SPACE_CHARS]
+        got = [(c, runs[seg.runIndex]) for seg in line.segments for c in seg.text if c not in SPACE_CHARS]
         if len(want) == len(got) and all(_same_char(o, r, font_keys) for o, r in zip(want, got)):
             out[k] = j
     return out

@@ -10,6 +10,9 @@ const IN_PLACE = 0.01;
  *  contract with KEEP_Y_TOL / KEEP_Y_EM in apps/api/edith/bake/text.py (the bake redraws a line beyond it): change both. */
 export const KEEP_Y_TOL = 1.0;
 export const KEEP_Y_EM = 0.4;
+/** The whitespace layoutText drops (`\s`: ECMAScript WhiteSpace and LineTerminator), listed: the bake compares a kept
+ *  line without exactly these. Shared contract with SPACE_CHARS in apps/api/edith/bake/text.py. */
+export const SPACE_CHARS = "\t\n\v\f\r                  　﻿";
 
 /** The box keeps its first baseline where `prev` had it: a fallback font with a taller ascent in the first line
  *  (CJK fallbacks are) would otherwise push the whole paragraph down. */

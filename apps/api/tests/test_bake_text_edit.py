@@ -6,7 +6,7 @@ from edith.bake.context import BakeContext
 from edith.doc_fonts import collect_fonts
 from edith.errors import BakeFailed, InvalidOp
 from edith.fonts import FontRegistry
-from edith.bake.text import kept_lines
+from edith.bake.text import SPACE_CHARS, kept_lines
 from edith.ops import ExportRequest, TextBox
 from edith.paragraphs import extract_paragraphs
 from edith.settings import Settings
@@ -284,6 +284,20 @@ def test_a_line_off_its_original_baseline_is_not_kept():
     """Baselines 100, 112, 124, 141 at 10 pt: the grid puts line 4 at 136, 5 pt off (> max(1, 0.4 × 10))."""
     paragraph, box = synthetic(["aa bb", "cc dd", "ee ff", "gg hh"], [100, 112, 124, 141])
     assert kept(paragraph, box) == {0: 0, 1: 1, 2: 2}
+
+
+def test_kept_lines_skip_exactly_the_whitespace_javascript_matches():
+    js = "\t\n\x0b\x0c\r \xa0                　﻿"
+    assert SPACE_CHARS == frozenset(js)  # the same list as apps/web/src/lib/keepLines.test.ts
+    # U+FEFF is space to the client (dropped between justified words): skipped.
+    paragraph, box = synthetic(["aa﻿ bb"], [100])
+    box["layout"][0]["segments"] = [{"x": 0, "text": "aa", "runIndex": 0}, {"x": 20, "text": "bb", "runIndex": 0}]
+    assert kept(paragraph, box) == {0: 0}
+    # U+001C is not (str.isspace says it is): the client never drops it, so a line without it is not the original.
+    paragraph, box = synthetic(["aa\x1cbb"], [100])
+    assert kept(paragraph, box) == {0: 0}
+    box["layout"][0]["segments"][0]["text"] = "aabb"
+    assert kept(paragraph, box) == {}
 
 
 def test_a_single_centred_or_right_line_is_anchored_like_the_client_anchors_it():

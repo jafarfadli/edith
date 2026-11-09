@@ -5,7 +5,7 @@ import type { FontRef, Run, TextBox, TextEdit } from "@edith/ops";
 import { moveOp, resizeOp } from "@/lib/objects";
 import type { Paragraph, TextData } from "@/lib/api";
 import { fontKey, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
-import { editedBox, KEEP_Y_EM, KEEP_Y_TOL } from "@/lib/keepLines";
+import { editedBox, KEEP_Y_EM, KEEP_Y_TOL, SPACE_CHARS } from "@/lib/keepLines";
 import { layoutText } from "@/lib/layout";
 import { keptLines, maskRects, paragraphBox, replacedLines } from "@/lib/paragraphs";
 import { runsText } from "@/lib/runs";
@@ -171,6 +171,15 @@ describe("editedBox keeps the lines an edit leaves alone", () => {
     const { box } = edit(LEFT, (t) => swap(t, "rapi", "rapih"));
     const back = editedBox(box, [[{ ...box.paragraphs[0][0], text: runsText(LEFT.runs) }]], LEFT, bundled);
     expect(sources(back)).toEqual([0, 1, 2, 3]);
+  });
+});
+
+describe("whitespace", () => {
+  it("is exactly SPACE_CHARS for the layout (\\s), as the bake's SPACE_CHARS lists it", () => {
+    const space: string[] = [];
+    for (let cp = 0; cp <= 0xffff; cp++) if (/\s/.test(String.fromCharCode(cp))) space.push(String.fromCharCode(cp));
+    expect(space.join("")).toBe(SPACE_CHARS);
+    for (const c of "\x1c\x1d\x1e\x1f\x85") expect(SPACE_CHARS).not.toContain(c); // Python's isspace() would take these
   });
 });
 
