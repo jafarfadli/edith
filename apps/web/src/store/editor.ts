@@ -43,8 +43,9 @@ export interface EditorState {
   selection: string | null; tool: Tool; zoom: number; style: ToolStyle; currentPage: string | null;
   init(info: DocInfo, restored?: EditorDoc | null): void;
   addObject(op: ContentOp): void;
-  /** `coalesce`: successive updates with the same key within COALESCE_MS are one undo step (slider drags, typing a size). */
-  updateObject(id: string, patch: Partial<ContentOp>, opts?: { coalesce?: string }): void;
+  /** `coalesce`: successive updates with the same key within COALESCE_MS are one undo step (slider drags, typing a size).
+   *  `remove`: objects deleted in the same step (marks on text a text.edit stops keeping, see updateTextOp). */
+  updateObject(id: string, patch: Partial<ContentOp>, opts?: { coalesce?: string; remove?: string[] }): void;
   /** Adds or replaces several objects and deletes the objects `remove` as one undo step (Replace All). */
   putObjects(ops: ContentOp[], remove?: string[]): void;
   deleteObject(id: string): void;
@@ -153,11 +154,16 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
       },
 
       updateObject(id, patch, opts) {
+        const gone = new Set((opts?.remove ?? []).filter((x) => x !== id));
         commit((d) => {
           const cur = d.objects[id];
           if (!cur) return d;
-          return { ...d, objects: { ...d.objects, [id]: { ...cur, ...patch, id: cur.id, type: cur.type } as ContentOp } };
+          const objects = { ...d.objects, [id]: { ...cur, ...patch, id: cur.id, type: cur.type } as ContentOp };
+          for (const x of gone) delete objects[x];
+          return { ...d, objects, order: gone.size ? d.order.filter((x) => !gone.has(x)) : d.order };
         }, opts?.coalesce);
+        const sel = get().selection;
+        if (sel !== null && gone.has(sel)) set({ selection: null });
       },
 
       putObjects(ops, remove = []) {

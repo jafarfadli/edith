@@ -73,7 +73,7 @@ export function opBounds(op: ContentOp): Rect {
 }
 
 /** A text box without kept original lines (LayoutLine.source): once moved or resized, every line is drawn. */
-function redrawAll(box: TextBox): TextBox {
+export function redrawAll(box: TextBox): TextBox {
   if (!box.layout.some((l) => l.source !== undefined && l.source !== null)) return box;
   return { ...box, layout: box.layout.map((l) => ({ baseline: l.baseline, segments: l.segments })) };
 }

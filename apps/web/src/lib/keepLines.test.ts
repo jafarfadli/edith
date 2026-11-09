@@ -135,6 +135,17 @@ describe("editedBox keeps the lines an edit leaves alone", () => {
     }
   });
 
+  it("drops the kept lines in the text resize hook even while its fonts load (no relayout yet)", async () => {
+    const { installTextTool } = await import("@/components/editor/text/install");
+    const { overlayHooks } = await import("@/components/editor/PageOverlay");
+    installTextTool();
+    const { box } = edit(LEFT, (t) => swap(t, "rapi", "rapih"));
+    const op: TextEdit = { id: "e", type: "text.edit", pageKey: "o0", paragraphId: LEFT.id, box };
+    const resized = overlayHooks.resizeText!(op, { ...box.rect, w: box.rect.w + 10 }); // the test's fonts are not in fontStore
+    expect(resized.box.rect.w).toBeCloseTo(box.rect.w + 10);
+    expect(sources(resized.box).every((s) => s === null)).toBe(true);
+  });
+
   it("recomputes from the original when an edited box is edited again (undo of the typo keeps everything)", () => {
     const { box } = edit(LEFT, (t) => swap(t, "rapi", "rapih"));
     const back = editedBox(box, [[{ ...box.paragraphs[0][0], text: runsText(LEFT.runs) }]], LEFT, bundled);
