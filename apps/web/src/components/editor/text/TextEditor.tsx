@@ -127,7 +127,9 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
         lineHeight: `${box.lineHeight * scale}px`, textAlign: box.align ?? "left",
         fontKerning: "none", fontVariantLigatures: "none", letterSpacing: 0,
         whiteSpace: "pre-wrap", overflowWrap: "break-word",
-        outline: `1px dashed ${CANVAS.accent}`, background: editing.kind === "text.edit" ? "#ffffff" : "rgba(255,255,255,0.85)",
+        // An OCR paragraph's editor stands on its cover's colour (the picture's background there), as the export does.
+        outline: `1px dashed ${CANVAS.accent}`,
+        background: editing.kind === "text.edit" ? "#ffffff" : editing.kind === "text.ocr_edit" ? editing.ocr?.coverColor ?? "#ffffff" : "rgba(255,255,255,0.85)",
       }}
     >
       <EditorContent editor={editor} />

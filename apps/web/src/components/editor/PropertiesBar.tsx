@@ -96,6 +96,7 @@ export function PropertiesBar() {
   const renderTextProps = useSyncExternalStore(subscribeSlot, getSlot, getSlot);
   const selection = useEditor((s) => s.selection);
   const op = useEditor((s) => (s.selection ? s.doc.objects[s.selection] : undefined));
+  const reverts = op?.type === "text.edit" || op?.type === "text.ocr_edit";
   const tool = useEditor((s) => s.tool);
   const style = useEditor((s) => s.style);
   const editingText = useStore(textEditStore, (st) => !!st.editing);
@@ -244,13 +245,13 @@ export function PropertiesBar() {
         )}
         {kind === "text" && scanned && <span className="text-xs text-warn">{t.text.scanned}</span>}
         {selection && (
-          // Deleting a text.edit op brings the original paragraph back.
+          // Deleting a text.edit op brings the original paragraph back; a text.ocr_edit op, the original picture of it.
           <>
             <span aria-hidden className="h-5 w-px shrink-0 bg-line" />
-            <button onClick={() => s.deleteObject(selection)} aria-label={op?.type === "text.edit" ? t.text.revert : t.editor.delete}
+            <button onClick={() => s.deleteObject(selection)} aria-label={reverts ? t.text.revert : t.editor.delete}
               className={BTN_DANGER}>
-              {op?.type === "text.edit" ? <Undo2 {...ICON} /> : <Trash2 {...ICON} />}
-              {op?.type === "text.edit" ? t.text.revert : t.editor.delete}
+              {reverts ? <Undo2 {...ICON} /> : <Trash2 {...ICON} />}
+              {reverts ? t.text.revert : t.editor.delete}
             </button>
           </>
         )}

@@ -2,12 +2,13 @@
 
 import { createStore } from "zustand/vanilla";
 import type { Editor } from "@tiptap/core";
-import type { ContentOp, Run, TextBox, TextEdit } from "@edith/ops";
-import type { Paragraph } from "@/lib/api";
+import type { ContentOp, Rect, Run, TextBox, TextEdit } from "@edith/ops";
+import type { OcrParagraph, Paragraph } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
 import { markupOverLines } from "@/lib/markup";
 import { noticeStore } from "@/lib/notices";
 import { newId } from "@/lib/id";
+import { ocrEditOp } from "@/lib/ocr";
 import { editedBox, keepFirstBaseline } from "@/lib/keepLines";
 import { keptLines, paragraphBox, preloadFallback, prepareRuns, replacedLines, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
@@ -15,16 +16,18 @@ import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
 import { t } from "@/lib/strings";
 import { keepRotatedTopLeft, rotationOf } from "@/lib/objects";
 import { boxFonts, boxLineHeight, newBox, relayout } from "@/lib/textbox";
-import { editorStore, textEditFor, type EditorDoc } from "@/store/editor";
+import { editorStore, ocrEditFor, textEditFor, type EditorDoc } from "@/store/editor";
 import { paragraphsOf, textStore } from "@/store/text";
 
 type Pt = [number, number];
 
-/** An open rich-text session: a text box being added/edited, or an original paragraph being rewritten. */
+/** An open rich-text session: a text box being added/edited, an original paragraph being rewritten, or a paragraph OCR
+ *  read in a picture being rewritten (`ocr`: what its edit covers, M5d). */
 export interface Editing {
   id: string; pageKey: string; box: TextBox; isNew: boolean;
-  kind: "text.add" | "text.edit";
+  kind: "text.add" | "text.edit" | "text.ocr_edit";
   paragraphId?: string;
+  ocr?: { cover: Rect; coverColor: string };
   /** Paragraphs the session started with (a new text.edit that ends unchanged adds nothing). */
   initial?: Run[][];
 }
@@ -59,6 +62,7 @@ export const textEditStore = createStore<TextEditState>()((set, get) => ({
   editing: null, current: null, paragraph: null,
   start: (editing) => {
     if (editing.kind === "text.edit" && !editing.paragraphId) throw new Error(`text.edit session ${editing.id} has no paragraphId`);
+    if (editing.kind === "text.ocr_edit" && (!editing.paragraphId || !editing.ocr)) throw new Error(`text.ocr_edit session ${editing.id} has no paragraph or cover`);
     session.paragraphs = editing.box.paragraphs;
     preloadSessionFonts(editing.box.paragraphs);
     set({ editing, current: attrsOf(editing.box.paragraphs[0][0]), paragraph: null });
@@ -183,6 +187,32 @@ export async function startParagraphEdit(pageKey: string, p: Paragraph): Promise
   textEditStore.getState().start({ id: newId(), pageKey, box, isNew: true, kind: "text.edit", paragraphId: p.id, initial: box.paragraphs });
 }
 
+/** Opens paragraph `p` that OCR read on `pageKey` for typing (its text.ocr_edit op, when it has one). Its text starts
+ *  in place, in the font, size and colour OCR guessed; committing paints its cover and draws the new text (M5d). */
+export async function startOcrEdit(pageKey: string, p: OcrParagraph): Promise<void> {
+  if (textEditStore.getState().editing || pendingCommit) return;
+  editorStore.getState().select(null);
+  textEditStore.getState().selectParagraph(null);
+  const ocr = { cover: p.cover, coverColor: p.coverColor };
+  const existing = ocrEditFor(editorStore.getState().doc, pageKey, p.id);
+  if (existing) {
+    textEditStore.getState().start({ id: existing.id, pageKey, box: existing.box, isNew: false, kind: "text.ocr_edit", paragraphId: p.id, ocr: { cover: existing.cover, coverColor: existing.coverColor } });
+    return;
+  }
+  let box: TextBox;
+  startingEdits++;
+  try {
+    box = await paragraphStartBox(p);
+  } catch (err) {
+    console.warn("OCR paragraph edit: font load failed", err);
+    return;
+  } finally {
+    startingEdits--;
+  }
+  if (textEditStore.getState().editing || pendingCommit || ocrEditFor(editorStore.getState().doc, pageKey, p.id)) return;
+  textEditStore.getState().start({ id: newId(), pageKey, box, isNew: true, kind: "text.ocr_edit", paragraphId: p.id, initial: box.paragraphs, ocr });
+}
+
 /** Turns original paragraph `p` into a text.edit op changed by `change` (moved, resized), selected. */
 export async function materializeParagraph(pageKey: string, p: Paragraph, change: (box: TextBox) => TextBox): Promise<void> {
   let box: TextBox;
@@ -257,7 +287,7 @@ export function commitEditing(paragraphs: Run[][]): Promise<void> {
  *  keeps its first baseline where the session's box had it and the lines the edit left alone (editedBox). */
 function committedBox(e: Editing, draft: TextBox, runs: Run[][], original: Paragraph | undefined): TextBox {
   const metrics = (f: Parameters<typeof fontStore.get>[0]) => fontStore.get(f);
-  if (e.kind !== "text.edit") return relayout({ ...draft, paragraphs: runs }, metrics);
+  if (e.kind === "text.add") return relayout({ ...draft, paragraphs: runs }, metrics);
   if (original) return editedBox(e.box, runs, original, metrics);
   return keepFirstBaseline(e.box, relayout({ ...draft, paragraphs: runs }, metrics));
 }
@@ -266,7 +296,9 @@ function land(e: Editing, box: TextBox): void {
   const st = editorStore.getState();
   const op = (e.kind === "text.edit"
     ? { id: e.id, type: "text.edit", pageKey: e.pageKey, paragraphId: e.paragraphId as string, box } // checked in start()
-    : { id: e.id, type: "text.add", pageKey: e.pageKey, box }) as ContentOp;
+    : e.kind === "text.ocr_edit"
+      ? ocrEditOp(e.id, e.pageKey, { id: e.paragraphId as string, ...e.ocr! }, box)
+      : { id: e.id, type: "text.add", pageKey: e.pageKey, box }) as ContentOp;
   // A rewritten paragraph loses the marks on its original lines, in the same undo step as the edit.
   const removed = op.type === "text.edit" ? markupUnderEdits(st.doc, [op as TextEdit]) : [];
   if (e.isNew) {

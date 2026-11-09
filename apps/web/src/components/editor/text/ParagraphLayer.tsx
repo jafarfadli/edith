@@ -2,17 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import type Konva from "konva";
-import { Rect, Transformer } from "react-konva";
+import { Label, Rect, Tag, Text, Transformer } from "react-konva";
 import { useStore } from "zustand";
 import type { Rect as Box, TextBox, TextEdit } from "@edith/ops";
-import type { Paragraph } from "@/lib/api";
+import type { OcrParagraph, Paragraph } from "@/lib/api";
+import { isLowConfidence, ocrBadge, ocrEditsOn, unedited } from "@/lib/ocr";
 import { noticeStore } from "@/lib/notices";
 import { maskRects } from "@/lib/paragraphs";
 import { srcKey } from "@/lib/sources";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
-import { imageTextOf, paragraphsOf, useText } from "@/store/text";
-import { materializeParagraph, startParagraphEdit, textEditStore } from "./textEdit";
+import { imageTextOf, ocrParagraphsOf, paragraphsOf, textStore, useText } from "@/store/text";
+import { runPageOcr } from "./ocrRun";
+import { materializeParagraph, startOcrEdit, startParagraphEdit, textEditStore } from "./textEdit";
 import { CANVAS } from "@/lib/theme";
 
 const OUTLINE = CANVAS.accent;
@@ -27,6 +29,10 @@ function setCursor(e: Konva.KonvaEventObject<unknown>, cursor: string) {
 /** Text that can't be edited (a locked paragraph, an image of print): its key and the notice that says why. */
 interface Locked { key: string; rect: Box; why: string }
 
+/** Badge text size (pt) over an OCR paragraph. */
+const BADGE_SIZE = 8;
+const BADGE_PAD = 2.5;
+
 /** Locked targets (source page `srcKey` / target key) explained under the text tool once already: there a click still
  *  adds a text box (the way to replace such text is a whiteout and new text over it), so the notice is not repeated on
  *  every click. Keyed by source page, so another document's page 1 is explained again. */
@@ -34,7 +40,9 @@ const explained = new Set<string>();
 
 /** Under the page's objects: white covers over the lines edited paragraphs replace (the bake redacts them) and, for
  *  the select and text tools, hover/select/drag/resize targets over the paragraphs not edited yet. Text that can't be
- *  edited (a locked paragraph, an image of print: M5c) gets a target too, which says why when clicked. */
+ *  edited (a locked paragraph, an image of print: M5c) gets a target too, which says why when clicked. Paragraphs OCR
+ *  read (M5d) show with a dashed accent outline (amber when unsure) and a "hasil OCR" badge on hover or selection; an
+ *  edited one is covered in its picture's background colour, as the export paints it (from its op: no OCR needed). */
 export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   const entry = useEditor((s) => s.doc.pages.find((p) => p.pageKey === pageKey));
   const order = useEditor((s) => s.doc.order);
@@ -42,6 +50,7 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   const tool = useEditor((s) => s.tool);
   const pages = useText((s) => s.pages);
   const imageText = useText((s) => s.imageText);
+  const ocr = useText((s) => s.ocr);
   const editing = useStore(textEditStore, (s) => s.editing);
   const selected = useStore(textEditStore, (s) => (s.paragraph?.pageKey === pageKey ? s.paragraph.id : null));
   const [hover, setHover] = useState<string | null>(null);
@@ -55,6 +64,12 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
     .map((op) => [op.paragraphId, op.box]));
   if (editing?.kind === "text.edit" && editing.pageKey === pageKey && editing.paragraphId) edits.set(editing.paragraphId, undefined);
   const edited = new Set(edits.keys());
+  // OCR edits of this page (and the one being typed): their covers, and the OCR paragraphs they replace.
+  const ocrEdits: { id: string; paragraphId: string; cover: Box; coverColor: string }[] = ocrEditsOn(order.map((id) => objects[id]), pageKey);
+  if (editing?.kind === "text.ocr_edit" && editing.pageKey === pageKey && editing.ocr && !ocrEdits.some((e) => e.id === editing.id)) {
+    ocrEdits.push({ id: editing.id, paragraphId: editing.paragraphId!, ...editing.ocr });
+  }
+  const ocrShown = entry ? unedited(ocrParagraphsOf(entry.src, ocr), ocrEdits) : [];
   const interactive = tool === "select" || tool === "text";
   // The selected paragraph only keeps its handles while it is still an original one under the select tool.
   const active = selected && tool === "select" && !edited.has(selected) ? selected : null;
@@ -67,17 +82,26 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
 
   // Images of print first, so a locked paragraph over one (invisible text over its picture) is the target hit.
   const locked: Locked[] = [
-    ...(entry ? imageTextOf(entry.src, imageText) : []).map((r, i) => ({ key: `image-${i}`, rect: r, why: t.editor.locked.imageText })),
+    ...(entry ? imageTextOf(entry.src, imageText) : []).map((r, i) => ({ key: `image-${i}`, rect: r, why: t.editor.imageTextOcr })),
     ...paragraphs.filter((p) => !p.editable && p.lock && !edited.has(p.id))
       .map((p) => ({ key: `lock-${p.id}`, rect: p.rect, why: t.editor.locked[p.lock!] })),
   ];
-  if (!paragraphs.length && !locked.length) return null;
+  if (!paragraphs.length && !locked.length && !ocrShown.length && !ocrEdits.length) return null;
 
   const select = (p: Paragraph) => {
     editorStore.getState().select(null);
     textEditStore.getState().selectParagraph({ pageKey, id: p.id });
   };
-  const explain = (l: Locked) => noticeStore.getState().show({ kind: "info", text: l.why });
+  // An image of print explains itself with a way out: read it (OCR), unless that ran already.
+  const explain = (l: Locked) => {
+    const src = entry && "doc" in entry.src ? entry.src : null;
+    const offer = l.key.startsWith("image-") && src && !textStore.getState().ocr[srcKey(src.doc, src.index)];
+    noticeStore.getState().show({ kind: "info", text: l.why, ...(offer ? { action: { label: t.ocr.run, run: () => { void runPageOcr(src.doc, src.index); } } } : {}) });
+  };
+  const selectOcr = (p: OcrParagraph) => {
+    editorStore.getState().select(null);
+    textEditStore.getState().selectParagraph({ pageKey, id: p.id });
+  };
   // Select tool: a press is a press on the empty page (it clears the selection: Delete must not remove an object the
   // user sees as deselected); a double-click explains. Text tool: the press still adds a text box (the way to replace
   // such text is a whiteout and new text over it) and explains once per target of a source page.
@@ -98,6 +122,9 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
       {paragraphs.filter((p) => edited.has(p.id)).flatMap((p) => maskRects(p, edits.get(p.id)).map((r, i) => (
         <Rect key={`mask-${p.id}-${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="#ffffff" listening={false} />
       )))}
+      {ocrEdits.map((e) => (
+        <Rect key={`cover-${e.id}`} name="ocr-cover" x={e.cover.x} y={e.cover.y} width={e.cover.w} height={e.cover.h} fill={e.coverColor} listening={false} />
+      ))}
       {locked.map((l) => (
         <Rect
           key={l.key}
@@ -148,6 +175,35 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
             void materializeParagraph(pageKey, p, (box) => ({ ...box, rect: { ...box.rect, x, w: Math.max(10, box.rect.w + w - p.rect.w) } }));
           }}
         />
+      ))}
+      {ocrShown.map((p) => {
+        const low = isLowConfidence(p);
+        const on = hover === p.id || selected === p.id;
+        return (
+          <Rect
+            key={p.id}
+            name="ocr-paragraph"
+            x={p.rect.x - 1} y={p.rect.y - 1} width={p.rect.w + 2} height={p.rect.h + 2}
+            fill={on ? (low ? "rgba(217, 119, 6, 0.10)" : "rgba(36, 107, 246, 0.08)") : "transparent"}
+            stroke={interactive ? (low ? CANVAS.ocrLow : OUTLINE) : undefined}
+            strokeWidth={on ? 1.5 : 1} strokeScaleEnabled={false} dash={selected === p.id ? undefined : [3, 2]}
+            listening={interactive}
+            onMouseEnter={(e) => { setHover(p.id); setCursor(e, "text"); }}
+            onMouseLeave={(e) => { setHover((h) => (h === p.id ? null : h)); setCursor(e, ""); }}
+            onPointerDown={(e) => {
+              e.cancelBubble = true;
+              if (tool === "text") { setCursor(e, ""); void startOcrEdit(pageKey, p); } else selectOcr(p);
+            }}
+            onDblClick={(e) => { setCursor(e, ""); void startOcrEdit(pageKey, p); }}
+            onDblTap={(e) => { setCursor(e, ""); void startOcrEdit(pageKey, p); }}
+          />
+        );
+      })}
+      {interactive && ocrShown.filter((p) => hover === p.id || selected === p.id).map((p) => (
+        <Label key={`badge-${p.id}`} name="ocr-badge" x={p.rect.x - 1} y={p.rect.y - 3 - BADGE_SIZE - 2 * BADGE_PAD} listening={false}>
+          <Tag fill={isLowConfidence(p) ? CANVAS.ocrLow : CANVAS.badge} cornerRadius={2} />
+          <Text text={ocrBadge(p)} fontSize={BADGE_SIZE} padding={BADGE_PAD} fill={CANVAS.badgeInk} fontFamily="Geist, system-ui, sans-serif" />
+        </Label>
       ))}
       <Transformer ref={trRef} rotateEnabled={false} flipEnabled={false} ignoreStroke keepRatio={false}
         enabledAnchors={["middle-left", "middle-right"]} borderStroke={OUTLINE} anchorStroke={OUTLINE} anchorSize={8} />
