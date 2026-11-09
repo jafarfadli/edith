@@ -13,6 +13,8 @@ const WIDTH_SLACK = 0.01;
 /** On-screen cover of an edited paragraph's original line (× size around the baseline). */
 export const MASK_ASCENT = 0.95;
 export const MASK_DESCENT = 0.25;
+/** Height (× size) of Latin ascenders and capitals above the baseline, for covers next to kept lines (maskRects). */
+const MEET_ASCENT = 0.75;
 
 /** Width of characters [start, end) of `runs`; trailing spaces are excluded unless `trimEnd` is false. */
 export function measureRange(runs: Run[], start: number, end: number, metricsFor: MetricsFor, trimEnd = true): number {
@@ -117,9 +119,22 @@ export function replacedLines(p: Paragraph, box?: TextBox): ParagraphLine[] {
 /** White covers hiding an edited paragraph's original lines on screen (the bake redacts them), except the lines its
  *  text.edit `box` keeps. */
 export function maskRects(p: Paragraph, box?: TextBox): Rect[] {
-  return replacedLines(p, box).map((l) => ({
-    x: l.rect.x - 0.5, y: l.baseline - MASK_ASCENT * l.size, w: l.rect.w + 1, h: (MASK_ASCENT + MASK_DESCENT) * l.size,
-  }));
+  const kept = keptLines(box);
+  // Next to a kept line at tight leading the bands overlap: the cover stops where the upper line's descenders
+  // (MASK_DESCENT) meet the lower line's ascenders (MEET_ASCENT, ink rather than the cover's margin), split by those
+  // shares, so the kept line's descenders or ascenders stay visible and the replaced line's stay covered.
+  const meet = (upper: ParagraphLine, lower: ParagraphLine) => {
+    const d = MASK_DESCENT * upper.size, a = MEET_ASCENT * lower.size;
+    return upper.baseline + (lower.baseline - upper.baseline) * (d / (d + a));
+  };
+  return p.lines.flatMap((l, i) => {
+    if (kept.has(i)) return [];
+    const above = p.lines[i - 1], below = p.lines[i + 1];
+    let top = l.baseline - MASK_ASCENT * l.size, bottom = l.baseline + MASK_DESCENT * l.size;
+    if (above && kept.has(i - 1)) top = Math.max(top, Math.min(meet(above, l), above.baseline + MASK_DESCENT * above.size));
+    if (below && kept.has(i + 1)) bottom = Math.min(bottom, Math.max(meet(l, below), below.baseline - MASK_ASCENT * below.size));
+    return [{ x: l.rect.x - 0.5, y: top, w: l.rect.w + 1, h: bottom - top }];
+  });
 }
 
 /** Slack (pt) before an edited paragraph counts as taller than the original. */

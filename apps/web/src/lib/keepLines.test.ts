@@ -5,7 +5,7 @@ import type { FontRef, Run, TextBox, TextEdit } from "@edith/ops";
 import { moveOp, resizeOp } from "@/lib/objects";
 import type { Paragraph, TextData } from "@/lib/api";
 import { fontKey, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
-import { editedBox } from "@/lib/keepLines";
+import { editedBox, KEEP_Y_EM, KEEP_Y_TOL, SPACE_CHARS } from "@/lib/keepLines";
 import { layoutText } from "@/lib/layout";
 import { keptLines, maskRects, paragraphBox, replacedLines } from "@/lib/paragraphs";
 import { runsText } from "@/lib/runs";
@@ -126,6 +126,27 @@ describe("editedBox keeps the lines an edit leaves alone", () => {
     expect(sources(editedBox({ ...start, align: "center" }, start.paragraphs, LEFT, bundled)).every((s) => s === null)).toBe(true);
   });
 
+  it("does not keep a line whose grid baseline is off its uneven original one (as the bake would not)", () => {
+    // Baselines 100, 112, 124, 141 at 10 pt (lineHeight = median 12): the grid puts line 4 at 136, 5 pt off.
+    const mono: FontMetrics = { unitsPerEm: 1, ascent: 0.8, descent: 0.2, advance: () => 1 };
+    const texts = ["aaaa bbbb cccc dddd", "ee ffff gggg hh", "iiiiii jjjj kkkk", "mmmm"];
+    let at = 0;
+    const lines = texts.map((t, i) => {
+      const b = [100, 112, 124, 141][i];
+      const line = { rect: { x: 10, y: b - 8, w: t.length * 10, h: 12 }, baseline: b, size: 10, start: at, end: at + t.length };
+      at += t.length + 1;
+      return line;
+    });
+    const p: Paragraph = { id: "g0", rect: { x: 10, y: 92, w: 200, h: 52 }, align: "left", lineHeight: 12, editable: true, lines,
+      runs: [{ text: texts.join(" "), font: { kind: "bundled", family: "Arimo" }, size: 10, color: "#000000" }] };
+    const start = paragraphBox(p, () => mono);
+    expect(sources(editedBox(start, start.paragraphs, p, () => mono))).toEqual([0, 1, 2, null]);
+    const typo = editedBox(start, [[{ ...p.runs[0], text: swap(p.runs[0].text, "aaaa", "aaab") }]], p, () => mono);
+    expect(sources(typo)).toEqual([null, 1, 2, null]);
+    expect(KEEP_Y_TOL).toBe(1);
+    expect(KEEP_Y_EM).toBe(0.4); // apps/api/edith/bake/text.py KEEP_Y_TOL, KEEP_Y_EM = 1.0, 0.4
+  });
+
   it("drops the kept lines when the op is moved or resized (every line is drawn then)", () => {
     const { box } = edit(LEFT, (t) => swap(t, "rapi", "rapih"));
     const op: TextEdit = { id: "e", type: "text.edit", pageKey: "o0", paragraphId: LEFT.id, box };
@@ -135,10 +156,30 @@ describe("editedBox keeps the lines an edit leaves alone", () => {
     }
   });
 
+  it("drops the kept lines in the text resize hook even while its fonts load (no relayout yet)", async () => {
+    const { installTextTool } = await import("@/components/editor/text/install");
+    const { overlayHooks } = await import("@/components/editor/PageOverlay");
+    installTextTool();
+    const { box } = edit(LEFT, (t) => swap(t, "rapi", "rapih"));
+    const op: TextEdit = { id: "e", type: "text.edit", pageKey: "o0", paragraphId: LEFT.id, box };
+    const resized = overlayHooks.resizeText!(op, { ...box.rect, w: box.rect.w + 10 }); // the test's fonts are not in fontStore
+    expect(resized.box.rect.w).toBeCloseTo(box.rect.w + 10);
+    expect(sources(resized.box).every((s) => s === null)).toBe(true);
+  });
+
   it("recomputes from the original when an edited box is edited again (undo of the typo keeps everything)", () => {
     const { box } = edit(LEFT, (t) => swap(t, "rapi", "rapih"));
     const back = editedBox(box, [[{ ...box.paragraphs[0][0], text: runsText(LEFT.runs) }]], LEFT, bundled);
     expect(sources(back)).toEqual([0, 1, 2, 3]);
+  });
+});
+
+describe("whitespace", () => {
+  it("is exactly SPACE_CHARS for the layout (\\s), as the bake's SPACE_CHARS lists it", () => {
+    const space: string[] = [];
+    for (let cp = 0; cp <= 0xffff; cp++) if (/\s/.test(String.fromCharCode(cp))) space.push(String.fromCharCode(cp));
+    expect(space.join("")).toBe(SPACE_CHARS);
+    for (const c of "\x1c\x1d\x1e\x1f\x85") expect(SPACE_CHARS).not.toContain(c); // Python's isspace() would take these
   });
 });
 
@@ -149,6 +190,25 @@ describe("kept lines on screen", () => {
     expect(replacedLines(LEFT, box)).toEqual([LEFT.lines[1]]);
     expect(maskRects(LEFT, box)).toEqual(maskRects({ ...LEFT, lines: [LEFT.lines[1]] }));
     expect(maskRects(LEFT)).toHaveLength(4); // no box (the editor is open): every line
+  });
+
+  it("stops a cover where a kept neighbour's band starts at tight leading (descenders stay visible)", () => {
+    // 10 pt lines at a 10 pt leading: bands (0.95 above, 0.25 below the baseline) overlap by 2 pt.
+    const line = (baseline: number) => ({ rect: { x: 10, y: baseline - 9, w: 100, h: 12 }, baseline, size: 10, start: 0, end: 1 });
+    const p = { ...LEFT, lines: [line(100), line(110), line(120)] };
+    const layout = (sources: (number | null)[]) => ({ ...paragraphBox(LEFT, bundled), layout: sources.map((s) => ({ baseline: 0, segments: [], ...(s === null ? {} : { source: s }) })) });
+    const [middle] = maskRects(p, layout([0, null, 2]));
+    expect(middle.y).toBeCloseTo(102.5); // below the upper line's descenders (0.25 em) …
+    expect(middle.y + middle.h).toBeCloseTo(112.5); // … above the lower line's ascenders (0.75 em)
+    expect(middle.y).toBeLessThanOrEqual(110 - 0.75 * 10); // still over the replaced line's own ascenders
+    // Two replaced lines next to each other keep their full covers between them.
+    const [first, second] = maskRects(p, layout([null, null, 2]));
+    expect(first.y).toBeCloseTo(100 - 9.5);
+    expect(first.y + first.h).toBeCloseTo(102.5);
+    expect(second.y).toBeCloseTo(110 - 9.5);
+    // Wide leading: nothing to share, the usual covers.
+    const loose = { ...LEFT, lines: [line(100), line(120)] };
+    expect(maskRects(loose, layout([0, null]))[0]).toEqual({ x: 9.5, y: 120 - 9.5, w: 101, h: 12 });
   });
 
   it("treats an op from an older draft (no `source`) as redrawing every line, as before", () => {

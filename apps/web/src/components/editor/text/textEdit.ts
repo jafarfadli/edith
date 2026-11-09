@@ -9,7 +9,7 @@ import { markupOverLines } from "@/lib/markup";
 import { noticeStore } from "@/lib/notices";
 import { newId } from "@/lib/id";
 import { editedBox, keepFirstBaseline } from "@/lib/keepLines";
-import { paragraphBox, preloadFallback, prepareRuns, replacedLines, resolveLoadedRuns } from "@/lib/paragraphs";
+import { keptLines, paragraphBox, preloadFallback, prepareRuns, replacedLines, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
 import { t } from "@/lib/strings";
@@ -91,6 +91,29 @@ export function markupUnderEdits(doc: EditorDoc, edits: TextEdit[]): string[] {
     if (p) for (const id of markupOverLines(ops, e.pageKey, replacedLines(p, e.box))) out.add(id);
   }
   return [...out];
+}
+
+/** Ids of the marks on original lines that text.edit `cur` keeps (LayoutLine.source) and `next` no longer does: once
+ *  moved, resized or restyled, those lines are redrawn and their glyphs removed, so the marks would float. */
+export function marksLostBy(doc: EditorDoc, cur: ContentOp, next: ContentOp): string[] {
+  if (cur.type !== "text.edit" || next.type !== "text.edit") return [];
+  const before = keptLines(cur.box), after = keptLines(next.box);
+  const p = originalParagraph(doc, cur.pageKey, cur.paragraphId);
+  const lost = p?.lines.filter((_, i) => before.has(i) && !after.has(i)) ?? [];
+  if (!lost.length) return [];
+  const ops = doc.order.map((id) => doc.objects[id]).filter((op): op is ContentOp => !!op);
+  return markupOverLines(ops, cur.pageKey, lost);
+}
+
+/** Every change of an existing object outside a text session (drag, nudge, transform, restyle) goes through here: a
+ *  text.edit that stops keeping original lines takes the marks on them along, in the same undo step, with a notice. */
+export function updateTextOp(id: string, patch: Partial<ContentOp>, opts?: { coalesce?: string }): void {
+  const st = editorStore.getState();
+  const cur = st.doc.objects[id];
+  if (!cur) return;
+  const removed = marksLostBy(st.doc, cur, { ...cur, ...patch } as ContentOp);
+  st.updateObject(id, patch, { ...opts, remove: removed });
+  noteMarkupRemoved(removed);
 }
 
 /** Tells the user their marks on edited text went (after markupUnderEdits() removed some). */

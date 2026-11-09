@@ -4,7 +4,9 @@ import type { StructurePage } from "@/store/editor";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 /** Paragraph segmentation the client's paragraph ids (g0, g1, …) come from: shared contract with PARAGRAPHS_VERSION in
- *  apps/api/edith/paragraphs.py. Exports send it (the API refuses text.edit ops of another version) and drafts store it. */
+ *  apps/api/edith/paragraphs.py. Exports send it (the API refuses text.edit ops of another version) and drafts store it.
+ *  Bump it on ANY change to how lines are split or measured (line start/end, rects, baselines), not only to ids: drafts
+ *  store LayoutLine.source indexes into a paragraph's lines, and the bake checks kept lines against those lines. */
 export const PARAGRAPHS_VERSION = 3;
 
 export class ApiError extends Error {

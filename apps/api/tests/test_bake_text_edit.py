@@ -6,7 +6,8 @@ from edith.bake.context import BakeContext
 from edith.doc_fonts import collect_fonts
 from edith.errors import BakeFailed, InvalidOp
 from edith.fonts import FontRegistry
-from edith.ops import ExportRequest
+from edith.bake.text import SPACE_CHARS, kept_lines
+from edith.ops import ExportRequest, TextBox
 from edith.paragraphs import extract_paragraphs
 from edith.settings import Settings
 from tests.pdfs import CID_TEXT, SUBSET_TTF, make_cid_subset_pdf, make_edit_pdf, make_fonts_pdf
@@ -255,3 +256,54 @@ def test_kept_lines_of_a_condensed_paragraph_keep_their_scaling(ctx):
     redrawn, original = line_spans(out[0], 134), line_spans(src[0], 134)
     assert "".join(s["text"] for s in redrawn).strip() == texts[1]
     assert redrawn[-1]["bbox"][2] > original[-1]["bbox"][2] + 2  # font advances, not Tz 94.7: wider, one letter less
+
+
+def synthetic(texts, baselines, align="left", rect=None, size=10.0):
+    """A SourcePages-like paragraph of `texts` (one per line) and the text.edit box keeping every line on the
+    lineHeight grid from the first baseline (as the client lays it out)."""
+    lines, at = [], 0
+    for t, b in zip(texts, baselines):
+        lines.append({"rect": {"x": 50, "y": b - size, "w": 100, "h": size * 1.2}, "baseline": b, "size": size,
+                      "start": at, "end": at + len(t)})
+        at += len(t) + 1
+    rect = rect or {"x": 50, "y": baselines[0] - size, "w": 100, "h": baselines[-1] - baselines[0] + size * 1.2}
+    paragraph = {"lines": lines, "rect": rect, "align": align,
+                 "runs": [{"text": " ".join(texts), "font": {"name": "Helvetica"}, "size": size, "color": "#000000"}]}
+    run = {"text": " ".join(texts), "font": ARIMO, "size": size, "color": "#000000"}
+    layout = [{"baseline": size + 12 * k, "source": k, "segments": [{"x": 0, "text": t, "runIndex": 0}]} for k, t in enumerate(texts)]
+    box = {"rect": {"x": 50, "y": baselines[0] - size, "w": 100, "h": 50}, "align": align, "lineHeight": 12,
+           "paragraphs": [[run]], "layout": layout}
+    return paragraph, box
+
+
+def kept(paragraph, box):
+    return kept_lines(TextBox.model_validate(box), paragraph, lambda f: frozenset())
+
+
+def test_a_line_off_its_original_baseline_is_not_kept():
+    """Baselines 100, 112, 124, 141 at 10 pt: the grid puts line 4 at 136, 5 pt off (> max(1, 0.4 × 10))."""
+    paragraph, box = synthetic(["aa bb", "cc dd", "ee ff", "gg hh"], [100, 112, 124, 141])
+    assert kept(paragraph, box) == {0: 0, 1: 1, 2: 2}
+
+
+def test_kept_lines_skip_exactly_the_whitespace_javascript_matches():
+    js = "\t\n\x0b\x0c\r \xa0                　﻿"
+    assert SPACE_CHARS == frozenset(js)  # the same list as apps/web/src/lib/keepLines.test.ts
+    # U+FEFF is space to the client (dropped between justified words): skipped.
+    paragraph, box = synthetic(["aa﻿ bb"], [100])
+    box["layout"][0]["segments"] = [{"x": 0, "text": "aa", "runIndex": 0}, {"x": 20, "text": "bb", "runIndex": 0}]
+    assert kept(paragraph, box) == {0: 0}
+    # U+001C is not (str.isspace says it is): the client never drops it, so a line without it is not the original.
+    paragraph, box = synthetic(["aa\x1cbb"], [100])
+    assert kept(paragraph, box) == {0: 0}
+    box["layout"][0]["segments"][0]["text"] = "aabb"
+    assert kept(paragraph, box) == {}
+
+
+def test_a_single_centred_or_right_line_is_anchored_like_the_client_anchors_it():
+    for align, x in (("center", 40), ("right", 30)):  # rect 50…150; the box 120 wide around its centre / to its right
+        paragraph, box = synthetic(["aa bb"], [100], align=align)
+        box["rect"].update(x=x, w=120)
+        assert kept(paragraph, box) == {0: 0}, align
+        box["rect"]["x"] = 50
+        assert kept(paragraph, box) == {}, align

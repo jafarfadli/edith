@@ -16,7 +16,7 @@ import { ICON, ICON_SM } from "../../ui/icon";
 import { FIELD, toggle } from "../../ui/styles";
 import { ColorField } from "../ColorField";
 import { useOverflow } from "./useOverflow";
-import { session, textEditStore } from "./textEdit";
+import { session, textEditStore, updateTextOp } from "./textEdit";
 
 /** Restyles the whole selected text op (no session open). Repeated changes within a second are one undo step. */
 async function applyToSelected(patch: BoxPatch) {
@@ -33,7 +33,7 @@ async function applyToSelected(patch: BoxPatch) {
       const paragraphs = await prepareRuns(styled.paragraphs, fonts);
       if (editorStore.getState().doc.objects[id] !== cur) continue;
       const box = relayout({ ...styled, paragraphs }, (f) => fontStore.get(f));
-      editorStore.getState().updateObject(id, { box } as Partial<TextAdd>, { coalesce: `text-style:${id}` });
+      updateTextOp(id, { box } as Partial<TextAdd>, { coalesce: `text-style:${id}` }); // relayout drops kept lines: their marks go
       return;
     }
     console.warn("text style: the text changed while its fonts loaded; style not applied", patch);

@@ -11,6 +11,8 @@ from edith.rules import Rules, page_rules
 
 # Version of the segmentation: paragraph ids (g0, g1, …) of a page change when it does. Shared contract with
 # apps/web/src/lib/paragraphs.ts (drafts and exports carry it; 1 = M1–M4, 2 = rule/hard-break aware, M5; 3 = M5b: cells, rows, lists, ink rects).
+# Bump it on ANY change to how lines are split or measured (line start/end, rects, baselines), not only to ids: drafts
+# store LayoutLine.source indexes into a paragraph's lines, and the bake checks kept lines against those lines.
 PARAGRAPHS_VERSION = 3
 # No TEXT_PRESERVE_LIGATURES: "ﬁ" comes out as "fi", which every font can draw.
 FLAGS = pymupdf.TEXT_PRESERVE_WHITESPACE | pymupdf.TEXT_MEDIABOX_CLIP

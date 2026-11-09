@@ -2,7 +2,7 @@
 
 import { createElement } from "react";
 import { fontStore } from "@/lib/fonts";
-import { isTextOp } from "@/lib/objects";
+import { isTextOp, redrawAll } from "@/lib/objects";
 import { textTargetAt } from "@/lib/textTarget";
 import { relayout } from "@/lib/textbox";
 import { editorStore } from "@/store/editor";
@@ -47,7 +47,8 @@ export function installTextTool(): void {
 
   // Only the left/right anchors are enabled for text: keep y, change x/width, re-wrap.
   overlayHooks.resizeText = (op, to) => {
-    const box = { ...op.box, rect: { ...op.box.rect, x: to.x, w: Math.max(to.w, 10) } };
+    // Resized, the original lines cannot stay (relayout drops `source`; so must the fallback while fonts load).
+    const box = redrawAll({ ...op.box, rect: { ...op.box.rect, x: to.x, w: Math.max(to.w, 10) } });
     return { ...op, box: fontsReady(box) ? relayout(box, (f) => fontStore.get(f)) : box };
   };
 

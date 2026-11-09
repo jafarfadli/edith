@@ -112,11 +112,29 @@ def redaction_rects(paragraph: dict, keep: frozenset[int] | set[int] = frozenset
     return out
 
 
-# A kept line (LayoutLine.source) must be in place: the box's left edge on the paragraph's (pt) and the line's
-# baseline on the original line's (pt, or this share of its size when larger: originals may space lines unevenly).
+# A kept line (LayoutLine.source) must be in place: the box anchored where the client's paragraphBox anchors it (pt)
+# and the line's baseline on the original line's (pt, or this share of its size when larger: originals may space
+# lines unevenly). Shared contract with KEEP_Y_TOL / KEEP_Y_EM in apps/web/src/lib/keepLines.ts: change both.
 KEEP_X_TOL = 0.5
 KEEP_Y_TOL, KEEP_Y_EM = 1.0, 0.4
 SIZE_TOL = 0.05
+# The whitespace a kept line is compared without: exactly what JavaScript's \s matches (ECMAScript WhiteSpace and
+# LineTerminator), which the client's layout drops at line ends and between justified words. Shared contract with
+# SPACE_CHARS in apps/web/src/lib/keepLines.ts. Not str.isspace(): that also takes U+001C–U+001F and U+0085, and
+# not U+FEFF.
+SPACE_CHARS = frozenset("\t\n\x0b\x0c\r \xa0 " + "".join(map(chr, range(0x2000, 0x200B)))
+                        + "    　﻿")
+
+
+def _anchor_offset(box: TextBox, paragraph: dict) -> float:
+    """How far the box is from where paragraphBox (apps/web/src/lib/paragraphs.ts) puts it: a single line that may
+    grow (not justified) keeps its centre or right edge when centred or right-aligned; anything else its left edge."""
+    r = paragraph["rect"]
+    if len(paragraph["lines"]) == 1 and box.align == "center":
+        return (box.rect.x + box.rect.w / 2) - (r["x"] + r["w"] / 2)
+    if len(paragraph["lines"]) == 1 and box.align == "right":
+        return (box.rect.x + box.rect.w) - (r["x"] + r["w"])
+    return box.rect.x - r["x"]
 
 
 def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
@@ -129,7 +147,7 @@ def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
     lines = paragraph["lines"]
     styles = [run for run in paragraph["runs"] for _ in run["text"]]  # original run of each character
     text = "".join(r["text"] for r in paragraph["runs"])
-    if box.align != paragraph["align"] or abs(box.rect.x - paragraph["rect"]["x"]) > KEEP_X_TOL:
+    if box.align != paragraph["align"] or abs(_anchor_offset(box, paragraph)) > KEEP_X_TOL:
         return {}
     out: dict[int, int] = {}
     for k, line in enumerate(box.layout):
@@ -139,8 +157,8 @@ def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
         orig = lines[j]
         if abs(box.rect.y + line.baseline - orig["baseline"]) > max(KEEP_Y_TOL, KEEP_Y_EM * orig["size"]):
             continue
-        want = [(text[i], styles[i]) for i in range(orig["start"], orig["end"]) if not text[i].isspace()]
-        got = [(c, runs[seg.runIndex]) for seg in line.segments for c in seg.text if not c.isspace()]
+        want = [(text[i], styles[i]) for i in range(orig["start"], orig["end"]) if text[i] not in SPACE_CHARS]
+        got = [(c, runs[seg.runIndex]) for seg in line.segments for c in seg.text if c not in SPACE_CHARS]
         if len(want) == len(got) and all(_same_char(o, r, font_keys) for o, r in zip(want, got)):
             out[k] = j
     return out
