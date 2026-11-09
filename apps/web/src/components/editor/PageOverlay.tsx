@@ -18,7 +18,7 @@ import { MarkupShape } from "./marks/MarkupShape";
 import { markupFromDrag, onMarkableText } from "./marks/markupTool";
 import { ObjectShape } from "./ObjectShape";
 import { usePolyTool } from "./shapes/usePolyTool";
-import { textEditStore } from "./text/textEdit";
+import { textEditStore, updateTextOp } from "./text/textEdit";
 import { CANVAS } from "@/lib/theme";
 
 type TextOp = TextAdd | TextEdit;
@@ -280,14 +280,14 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
                   const home = objectGroupAttrs(cur ?? op);
                   const dx = g.x() - home.x, dy = g.y() - home.y;
                   g.position({ x: home.x, y: home.y });
-                  if (cur && (dx || dy)) editorStore.getState().updateObject(op.id, moveOp(cur, dx, dy));
+                  if (cur && (dx || dy)) updateTextOp(op.id, moveOp(cur, dx, dy));
                 }}
                 onTransformEnd={(e) => {
                   const g = e.currentTarget as Konva.Group;
                   const cur = editorStore.getState().doc.objects[op.id];
                   const next = cur ? transformed(cur, g, pageRef.current!) : null;
                   g.setAttrs({ ...objectGroupAttrs(next ?? op), scaleX: 1, scaleY: 1 });
-                  if (next) editorStore.getState().updateObject(op.id, next);
+                  if (next) updateTextOp(op.id, next);
                 }}
                 onDblClick={() => overlayHooks.onDoubleClick?.(op)}
               >

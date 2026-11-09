@@ -6,7 +6,9 @@ from edith.bake.context import BakeContext
 from edith.doc_fonts import collect_fonts
 from edith.errors import BakeFailed, InvalidOp
 from edith.fonts import FontRegistry
-from edith.ops import ExportRequest
+from edith.bake.text import SPACE_CHARS, kept_lines
+from edith.ops import ExportRequest, TextBox
+from edith.paragraphs import extract_paragraphs
 from edith.settings import Settings
 from tests.pdfs import CID_TEXT, SUBSET_TTF, make_cid_subset_pdf, make_edit_pdf, make_fonts_pdf
 
@@ -151,3 +153,176 @@ def test_characters_missing_from_a_reused_subset_fail_the_bake(ctx):
     data = make_cid_subset_pdf()
     with pytest.raises(BakeFailed):  # the client sends them in a fallback font, never in the subset
         bake(data, ops(edit(text="가나다", font=cid_font_ref(data, "Dotum"), y=88)), ctx)
+
+
+# --- Kept lines (LayoutLine.source, M5b F1): unchanged original lines keep their glyphs -------------------------
+
+HELV_LINES = ("Paragraf yang diedit baris satu", "baris dua.")
+
+
+def two_lines(second="baris tiga.", sources=(0, None), first=HELV_LINES[0], color="#000000", x=72, y=88.0,
+              font=ARIMO):
+    """make_edit_pdf()'s g0 (baselines 100 / 112) as a text.edit whose layout lines carry `sources`."""
+    run = {"text": f"{first} {second}", "font": font, "size": 12, "color": color}
+    layout = []
+    for k, (text_, src) in enumerate(((first, sources[0]), (second, sources[1]))):
+        line = {"baseline": 12.0 + 12 * k, "segments": [{"x": 0, "text": text_, "runIndex": 0}]}
+        if src is not None:
+            line["source"] = src
+        layout.append(line)
+    return {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+            "box": {"rect": {"x": x, "y": y, "w": 300, "h": 28}, "align": "left", "lineHeight": 12,
+                    "paragraphs": [[run]], "layout": layout}}
+
+
+def line_spans(page, baseline):
+    return [s for s in spans(page) if abs(s["origin"][1] - baseline) < 0.5 and s["text"].strip()]
+
+
+def test_a_kept_line_keeps_its_original_glyphs_and_only_the_changed_line_is_redrawn(ctx):
+    out = reload(bake(make_edit_pdf(), ops(two_lines()), ctx))
+    first = line_spans(out[0], 100)
+    assert [s["text"] for s in first] == [HELV_LINES[0]]
+    assert first[0]["font"] == "Helvetica" and first[0]["origin"] == pytest.approx((72, 100), abs=0.01)
+    second = line_spans(out[0], 112)
+    assert [s["text"] for s in second] == ["baris tiga."] and "Arimo" in second[0]["font"]
+    t = text(out[0])
+    assert t.count(HELV_LINES[0]) == 1 and "baris dua." not in t  # the kept text exists once
+    assert "Paragraf tetangga tetap utuh di sini sampai akhir." in t
+
+
+def test_every_line_kept_leaves_the_page_text_as_it_was(ctx):
+    data = make_edit_pdf()
+    out = reload(bake(data, ops(two_lines(second=HELV_LINES[1], sources=(0, 1))), ctx))
+    orig = pymupdf.open(stream=data, filetype="pdf")[0]
+    assert [(s["text"], s["font"], s["origin"]) for s in spans(out[0])] == [(s["text"], s["font"], s["origin"]) for s in spans(orig)]
+    assert {f[3] for f in out[0].get_fonts(full=True)} == {f[3] for f in orig.get_fonts(full=True)}  # no Arimo embedded
+
+
+@pytest.mark.parametrize("change", [
+    dict(first="Paragraf yang diubah baris satu"),  # the text is not the original line's
+    dict(color="#ff0000"),                          # nor its colour
+    dict(x=80),                                     # the box moved sideways
+    dict(y=95.0),                                   # … or down
+    dict(sources=(1, None)),                        # the source names another line
+])
+def test_a_line_that_no_longer_matches_its_source_is_redrawn(ctx, change):
+    out = reload(bake(make_edit_pdf(), ops(two_lines(**change)), ctx))
+    first = line_spans(out[0], 100 + (change.get("y", 88.0) - 88.0))
+    assert first and all("Arimo" in s["font"] for s in first)  # drawn by the bake …
+    assert text(out[0]).count("Paragraf yang di") == 1  # … and the original redacted
+
+
+def test_an_original_line_is_kept_once(ctx):
+    op = two_lines(second=HELV_LINES[0], sources=(0, 0))
+    out = reload(bake(make_edit_pdf(), ops(op), ctx))
+    assert [s["font"] for s in line_spans(out[0], 100)] == ["Helvetica"]
+    assert "Arimo" in line_spans(out[0], 112)[0]["font"]
+
+
+def test_a_kept_line_must_name_the_original_font_when_it_uses_one(ctx):
+    data = make_cid_subset_pdf()
+
+    def op(name):
+        return {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+                "box": {"rect": {"x": 72, "y": 88, "w": 300, "h": 16}, "align": "left", "lineHeight": 14.4,
+                        "paragraphs": [[{"text": CID_TEXT, "font": cid_font_ref(data, name), "size": 12, "color": "#000000"}]],
+                        "layout": [{"baseline": 12.0, "source": 0, "segments": [{"x": 0, "text": CID_TEXT, "runIndex": 0}]}]}}
+    before = line_spans(pymupdf.open(stream=data, filetype="pdf")[0], 100)
+    kept = reload(bake(data, ops(op("Dotum")), ctx))
+    assert [(s["font"], s["origin"]) for s in line_spans(kept[0], 100)] == [(s["font"], s["origin"]) for s in before]
+    other = reload(bake(data, ops(op("Batang")), ctx))  # the Batang line's font is not this line's: redrawn in it
+    assert all("Batang" in s["font"] for s in line_spans(other[0], 100))
+
+
+def _condensed_edit(run_style: dict):
+    """keep-lines.pdf (Tz 94.7) with one letter deleted from line 2: lines 1 and 3 sent as kept, runs in `run_style`."""
+    from tests.pdfs import KEEP_LINES, make_keep_lines_pdf
+    data = make_keep_lines_pdf()
+    src = pymupdf.open(stream=data, filetype="pdf")
+    p = next(p for p in extract_paragraphs(src[0]) if len(p["lines"]) == 3)
+    texts = [KEEP_LINES[0], KEEP_LINES[1].replace("Applicants", "Applicant"), KEEP_LINES[2]]
+    layout = [{"baseline": 10.0 + 14 * k, "segments": [{"x": 0, "text": t, "runIndex": 0}], **({"source": k} if k != 1 else {})}
+              for k, t in enumerate(texts)]
+    op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": p["id"],
+          "box": {"rect": {"x": 56, "y": 110, "w": 330, "h": 42}, "align": "left", "lineHeight": 14,
+                  "paragraphs": [[{"text": " ".join(texts), "font": cid_font_ref(data, "Dotum"), "color": "#000000", **run_style}]],
+                  "layout": layout}}
+    return data, src, texts, op
+
+
+def test_kept_lines_of_a_condensed_paragraph_keep_their_scaling(ctx):
+    """Hancom condenses text with Tz: GET /text gives the runs the true size and hScale (M5b F2), the kept lines stay
+    exactly as they were and the redrawn one is condensed like them (one letter less: it ends earlier)."""
+    from edith.extract import extract_text
+    data, src, texts, _ = _condensed_edit({})
+    run = next(p for p in extract_text(src, ctx.fonts)["pages"][0]["paragraphs"] if len(p["lines"]) == 3)["runs"][0]
+    assert (run["size"], run["hScale"]) == (10.0, pytest.approx(0.947, abs=0.001))
+    *_, op = _condensed_edit({"size": run["size"], "hScale": run["hScale"]})
+    out = reload(bake(data, ops(op), ctx))
+    for baseline in (120, 148):
+        assert [(s["text"], s["bbox"]) for s in line_spans(out[0], baseline)] == [(s["text"], s["bbox"]) for s in line_spans(src[0], baseline)]
+    redrawn, original = line_spans(out[0], 134), line_spans(src[0], 134)
+    assert "".join(s["text"] for s in redrawn).strip() == texts[1]
+    assert original[-1]["bbox"][2] - 8 < redrawn[-1]["bbox"][2] < original[-1]["bbox"][2]
+
+
+@pytest.mark.parametrize("style", [{"size": 9.73}, {"size": 10.0}, {"size": 10.0, "hScale": 0.9},
+                                   {"size": 10.0, "hScale": 0.947, "charSpacing": 0.5}])
+def test_a_kept_line_whose_scale_or_spacing_differs_from_the_original_is_redrawn(ctx, style):
+    """Kept lines must carry the original's measured size, hScale, charSpacing and wordSpacing (web keepLines compares
+    the same fields): MuPDF's 9.73, no scale, another scale or added spacing redraw the line."""
+    data, src, _texts, op = _condensed_edit(style)
+    out = reload(bake(data, ops(op), ctx))
+    assert [s["bbox"] for s in line_spans(out[0], 120)] != [s["bbox"] for s in line_spans(src[0], 120)]
+
+
+def synthetic(texts, baselines, align="left", rect=None, size=10.0):
+    """A SourcePages-like paragraph of `texts` (one per line) and the text.edit box keeping every line on the
+    lineHeight grid from the first baseline (as the client lays it out)."""
+    lines, at = [], 0
+    for t, b in zip(texts, baselines):
+        lines.append({"rect": {"x": 50, "y": b - size, "w": 100, "h": size * 1.2}, "baseline": b, "size": size,
+                      "start": at, "end": at + len(t)})
+        at += len(t) + 1
+    rect = rect or {"x": 50, "y": baselines[0] - size, "w": 100, "h": baselines[-1] - baselines[0] + size * 1.2}
+    paragraph = {"lines": lines, "rect": rect, "align": align,
+                 "runs": [{"text": " ".join(texts), "font": {"name": "Helvetica"}, "size": size, "color": "#000000"}]}
+    run = {"text": " ".join(texts), "font": ARIMO, "size": size, "color": "#000000"}
+    layout = [{"baseline": size + 12 * k, "source": k, "segments": [{"x": 0, "text": t, "runIndex": 0}]} for k, t in enumerate(texts)]
+    box = {"rect": {"x": 50, "y": baselines[0] - size, "w": 100, "h": 50}, "align": align, "lineHeight": 12,
+           "paragraphs": [[run]], "layout": layout}
+    return paragraph, box
+
+
+def kept(paragraph, box):
+    return kept_lines(TextBox.model_validate(box), paragraph, lambda f: frozenset())
+
+
+def test_a_line_off_its_original_baseline_is_not_kept():
+    """Baselines 100, 112, 124, 141 at 10 pt: the grid puts line 4 at 136, 5 pt off (> max(1, 0.4 × 10))."""
+    paragraph, box = synthetic(["aa bb", "cc dd", "ee ff", "gg hh"], [100, 112, 124, 141])
+    assert kept(paragraph, box) == {0: 0, 1: 1, 2: 2}
+
+
+def test_kept_lines_skip_exactly_the_whitespace_javascript_matches():
+    js = "\t\n\x0b\x0c\r \xa0                　﻿"
+    assert SPACE_CHARS == frozenset(js)  # the same list as apps/web/src/lib/keepLines.test.ts
+    # U+FEFF is space to the client (dropped between justified words): skipped.
+    paragraph, box = synthetic(["aa﻿ bb"], [100])
+    box["layout"][0]["segments"] = [{"x": 0, "text": "aa", "runIndex": 0}, {"x": 20, "text": "bb", "runIndex": 0}]
+    assert kept(paragraph, box) == {0: 0}
+    # U+001C is not (str.isspace says it is): the client never drops it, so a line without it is not the original.
+    paragraph, box = synthetic(["aa\x1cbb"], [100])
+    assert kept(paragraph, box) == {0: 0}
+    box["layout"][0]["segments"][0]["text"] = "aabb"
+    assert kept(paragraph, box) == {}
+
+
+def test_a_single_centred_or_right_line_is_anchored_like_the_client_anchors_it():
+    for align, x in (("center", 40), ("right", 30)):  # rect 50…150; the box 120 wide around its centre / to its right
+        paragraph, box = synthetic(["aa bb"], [100], align=align)
+        box["rect"].update(x=x, w=120)
+        assert kept(paragraph, box) == {0: 0}, align
+        box["rect"]["x"] = 50
+        assert kept(paragraph, box) == {}, align

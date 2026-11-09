@@ -30,6 +30,7 @@ import { Sidebar } from "./Sidebar";
 import { Toolbar } from "./Toolbar";
 import { ZoomPill } from "./ZoomPill";
 import { useShortcuts } from "./useShortcuts";
+import { updateTextOp } from "./text/textEdit";
 
 // The text tool's hooks live in the Konva overlay chunk (Konva must stay out of SSR), so install them when it loads.
 const PageOverlay = dynamic(async () => {
@@ -144,7 +145,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     const g = pageGeom(entry, st.info);
     const [x0, y0] = toPage([0, 0], g, 1);
     const [x1, y1] = toPage([d[0] * step, d[1] * step], g, 1);
-    st.updateObject(op.id, moveOp(op, x1 - x0, y1 - y0), { coalesce: `nudge:${op.id}` }); // held arrow keys: one undo step
+    updateTextOp(op.id, moveOp(op, x1 - x0, y1 - y0), { coalesce: `nudge:${op.id}` }); // held arrow keys: one undo step
     return true;
   }, []);
   useShortcuts(nudge);

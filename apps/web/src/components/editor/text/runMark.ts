@@ -10,7 +10,7 @@ declare module "@tiptap/core" {
   }
 }
 
-const KEYS = ["font", "size", "color", "bgColor", "underline", "strike"] as const;
+const KEYS = ["font", "size", "color", "bgColor", "underline", "strike", "hScale", "charSpacing", "wordSpacing"] as const;
 
 function readRun(el: HTMLElement): Partial<RunAttrs> {
   try { return JSON.parse(el.getAttribute("data-run") || "{}") as Partial<RunAttrs>; } catch { return {}; }
@@ -22,7 +22,7 @@ export function createRunMark(fallback: () => RunAttrs) {
     name: "run",
     inclusive: true,
     addAttributes() {
-      const defaults: RunAttrs = { font: { kind: "bundled", family: "Arimo", bold: false, italic: false }, size: 12, color: "#000000", bgColor: null, underline: false, strike: false };
+      const defaults: RunAttrs = { font: { kind: "bundled", family: "Arimo", bold: false, italic: false }, size: 12, color: "#000000", bgColor: null, underline: false, strike: false, hScale: 1, charSpacing: 0, wordSpacing: 0 };
       return Object.fromEntries(KEYS.map((k) => [k, {
         default: defaults[k],
         rendered: false,

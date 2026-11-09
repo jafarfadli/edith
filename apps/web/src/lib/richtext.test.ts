@@ -63,6 +63,19 @@ describe("rich text model", () => {
     expect(applyPatch(a, { bgColor: null }, {}).bgColor).toBeNull();
   });
 
+  it("keeps the original's measured scale and spacing for a colour or decoration, drops them for another font or size", () => {
+    const spaced = { ...attrsOf(r("")), hScale: 0.947, charSpacing: -0.3, wordSpacing: 1.2 };
+    const keep = { hScale: 0.947, charSpacing: -0.3, wordSpacing: 1.2 };
+    expect(applyPatch(spaced, { color: "#ff0000", underline: true }, {})).toMatchObject(keep);
+    for (const patch of [{ family: "Lora" }, { size: 14 }, { bold: true }]) {
+      const out = applyPatch(spaced, patch, {});
+      expect(out, JSON.stringify(patch)).not.toHaveProperty("hScale");
+      expect(out).not.toHaveProperty("charSpacing");
+      expect(out).not.toHaveProperty("wordSpacing");
+    }
+    expect(applyPatch(spaced, { size: spaced.size }, {})).toMatchObject(keep); // the same size: unchanged
+  });
+
   it("builds editor CSS", () => {
     const css = runCss(attrsOf(r("", { underline: true, strike: true, bgColor: "#ffff00" })));
     expect(css).toContain('font-family:"edith-Arimo-regular"');

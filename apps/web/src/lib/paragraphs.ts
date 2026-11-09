@@ -1,5 +1,5 @@
 import type { FontRef, Rect, Run, TextBox } from "@edith/ops";
-import type { Paragraph } from "@/lib/api";
+import type { Paragraph, ParagraphLine } from "@/lib/api";
 import { textWidth, type FontMetrics } from "@/lib/fonts";
 import { normalizeRuns, runsText, sliceRuns } from "@/lib/runs";
 import { relayout } from "@/lib/textbox";
@@ -13,6 +13,8 @@ const WIDTH_SLACK = 0.01;
 /** On-screen cover of an edited paragraph's original line (× size around the baseline). */
 export const MASK_ASCENT = 0.95;
 export const MASK_DESCENT = 0.25;
+/** Height (× size) of Latin ascenders and capitals above the baseline, for covers next to kept lines (maskRects). */
+const MEET_ASCENT = 0.75;
 
 /** Width of characters [start, end) of `runs`; trailing spaces are excluded unless `trimEnd` is false. */
 export function measureRange(runs: Run[], start: number, end: number, metricsFor: MetricsFor, trimEnd = true): number {
@@ -23,7 +25,10 @@ export function measureRange(runs: Run[], start: number, end: number, metricsFor
     if (text) pieces[pieces.length - 1] = { ...last, text };
     else pieces.pop();
   }
-  return pieces.reduce((w, r) => w + textWidth(r.text, metricsFor(r.font), r.size), 0);
+  const w = pieces.reduce((sum, r) => sum + textWidth(r.text, metricsFor(r.font), r.size, r), 0);
+  // The range ends at its last glyph's ink: not the character spacing after it (as layoutText measures lines).
+  const last = pieces[pieces.length - 1];
+  return trimEnd && last && /\S$/.test(last.text) ? w - (last.charSpacing ?? 0) : w;
 }
 
 /** Box width that holds every original line on one line. */
@@ -71,30 +76,112 @@ export function rawToBox(p: Paragraph, breaks: number[]): (offset: number) => nu
   };
 }
 
+/** How far (pt) a single line measured wider than its room may still exceed it (paragraphFrame). */
+const OVERSHOOT = 1;
+/** A wrap width stays this far (pt) under the narrowest soft break's "line + space + next word" (wrapWidth). */
+const BREAK_MARGIN = 0.05;
+/** CJK ideographs, kana and full-width forms: lines wrap after any of them (paragraphs.py _wide). */
+const WIDE = /^[⺀-〿぀-ヿ㐀-䶿一-鿿豈-﫿＀-｠￠-￦]/;
+
+/** The first word of `text`: up to the first space; a CJK ideograph or kana alone. */
+function firstWord(text: string): string {
+  return WIDE.test(text) ? [...text][0] : /^\S*/.exec(text)![0];
+}
+
+/**
+ * Width a multi-line left-aligned paragraph wraps at (M5b F2). Any width from its widest line up to just under the
+ * narrowest "line + space + next line's first word" (its soft breaks) reproduces the original breaks: it takes the
+ * middle of that slack, no wider than the room the API measured beside its lines (`maxWidth`: up to the next rule,
+ * other text or the right margin). Its widest line no longer fills the box, so a one-character edit does not push a
+ * word to the next line (nor, shortening a line, pull one up). Without `maxWidth` (older API): the widest line.
+ */
+export function wrapWidth(p: Paragraph, natural: number, metricsFor: MetricsFor): number {
+  if (!p.maxWidth) return natural;
+  const text = runsText(p.runs);
+  const hard = new Set(hardBreaks(p, natural, metricsFor));
+  let soft = Infinity;
+  p.lines.forEach((line, i) => {
+    const next = p.lines[i + 1];
+    if (!next || hard.has(i)) return;
+    const word = firstWord(text.slice(next.start));
+    soft = Math.min(soft, measureRange(p.runs, line.start, next.start + word.length, metricsFor) - BREAK_MARGIN);
+  });
+  // Halfway into the slack: a line may grow by as much as the tightest soft break may shrink (an edit that shortens
+  // that line would otherwise pull the next line's first word up).
+  const middle = soft === Infinity ? Infinity : natural + (soft - natural) / 2;
+  return Math.max(natural, Math.min(p.maxWidth + WIDTH_SLACK, middle));
+}
+
+/** What paragraphBox lays `p` out in: the box left edge and width, the lines followed by a hard break and the
+ *  logical paragraphs. */
+export function paragraphFrame(p: Paragraph, metricsFor: MetricsFor): { x: number; width: number; breaks: number[]; paragraphs: Run[][] } {
+  // A single line (a form label, a table cell, a title) may grow into the room the API measured beside it:
+  // rightwards when left-aligned, around its centre when centred, leftwards when right-aligned (M5b).
+  const single = p.lines.length === 1 && p.align !== "justify";
+  const natural = paragraphWidth(p, metricsFor);
+  let width = natural;
+  if (single && p.maxWidth) {
+    // Clamped (M5b F2): a line measured wider than its room (a substitute font) exceeds it by OVERSHOOT at most, then
+    // wraps rather than running off the page or into its neighbour.
+    const room = p.maxWidth + WIDTH_SLACK;
+    width = Math.max(room, Math.min(natural, room + OVERSHOOT));
+  } else if (p.lines.length > 1 && p.align === "left") {
+    width = wrapWidth(p, natural, metricsFor);
+  }
+  const x = !single ? p.rect.x
+    : p.align === "center" ? p.rect.x + p.rect.w / 2 - width / 2
+      : p.align === "right" ? p.rect.x + p.rect.w - width : p.rect.x;
+  const breaks = hardBreaks(p, width, metricsFor);
+  return { x, width, breaks, paragraphs: paragraphRuns(p, breaks) };
+}
+
 /** The TextBox that redraws `p` in place: same lines, first baseline on the original one. `edit`
  *  changes the logical paragraphs first (Replace); `toBox` maps offsets of the paragraph's joined text. */
 export function paragraphBox(
   p: Paragraph, metricsFor: MetricsFor,
   edit?: (paragraphs: Run[][], toBox: (offset: number) => number) => Run[][],
 ): TextBox {
-  // A left-aligned single line (a form label, a table cell) may grow into the room the API measured beside it.
-  const room = p.lines.length === 1 && p.align === "left" && p.maxWidth ? p.maxWidth + WIDTH_SLACK : 0;
-  const width = Math.max(paragraphWidth(p, metricsFor), room);
-  const breaks = hardBreaks(p, width, metricsFor);
-  const paragraphs = paragraphRuns(p, breaks);
+  const { x, width, breaks, paragraphs } = paragraphFrame(p, metricsFor);
   const box = relayout({
-    rect: { x: p.rect.x, y: 0, w: width, h: 0 }, align: p.align, lineHeight: p.lineHeight,
+    rect: { x, y: 0, w: width, h: 0 }, align: p.align, lineHeight: p.lineHeight,
     paragraphs: edit ? edit(paragraphs, rawToBox(p, breaks)) : paragraphs, layout: [],
   }, metricsFor);
   const first = box.layout[0]?.baseline ?? 0;
   return { ...box, rect: { ...box.rect, y: p.lines[0].baseline - first } };
 }
 
-/** White covers hiding an edited paragraph's original lines on screen (the bake redacts them). */
-export function maskRects(p: Paragraph): Rect[] {
-  return p.lines.map((l) => ({
-    x: l.rect.x - 0.5, y: l.baseline - MASK_ASCENT * l.size, w: l.rect.w + 1, h: (MASK_ASCENT + MASK_DESCENT) * l.size,
-  }));
+/** The original lines a text.edit box keeps (its layout lines' `source`): the bake neither redacts nor redraws them. */
+export function keptLines(box: TextBox | undefined): Set<number> {
+  const out = new Set<number>();
+  for (const line of box?.layout ?? []) if (line.source !== undefined && line.source !== null) out.add(line.source);
+  return out;
+}
+
+/** The original lines of `p` that its text.edit `box` replaces (all of them without a box). */
+export function replacedLines(p: Paragraph, box?: TextBox): ParagraphLine[] {
+  const kept = keptLines(box);
+  return p.lines.filter((_, i) => !kept.has(i));
+}
+
+/** White covers hiding an edited paragraph's original lines on screen (the bake redacts them), except the lines its
+ *  text.edit `box` keeps. */
+export function maskRects(p: Paragraph, box?: TextBox): Rect[] {
+  const kept = keptLines(box);
+  // Next to a kept line at tight leading the bands overlap: the cover stops where the upper line's descenders
+  // (MASK_DESCENT) meet the lower line's ascenders (MEET_ASCENT, ink rather than the cover's margin), split by those
+  // shares, so the kept line's descenders or ascenders stay visible and the replaced line's stay covered.
+  const meet = (upper: ParagraphLine, lower: ParagraphLine) => {
+    const d = MASK_DESCENT * upper.size, a = MEET_ASCENT * lower.size;
+    return upper.baseline + (lower.baseline - upper.baseline) * (d / (d + a));
+  };
+  return p.lines.flatMap((l, i) => {
+    if (kept.has(i)) return [];
+    const above = p.lines[i - 1], below = p.lines[i + 1];
+    let top = l.baseline - MASK_ASCENT * l.size, bottom = l.baseline + MASK_DESCENT * l.size;
+    if (above && kept.has(i - 1)) top = Math.max(top, Math.min(meet(above, l), above.baseline + MASK_DESCENT * above.size));
+    if (below && kept.has(i + 1)) bottom = Math.min(bottom, Math.max(meet(l, below), below.baseline - MASK_ASCENT * below.size));
+    return [{ x: l.rect.x - 0.5, y: top, w: l.rect.w + 1, h: bottom - top }];
+  });
 }
 
 /** Slack (pt) before an edited paragraph counts as taller than the original. */

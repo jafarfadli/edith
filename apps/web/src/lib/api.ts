@@ -4,8 +4,10 @@ import type { StructurePage } from "@/store/editor";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 /** Paragraph segmentation the client's paragraph ids (g0, g1, …) come from: shared contract with PARAGRAPHS_VERSION in
- *  apps/api/edith/paragraphs.py. Exports send it (the API refuses text.edit ops of another version) and drafts store it. */
-export const PARAGRAPHS_VERSION = 2;
+ *  apps/api/edith/paragraphs.py. Exports send it (the API refuses text.edit ops of another version) and drafts store it.
+ *  Bump it on ANY change to how lines are split or measured (line start/end, rects, baselines), not only to ids: drafts
+ *  store LayoutLine.source indexes into a paragraph's lines, and the bake checks kept lines against those lines. */
+export const PARAGRAPHS_VERSION = 3;
 
 export class ApiError extends Error {
   constructor(public code: string, public status: number, public extra: Record<string, unknown> = {}) {
@@ -16,8 +18,12 @@ export class ApiError extends Error {
 
 /** One original line of a paragraph; `start`/`end` index the paragraph's joined run text (end excludes trailing spaces). */
 export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number }
-/** `maxWidth` (single-line paragraphs, M5): how wide the paragraph may grow when edited, from its left edge — up to
- *  the next cell border or text on its line. */
+/** `maxWidth` (single-line paragraphs, M5): how wide the paragraph may grow when edited — up to the next cell border
+ *  or text on its line. Measured per `align` (M5b): from the left edge (left), around the centre (center: the whole
+ *  symmetric width) or leftwards from the right edge (right). Rects are the ink since M5b (no leading/trailing spaces).
+ *  Left-aligned multi-line paragraphs get it too (M5b F2): the room beside all their lines, the most the web may
+ *  widen their wrap width (lib/paragraphs.ts wrapWidth). Runs of original text carry the PDF's measured hScale /
+ *  charSpacing / wordSpacing (and the true size of horizontally scaled text). */
 export interface Paragraph {
   id: string; rect: Rect; lines: ParagraphLine[]; runs: Run[];
   align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean; maxWidth?: number;
@@ -30,7 +36,7 @@ export interface DocFont {
 }
 export interface TextData {
   doc_id: string; pages: { index: number; paragraphs: Paragraph[] }[]; fonts: DocFont[];
-  /** Segmentation version (2 since M5); absent in fixtures built from extract_text directly. */
+  /** Segmentation version (2 since M5, 3 since M5b); absent in fixtures built from extract_text directly. */
   paragraphsVersion?: number;
 }
 

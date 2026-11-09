@@ -9,7 +9,8 @@ import { t } from "@/lib/strings";
 import { boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
-import { afterTextCommitted, commitEditing, materializeParagraph, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, whenTextCommitted } from "./textEdit";
+import { moveOp, resizeOp } from "@/lib/objects";
+import { afterTextCommitted, commitEditing, materializeParagraph, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, updateTextOp, whenTextCommitted } from "./textEdit";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
@@ -366,6 +367,62 @@ describe("markup over an edited paragraph", () => {
     expect(noticeStore.getState().notice).toEqual({ kind: "info", text: t.text.markupRemoved });
     editorStore.getState().undo();
     expect(Object.keys(editorStore.getState().doc.objects).sort()).toEqual(["h1", "h4", "n", "s3", "u2"]);
+  });
+
+  it("keeps the marks on the lines an edit leaves alone: those keep their original glyphs (LayoutLine.source)", async () => {
+    gate.resolve();
+    await startParagraphEdit("o0", g3);
+    const e = textEditStore.getState().editing!;
+    expect(e.box.paragraphs.map((p) => p[0].text)).toEqual(["Halo", "lama"]); // "lama" would fit after "Halo": a hard break
+    await commitEditing([e.box.paragraphs[0], [{ ...e.box.paragraphs[1][0], text: "lamb" }]]);
+    const doc = editorStore.getState().doc;
+    const op = Object.values(doc.objects).find((o) => o.type === "text.edit") as TextEdit;
+    expect(op.box.layout.map((l) => l.source ?? null)).toEqual([0, null]);
+    expect(Object.keys(doc.objects).sort()).toEqual([op.id, "h1", "h4", "n", "s3"].sort()); // only u2 (line 2) went
+    // Reopened and committed again unchanged: the same op, nothing new to undo.
+    const before = editorStore.getState().past.length;
+    textEditStore.getState().start({ id: op.id, pageKey: "o0", box: op.box, isNew: false, kind: "text.edit", paragraphId: "g3" });
+    await commitEditing(op.box.paragraphs);
+    expect(editorStore.getState().past.length).toBe(before);
+  });
+
+  it.each([
+    ["moved (drag, nudge)", (op: TextEdit) => moveOp(op, 5, 0)],
+    ["resized", (op: TextEdit) => resizeOp(op, { ...op.box.rect, w: op.box.rect.w + 30 })],
+    ["restyled (relayout)", (op: TextEdit) => ({ box: relayout(op.box, () => metricsOf(font)) })],
+  ])("removes the marks on kept lines once the edit is %s, in the same undo step, with a notice", async (_how, change) => {
+    gate.resolve();
+    await startParagraphEdit("o0", g3);
+    const e = textEditStore.getState().editing!;
+    await commitEditing([e.box.paragraphs[0], [{ ...e.box.paragraphs[1][0], text: "lamb" }]]);
+    const op = Object.values(editorStore.getState().doc.objects).find((o) => o.type === "text.edit") as TextEdit;
+    expect(editorStore.getState().doc.objects.h1).toBeDefined(); // on the kept line 1
+    noticeStore.setState({ notice: null });
+    const before = editorStore.getState().past.length;
+    updateTextOp(op.id, change(op));
+    const after = editorStore.getState();
+    expect((after.doc.objects[op.id] as TextEdit).box.layout.every((l) => l.source == null)).toBe(true);
+    expect(after.doc.objects.h1).toBeUndefined();
+    expect(after.doc.order).not.toContain("h1");
+    expect(Object.keys(after.doc.objects).sort()).toEqual([op.id, "h4", "n", "s3"].sort());
+    expect(after.past.length).toBe(before + 1);
+    expect(noticeStore.getState().notice).toEqual({ kind: "info", text: t.text.markupRemoved });
+    editorStore.getState().undo();
+    expect(editorStore.getState().doc.objects.h1).toBeDefined();
+    expect(editorStore.getState().doc.objects[op.id]).toEqual(op);
+  });
+
+  it("leaves marks alone when the change keeps the lines (or the op is not a text.edit)", async () => {
+    gate.resolve();
+    await startParagraphEdit("o0", g3);
+    const e = textEditStore.getState().editing!;
+    await commitEditing([e.box.paragraphs[0], [{ ...e.box.paragraphs[1][0], text: "lamb" }]]);
+    const op = Object.values(editorStore.getState().doc.objects).find((o) => o.type === "text.edit") as TextEdit;
+    noticeStore.setState({ notice: null });
+    updateTextOp("h4", { color: "#00ff00" } as Partial<ContentOp>);
+    updateTextOp(op.id, { box: { ...op.box, paragraphs: op.box.paragraphs } });
+    expect(editorStore.getState().doc.objects.h1).toBeDefined();
+    expect(noticeStore.getState().notice).toBeNull();
   });
 
   it("also when an existing text.edit is edited again, and no notice when nothing was removed", async () => {

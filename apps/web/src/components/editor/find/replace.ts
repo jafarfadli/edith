@@ -10,7 +10,8 @@ import { opKey } from "@/lib/targets";
 import { relayout } from "@/lib/textbox";
 import { editorStore, textEditFor } from "@/store/editor";
 import { paragraphsOf, textStore } from "@/store/text";
-import { markupUnderEdits, noteMarkupRemoved } from "../text/textEdit";
+import { markupUnderEdits, noteMarkupRemoved, originalParagraph } from "../text/textEdit";
+import { editedBox } from "@/lib/keepLines";
 
 const metrics = (f: Parameters<typeof fontStore.get>[0]) => fontStore.get(f);
 
@@ -43,7 +44,11 @@ export async function applyReplacements(matches: Match[], text: string): Promise
       const op = doc.objects[key.slice(3)];
       if (!isTextOp(op)) continue;
       const paragraphs = await prepareRuns(replaceMatches(op.box.paragraphs, ms, text), fonts);
-      out.push({ op: { ...op, box: relayout({ ...op.box, paragraphs }, metrics) } as TextAdd | TextEdit, base: op, ends: endsAfter(ms, text) });
+      // A rewritten paragraph keeps the original lines the replacement leaves alone (editedBox).
+      const p = op.type === "text.edit" ? originalParagraph(doc, op.pageKey, op.paragraphId) : undefined;
+      const original = p ? await prepareRuns([p.runs], fonts).catch(() => null) : null;
+      const box = p && original ? editedBox(op.box, paragraphs, { ...p, runs: original[0] }, metrics) : relayout({ ...op.box, paragraphs }, metrics);
+      out.push({ op: { ...op, box } as TextAdd | TextEdit, base: op, ends: endsAfter(ms, text) });
     } else {
       const [, pageKey, id] = key.split(":");
       const entry = doc.pages.find((p) => p.pageKey === pageKey);
@@ -51,13 +56,14 @@ export async function applyReplacements(matches: Match[], text: string): Promise
       if (!p || textEditFor(doc, pageKey, id)) continue;
       const [runs] = await prepareRuns([p.runs], fonts);
       let ends: number[] = [];
+      const start = paragraphBox({ ...p, runs }, metrics);
       const box = paragraphBox({ ...p, runs }, metrics, (ps, toBox) => {
         const ranges = ms.map((m) => ({ start: toBox(m.start), end: toBox(m.end) }));
         ends = endsAfter(ranges, text);
         return replaceMatches(ps, ranges, text);
       });
       const paragraphs = await prepareRuns(box.paragraphs, fonts); // the new text may lack glyphs in the original font
-      out.push({ op: { id: newId(), type: "text.edit", pageKey, paragraphId: id, box: relayout({ ...box, paragraphs }, metrics) } as TextEdit, base: null, ends });
+      out.push({ op: { id: newId(), type: "text.edit", pageKey, paragraphId: id, box: editedBox(start, paragraphs, { ...p, runs }, metrics) } as TextEdit, base: null, ends });
     }
   }
   const now = editorStore.getState().doc;

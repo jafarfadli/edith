@@ -115,7 +115,7 @@ def test_line_ending_in_space_excludes_it_from_end():
 
 def test_paragraphs_version_is_pinned():
     from edith.paragraphs import PARAGRAPHS_VERSION
-    assert PARAGRAPHS_VERSION == 2  # shared with apps/web/src/lib/paragraphs.ts; bump both when ids can change
+    assert PARAGRAPHS_VERSION == 3  # shared with apps/web/src/lib/paragraphs.ts; bump both when ids can change
 
 
 def test_form_table_segments_like_a_form():
@@ -191,6 +191,71 @@ def test_list_item_continues_only_past_its_bullet():
         "• Butir kedua yang juga cukup panjang hingga", "tidak menggantung di bawah butir."]
 
 
+def test_rows_and_cells_never_join_one_paragraph():
+    """M5b RC4: a value and the next row's label (no horizontal overlap), a run crossing a column rule, a dot-leader
+    row above a label, table-of-contents entries of similar length (each ends with room for the next one)."""
+    from tests.pdfs import ROWS_TOC, make_rows_pdf
+    got = [text(p) for p in paragraphs(make_rows_pdf())]
+    assert got[:4] == ["Nama", ": Dr. Budi Santoso, S.T.", "Jabatan", ": Ketua Program Studi"]
+    assert got[4:7] == ["NIM", "1.", "Budi"]
+    assert got[7:9] == ["23/5/2026", "Pengenalan organisasi"]  # the rule cuts the run; the cell wraps on
+    assert got[9:11] == ["Nama Mahasiswa : " + "." * 60, "NIM"]
+    assert got[11] == LOREM + " " + LOREM  # justified prose: its lines leave no room
+    assert got[12:] == ROWS_TOC
+
+
+def test_numbered_items_tabs_and_hanging_indents():
+    """M5b RC5: a numbered item continues on full-width lines at its text (they are not first-line indents); its
+    marker becomes a paragraph of its own, so the text keeps its hanging indent and the tab after the marker when
+    edited. Tab stops after a section number or around a colon split the row; ordinary spaces never do."""
+    from tests.pdfs import LIST_ITEMS, make_lists_pdf
+    ps = paragraphs(make_lists_pdf())
+    (m1, t1), (m2, t2) = LIST_ITEMS
+    assert [text(p) for p in ps] == [
+        m1, " ".join(t1), m2, " ".join(t2),
+        "Nama Mahasiswa", ":", "." * 40,
+        "Bab I", "Pendahuluan", "4.2", "Rumusan Masalah",
+        "Dokumen yang diperlukan adalah sebagai berikut: surat pengantar dan formulir.",
+    ]
+    assert ps[1]["rect"]["x"] == pytest.approx(90, abs=0.01)  # the text's own left edge: its hang survives
+    assert ps[3]["rect"]["x"] == pytest.approx(ps[2]["rect"]["x"] + ps[2]["rect"]["w"] + 3.06, abs=0.05)
+
+
+def test_rects_are_the_ink_and_alignment_comes_from_the_lines_and_their_place():
+    """M5b RC2/RC3: leading spaces are the line's x, not text; trailing spaces are neither text nor width. Two
+    justified lines are justified (stretched word gaps); a centred paragraph whose first line is shorter is
+    centred. Single lines take their alignment from where they sit, and maxWidth is the room to grow in that
+    direction: around the centre (page or cell), or leftwards from the right edge."""
+    from tests.pdfs import ALIGN_JUSTIFIED, make_align_pdf
+    ps = paragraphs(make_align_pdf())
+    assert [text(p) for p in ps] == [
+        "Body text starts at the left margin of this page.", "Menyetujui,", ALIGN_JUSTIFIED,
+        "Laporan Mingguan Kerja Praktek Semester Ganjil", "SURAT KETERANGAN", "Tanggal", "Tanggal 23 April 2018"]
+    assert [p["align"] for p in ps] == ["left", "left", "justify", "center", "center", "center", "right"]
+    spaced = ps[1]
+    w = pymupdf.get_text_length("Menyetujui,", fontname="helv", fontsize=11)
+    assert spaced["rect"]["x"] == pytest.approx(72 + pymupdf.get_text_length(" " * 20, fontname="helv", fontsize=11),
+                                                abs=0.01)
+    assert spaced["rect"]["w"] == pytest.approx(w, abs=0.01) and spaced["lines"][0]["rect"]["w"] == pytest.approx(w, abs=0.01)
+    assert (spaced["lines"][0]["start"], spaced["lines"][0]["end"]) == (0, len("Menyetujui,"))
+    title, cell, date = ps[4], ps[5], ps[6]
+    assert title["maxWidth"] == pytest.approx(2 * (297.5 - 72 - 2), abs=0.1)  # symmetric up to the margins
+    assert cell["maxWidth"] == pytest.approx(220 - 100 - 4, abs=0.01)          # the cell, less its padding
+    assert date["rect"]["x"] + date["rect"]["w"] == pytest.approx(523, abs=0.01)
+    assert date["maxWidth"] == pytest.approx(523 - 72, abs=0.01)               # back to the left margin
+
+
+def test_list_markers():
+    from edith.paragraphs import ITEM, TAB_LEFT
+    for marker in ["1.", "12)", "a.", "(b)", "iv.", "(ii)", "IV.", "B)", "•", "1.2.", "‣"]:
+        assert ITEM.fullmatch(marker), marker
+    for word in ["A.", "e.g.", "2026", "1.1", "Ib."]:  # initials, abbreviations, numbers: not markers
+        assert not ITEM.fullmatch(word), word
+    for left in ["4.1", "Bab IV", "Chapter 3", "1.", "•"]:
+        assert TAB_LEFT.fullmatch(left), left
+    assert not TAB_LEFT.fullmatch("Nama Mahasiswa")
+
+
 def test_first_word_of_cjk_is_one_character():
     from edith.paragraphs import _first_word
 
@@ -246,7 +311,10 @@ def test_single_lines_get_room_up_to_the_next_rule_or_text():
     assert ps["1.2 성별 Sex"]["maxWidth"] == pytest.approx(595 - left - 2 - 306, abs=0.01)  # margin before the table side (545)
     assert ps["<신청서 작성방법>"]["maxWidth"] == pytest.approx(595 - left - 2 - left, abs=0.01)  # mirrored left margin
     wrapped = paragraphs(make_paragraphs_pdf())[0]
-    assert len(wrapped["lines"]) == 3 and "maxWidth" not in wrapped  # wrapped text keeps its measure
+    # Wrapped left-aligned text (M5b F2): the room beside all its lines, here up to its frame (x 300) less ROOM_PAD.
+    assert len(wrapped["lines"]) == 3 and wrapped["maxWidth"] == pytest.approx(300 - 2 - 72, abs=0.01)
+    assert all("maxWidth" not in p for p in paragraphs(make_paragraphs_pdf()) if p["align"] in ("justify", "center")
+               and len(p["lines"]) > 1)
 
 
 @pytest.mark.parametrize("crop,width", [(None, 595), ((50, 60, 500, 700), 450)])

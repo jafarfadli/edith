@@ -1,6 +1,9 @@
+from collections.abc import Callable
+
 import pymupdf
 
-from edith.doc_fonts import collect_fonts, fill_substitutes, is_symbolic, name_key, span_fonts
+from edith.doc_fonts import (collect_fonts, fill_substitutes, font_candidates, is_symbolic, load_font, name_key,
+                              pick_font, span_fonts)
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
 from edith.fonts import FontRegistry
 from edith.forms import extract_fields
@@ -44,17 +47,39 @@ def extract_structure(doc: pymupdf.Document) -> dict:
     return {"page_count": doc.page_count, "pages": pages, "fields": extract_fields(doc)}
 
 
-def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
-    """Paragraphs of every page plus the fonts they use. A run whose font is reusable gets
-    `{"kind": "original", "ref"}`; any other run gets its bundled substitute. A paragraph with text in a
-    symbol font that can't be reused is not editable: no other font draws its characters."""
-    fonts = collect_fonts(doc)
-    pages = []
-    for page in doc:
-        by_name = span_fonts(page, fonts)
+class TextFonts:
+    """How a document's text maps to fonts, shared by GET /text and the bake's own extraction (SourcePages): a span's
+    run FontRef (`resolve`: the reusable original, else its bundled substitute), whether its paragraph is locked, and
+    the program a client measures a run in (`program`), from which the runs' scale and spacing are measured."""
 
-        def resolve(span: dict, by_name=by_name) -> dict:
-            font = by_name.get(name_key(span["font"]))
+    def __init__(self, doc: pymupdf.Document, registry: FontRegistry):
+        self.doc, self.registry = doc, registry
+        self.fonts = collect_fonts(doc)
+        self._programs: dict[str, pymupdf.Font | None] = {}
+
+    def program(self, ref: dict) -> pymupdf.Font | None:
+        """The program a client measures a run in (the served original, or the bundled substitute file)."""
+        key = repr(sorted((k, v) for k, v in ref.items() if k != "name"))
+        if key not in self._programs:
+            try:
+                self._programs[key] = (
+                    load_font(self.doc, int(ref["ref"][1:])) if ref.get("kind") == "original"
+                    else self.registry.font(ref["family"], ref.get("bold", False), ref.get("italic", False)))
+            except Exception:  # noqa: BLE001 - unknown family or unreadable program: no spacing measured
+                self._programs[key] = None
+        return self._programs[key]
+
+    def page(self, page: pymupdf.Page) -> tuple[Callable[[dict], dict], Callable[[dict], bool]]:
+        """(resolve, locked) for the spans of `page`."""
+        doc, fonts, registry = self.doc, self.fonts, self.registry
+        by_name = span_fonts(page, fonts)
+        by_key = font_candidates(page, fonts)
+
+        def resolve(span: dict) -> dict:
+            key = name_key(span["font"])
+            font = by_name.get(key)
+            if font is None and len(by_key.get(key, ())) > 1:  # two subsets share the name: the one that draws it
+                font = pick_font(doc, by_key[key], key, span)
             if font is None:
                 return registry.substitute(span["font"], span["flags"])
             if font.substitute is None:  # BaseFont names map better than program names
@@ -63,7 +88,7 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
 
         page_fonts = list({e[0]: fonts[e[0]] for e in page.get_fonts(full=True) if e[0] in fonts}.values())
 
-        def locked(span: dict, page_fonts=page_fonts) -> bool:
+        def locked(span: dict) -> bool:
             key = name_key(span["font"])
             candidates = [f for f in page_fonts if key in f.keys]  # several when the name is ambiguous
             if not candidates:
@@ -72,6 +97,18 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
                 return candidates[0].symbolic and not candidates[0].reusable
             return is_symbolic(span["font"]) and not any(f.reusable for f in candidates)
 
-        pages.append({"index": page.number, "paragraphs": extract_paragraphs(page, resolve, locked)})
-    fill_substitutes(fonts, registry)
-    return {"pages": pages, "fonts": [f.to_json() for f in fonts.values()]}
+        return resolve, locked
+
+
+def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
+    """Paragraphs of every page plus the fonts they use. A run whose font is reusable gets
+    `{"kind": "original", "ref"}`; any other run gets its bundled substitute. A paragraph with text in a
+    symbol font that can't be reused is not editable: no other font draws its characters."""
+    text_fonts = TextFonts(doc, registry)
+    pages = []
+    for page in doc:
+        resolve, locked = text_fonts.page(page)
+        pages.append({"index": page.number,
+                      "paragraphs": extract_paragraphs(page, resolve, locked, text_fonts.program)})
+    fill_substitutes(text_fonts.fonts, registry)
+    return {"pages": pages, "fonts": [f.to_json() for f in text_fonts.fonts.values()]}

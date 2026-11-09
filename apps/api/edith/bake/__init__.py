@@ -127,7 +127,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             ctx = replace(ctx, load_source=_memo(ctx.load_source))
         pages_src = SourcePages(ctx.doc_id, source, {
             p.pageKey: (p.src.doc, p.src.index) if isinstance(p.src, DocSrc) else None for p in layout.pages
-        }, ctx.load_source)
+        }, ctx.load_source, ctx.fonts)
         ctx = replace(ctx, source=pages_src)
         # form.set with `doc` = the edited id is the same as none: one op per field name among them.
         main_forms: list = []

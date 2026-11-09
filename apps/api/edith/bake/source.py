@@ -2,25 +2,36 @@ from collections.abc import Callable
 
 import pymupdf
 
-from edith.doc_fonts import load_font
+from edith.doc_fonts import load_font, name_key
 from edith.errors import BakeFailed, DocExpired, DocNotFound
+from edith.extract import TextFonts
+from edith.fonts import FontRegistry
 from edith.paragraphs import extract_paragraphs
+
+
+def _span_font(span: dict) -> dict:
+    return {"name": span["font"]}
 
 
 class SourcePages:
     """Read-only views of the uploaded PDFs a layout uses — the edited one and imported ones — for ops that
     refer to their original content: paragraphs (`text.edit`) and embedded fonts (`FontRef` kind "original",
     whose `doc` names an imported PDF; none = the edited one). Paragraph ids come from the same extraction
-    GET /documents/{id}/text uses, run on the untouched source file."""
+    GET /documents/{id}/text uses, run on the untouched source file. With the font `registry`, paragraph runs carry
+    what GET /text measures (true size, hScale, charSpacing, wordSpacing) and name their span's font (`font.name`);
+    without it, only the span's font name and MuPDF's size."""
 
     def __init__(self, main_id: str, source: bytes, page_src: dict[str, tuple[str, int] | None],
-                 load: Callable[[str], bytes] | None = None):
+                 load: Callable[[str], bytes] | None = None, registry: FontRegistry | None = None):
         self._main = main_id
+        self._registry = registry
+        self._text_fonts: dict[str, TextFonts] = {}
         self._docs: dict[str, pymupdf.Document | None] = {main_id: pymupdf.open(stream=source, filetype="pdf")}
         self._load = load
         self._page_src = page_src  # pageKey → (doc id, source page index); None for blank pages
         self._paragraphs: dict[tuple[str, int], dict[str, dict]] = {}
         self._fonts: dict[tuple[str, str], pymupdf.Font] = {}
+        self._font_keys: dict[tuple[str, str], frozenset[str]] = {}
 
     def _doc(self, doc_id: str) -> pymupdf.Document | None:
         """The document, opened on first use; None when it is unknown. An expired one raises DocExpired naming it."""
@@ -48,8 +59,39 @@ class SourcePages:
         if doc is None or src[1] >= doc.page_count:
             return None
         if src not in self._paragraphs:
-            self._paragraphs[src] = {p["id"]: p for p in extract_paragraphs(doc[src[1]])}
+            # Runs name the span's font (not a FontRef): text.edit checks a kept line against it (see kept_lines).
+            page = doc[src[1]]
+            if self._registry is None:
+                found = extract_paragraphs(page, _span_font)
+            else:
+                # As GET /text measures them (true size, hScale, charSpacing, wordSpacing), with the span's font name.
+                if src[0] not in self._text_fonts:
+                    self._text_fonts[src[0]] = TextFonts(doc, self._registry)
+                text_fonts = self._text_fonts[src[0]]
+                resolve, _locked = text_fonts.page(page)
+                found = extract_paragraphs(page, lambda span: {**resolve(span), "name": span["font"]}, None,
+                                           text_fonts.program)
+            self._paragraphs[src] = {p["id"]: p for p in found}
         return self._paragraphs[src].get(paragraph_id)
+
+    def font_keys(self, ref: str, doc_id: str | None = None) -> frozenset[str]:
+        """name_key()s of font `ref` of a document (its BaseFont and its program's name), as span font names
+        compare to them; empty when the font is unknown."""
+        key = (doc_id or self._main, ref)
+        if key not in self._font_keys:
+            doc = self._doc(key[0])
+            keys: set[str] = set()
+            xref = int(ref[1:])
+            if doc is not None and 0 < xref < doc.xref_length():
+                kind, base = doc.xref_get_key(xref, "BaseFont")
+                if kind == "name":
+                    keys.add(name_key(base.lstrip("/")))
+                try:
+                    keys.add(name_key(self.font(ref, doc_id).name))
+                except Exception:  # noqa: BLE001 - not reusable: the BaseFont name alone
+                    pass
+            self._font_keys[key] = frozenset(keys)
+        return self._font_keys[key]
 
     def font(self, ref: str, doc_id: str | None = None) -> pymupdf.Font:
         key = (doc_id or self._main, ref)

@@ -32,6 +32,8 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
 
   const overflow = useOverflow(op);
   const runs = box.paragraphs.flat();
+  // A text.edit's kept lines (`source`) are the page's own glyphs: not drawn again (ParagraphLayer leaves them uncovered).
+  const drawn = op.type === "text.edit" ? box.layout.filter((l) => l.source === undefined || l.source === null) : box.layout;
   const { x, y, w, h } = box.rect;
   return (
     <>
@@ -56,11 +58,11 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
             if ("fontKerning" in c) c.fontKerning = "none";
             // Same order as the bake: every background, then the glyphs, then underline/strike.
             const bands: { x: number; y: number; w: number; h: number; color: string; over: boolean }[] = [];
-            for (const line of box.layout) {
+            for (const line of drawn) {
               for (const seg of line.segments) {
                 const r = runs[seg.runIndex];
                 if (!r || !(r.bgColor || r.underline || r.strike)) continue;
-                const d = decorBands(seg.x, line.baseline, textWidth(seg.text, fontStore.get(r.font), r.size), r);
+                const d = decorBands(seg.x, line.baseline, textWidth(seg.text, fontStore.get(r.font), r.size, r), r);
                 if (d.bg) bands.push({ ...d.bg, color: r.bgColor!, over: false });
                 if (d.underline) bands.push({ ...d.underline, color: r.color, over: true });
                 if (d.strike) bands.push({ ...d.strike, color: r.color, over: true });
@@ -68,17 +70,25 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
             }
             const fill = (over: boolean) => bands.filter((b) => b.over === over).forEach((b) => { c.fillStyle = b.color; c.fillRect(b.x, b.y, b.w, b.h); });
             fill(false);
-            for (const line of box.layout) {
+            for (const line of drawn) {
               for (const seg of line.segments) {
                 const r = runs[seg.runIndex];
                 if (!r) continue;
                 const m = fontStore.get(r.font);
                 c.font = `${r.size}px "${cssFamily(r.font)}"`;
                 c.fillStyle = r.color;
-                const offs = charOffsets(seg.text, m, r.size);
+                const offs = charOffsets(seg.text, m, r.size, r);
+                const scale = r.hScale ?? 1; // the original's horizontal scale (Tz): glyphs as narrow as the bake draws them
                 let i = 0;
                 for (const ch of seg.text) {
-                  c.fillText(ch, seg.x + offs[i], line.baseline);
+                  if (scale === 1) c.fillText(ch, seg.x + offs[i], line.baseline);
+                  else {
+                    c.save();
+                    c.translate(seg.x + offs[i], line.baseline);
+                    c.scale(scale, 1);
+                    c.fillText(ch, 0, 0);
+                    c.restore();
+                  }
                   i++;
                 }
               }

@@ -6,6 +6,7 @@ import pymupdf
 from edith.bake.registry import register
 from edith.bake.tounicode import fix_to_unicode
 from edith.bake.util import rgb
+from edith.doc_fonts import name_key
 from edith.ops import Run, TextAdd, TextBox, TextEdit
 
 # Decoration geometry, in multiples of the run's font size relative to the baseline (y grows down).
@@ -41,6 +42,18 @@ def quantized_width(font: pymupdf.Font, text: str, size: float) -> float:
     return sum(math.floor(round(font.glyph_advance(ord(c)) * 1000, 3)) for c in text) / 1000 * size
 
 
+def run_width(font: pymupdf.Font, text: str, run: Run) -> float:
+    """Pen advance of `text` in `run` (Run.hScale / charSpacing / wordSpacing), as the web measures it
+    (lib/fonts.ts textWidth)."""
+    return (quantized_width(font, text, run.size) * run.hScale + len(text) * run.charSpacing
+            + text.count(" ") * run.wordSpacing)
+
+
+# Horizontally scaled text (Run.hScale) is written by one TextWriter per (colour, scale), morphed by the scale
+# around this fixed point (writer coordinates): a segment's origin is moved so that it lands where intended.
+SCALE_PIVOT = pymupdf.Point(0, 0)
+
+
 def run_font(run: Run, ctx) -> pymupdf.Font:
     if run.font.kind == "original":
         if ctx.source is None:
@@ -53,12 +66,15 @@ def _band(x: float, y: float, w: float, top: float, height: float, size: float) 
     return pymupdf.Rect(x, y + top * size, x + w, y + (top + height) * size)
 
 
-def draw_text_box(page: pymupdf.Page, box: TextBox, ctx) -> None:
+def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozenset[int] = frozenset()) -> None:
+    """Draws the box's layout, except the lines whose index is in `skip` (kept original lines of a text.edit)."""
     runs = [r for paragraph in box.paragraphs for r in paragraph]
-    writers: dict[str, pymupdf.TextWriter] = defaultdict(lambda: pymupdf.TextWriter(page.rect))
+    writers: dict[tuple[str, float], pymupdf.TextWriter] = defaultdict(lambda: pymupdf.TextWriter(page.rect))
     backgrounds: list[tuple[pymupdf.Rect, str]] = []
     lines: list[tuple[pymupdf.Rect, str]] = []
-    for line in box.layout:
+    for k, line in enumerate(box.layout):
+        if k in skip:
+            continue
         for seg in line.segments:
             if not seg.text:
                 continue
@@ -71,19 +87,23 @@ def draw_text_box(page: pymupdf.Page, box: TextBox, ctx) -> None:
                     raise ValueError(f"font {r.font.ref} has no glyph for {''.join(missing)!r}")
             x, y = box.rect.x + seg.x, box.rect.y + line.baseline
             if r.bgColor or r.underline or r.strike:
-                w = quantized_width(font, seg.text, r.size)
+                w = run_width(font, seg.text, r)
                 if r.bgColor:
                     backgrounds.append((_band(x, y, w, -BG_ASCENT, BG_ASCENT + BG_DESCENT, r.size), r.bgColor))
                 if r.underline:
                     lines.append((_band(x, y, w, UNDERLINE_TOP, DECOR_THICKNESS, r.size), r.color))
                 if r.strike:
                     lines.append((_band(x, y, w, STRIKE_TOP, DECOR_THICKNESS, r.size), r.color))
-            writers[r.color].append(writer_origin(page, (x, y)), seg.text, font=font, fontsize=r.size)
+            origin = writer_origin(page, (x, y))
+            if r.hScale != 1:  # undone by the writer's morph (see SCALE_PIVOT)
+                origin = pymupdf.Point(SCALE_PIVOT.x + (origin.x - SCALE_PIVOT.x) / r.hScale, origin.y)
+            writers[(r.color, r.hScale)].append(origin, seg.text, font=font, fontsize=r.size)
     for rect, color in backgrounds:
         page.draw_rect(rect, color=None, fill=rgb(color), width=0, overlay=True)
     before = {f[0] for f in page.get_fonts(full=True)}
-    for color, writer in writers.items():
-        writer.write_text(page, color=rgb(color))
+    for (color, scale), writer in writers.items():
+        morph = None if scale == 1 else (SCALE_PIVOT, pymupdf.Matrix(scale, 0, 0, 1, 0, 0))
+        writer.write_text(page, color=rgb(color), morph=morph)
     for xref in {f[0] for f in page.get_fonts(full=True)} - before:
         fix_to_unicode(page.parent, xref)  # spaces read back as U+0020, not U+00A0
     for rect, color in lines:
@@ -95,10 +115,12 @@ def text_add(page: pymupdf.Page, op: TextAdd, ctx) -> None:
     draw_text_box(page, op.box, ctx)
 
 
-def redaction_rects(paragraph: dict) -> list[pymupdf.Rect]:
-    """One thin band per original line of `paragraph` (see REDACT_BAND)."""
+def redaction_rects(paragraph: dict, keep: frozenset[int] | set[int] = frozenset()) -> list[pymupdf.Rect]:
+    """One thin band per original line of `paragraph` (see REDACT_BAND), except the lines in `keep`."""
     out = []
-    for line in paragraph["lines"]:
+    for i, line in enumerate(paragraph["lines"]):
+        if i in keep:
+            continue
         r = line["rect"]
         y = line["baseline"] - REDACT_BAND * line["size"]
         inset = 0.5 if r["w"] > 2 else 0
@@ -106,16 +128,88 @@ def redaction_rects(paragraph: dict) -> list[pymupdf.Rect]:
     return out
 
 
+# A kept line (LayoutLine.source) must be in place: the box anchored where the client's paragraphBox anchors it (pt)
+# and the line's baseline on the original line's (pt, or this share of its size when larger: originals may space
+# lines unevenly). Shared contract with KEEP_Y_TOL / KEEP_Y_EM in apps/web/src/lib/keepLines.ts: change both.
+KEEP_X_TOL = 0.5
+KEEP_Y_TOL, KEEP_Y_EM = 1.0, 0.4
+SIZE_TOL = 0.05
+H_SCALE_TOL, SPACING_TOL = 0.0005, 0.005  # hScale, charSpacing / wordSpacing (pt) of a kept line: as measured
+# The whitespace a kept line is compared without: exactly what JavaScript's \s matches (ECMAScript WhiteSpace and
+# LineTerminator), which the client's layout drops at line ends and between justified words. Shared contract with
+# SPACE_CHARS in apps/web/src/lib/keepLines.ts. Not str.isspace(): that also takes U+001C–U+001F and U+0085, and
+# not U+FEFF.
+SPACE_CHARS = frozenset("\t\n\x0b\x0c\r \xa0 " + "".join(map(chr, range(0x2000, 0x200B)))
+                        + "    　﻿")
+
+
+def _anchor_offset(box: TextBox, paragraph: dict) -> float:
+    """How far the box is from where paragraphBox (apps/web/src/lib/paragraphs.ts) puts it: a single line that may
+    grow (not justified) keeps its centre or right edge when centred or right-aligned; anything else its left edge."""
+    r = paragraph["rect"]
+    if len(paragraph["lines"]) == 1 and box.align == "center":
+        return (box.rect.x + box.rect.w / 2) - (r["x"] + r["w"] / 2)
+    if len(paragraph["lines"]) == 1 and box.align == "right":
+        return (box.rect.x + box.rect.w) - (r["x"] + r["w"])
+    return box.rect.x - r["x"]
+
+
+def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
+    """Layout line index → original line index, for the lines of a text.edit `box` whose `source` still
+    matches the original `paragraph` (SourcePages.paragraph: runs name their span font): the same characters
+    (whitespace aside) with the same size, colour, font and no decoration, the box in place with the original
+    alignment, each original line kept once. The bake keeps those lines' original glyphs; any other line is
+    redrawn. `font_keys(FontRef)` gives an original font's name keys (SourcePages.font_keys)."""
+    runs = [r for p in box.paragraphs for r in p]
+    lines = paragraph["lines"]
+    styles = [run for run in paragraph["runs"] for _ in run["text"]]  # original run of each character
+    text = "".join(r["text"] for r in paragraph["runs"])
+    if box.align != paragraph["align"] or abs(_anchor_offset(box, paragraph)) > KEEP_X_TOL:
+        return {}
+    out: dict[int, int] = {}
+    for k, line in enumerate(box.layout):
+        j = line.source
+        if j is None or j >= len(lines) or j in out.values():
+            continue
+        orig = lines[j]
+        if abs(box.rect.y + line.baseline - orig["baseline"]) > max(KEEP_Y_TOL, KEEP_Y_EM * orig["size"]):
+            continue
+        want = [(text[i], styles[i]) for i in range(orig["start"], orig["end"]) if text[i] not in SPACE_CHARS]
+        got = [(c, runs[seg.runIndex]) for seg in line.segments for c in seg.text if c not in SPACE_CHARS]
+        if len(want) == len(got) and all(_same_char(o, r, font_keys) for o, r in zip(want, got)):
+            out[k] = j
+    return out
+
+
+def _same_char(orig: tuple[str, dict], new: tuple[str, Run], font_keys) -> bool:
+    (c, span), (d, run) = orig, new
+    if c != d or abs(run.size - span["size"]) > SIZE_TOL or run.color.lower() != span["color"].lower():
+        return False
+    if run.bgColor or run.underline or run.strike:
+        return False
+    # The original's measured scale and spacing (SourcePages measures them as GET /text does): unchanged.
+    if (abs(run.hScale - span.get("hScale", 1)) > H_SCALE_TOL or abs(run.charSpacing - span.get("charSpacing", 0)) > SPACING_TOL
+            or abs(run.wordSpacing - span.get("wordSpacing", 0)) > SPACING_TOL):
+        return False
+    # A bundled font stands in for an original one the client could not reuse (or lacked a glyph of): accepted.
+    return run.font.kind != "original" or name_key(span["font"]["name"]) in font_keys(run.font)
+
+
+def _kept(op: TextEdit, ctx) -> dict[int, int]:
+    paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
+    return kept_lines(op.box, paragraph, lambda f: ctx.source.font_keys(f.ref, f.doc))
+
+
 @register("text.edit", phase="redact_text")
 def text_edit_redact(page: pymupdf.Page, op: TextEdit, ctx) -> None:
     paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
-    for rect in redaction_rects(paragraph):
+    for rect in redaction_rects(paragraph, set(_kept(op, ctx).values())):
         page.add_redact_annot(rect, fill=False)  # fill=False: paint nothing over what stays
 
 
 @register("text.edit")
 def text_edit(page: pymupdf.Page, op: TextEdit, ctx) -> None:
-    draw_text_box(page, op.box, ctx)
+    draw_text_box(page, op.box, ctx, skip=set(_kept(op, ctx)))
 
 
 def links_under_redactions(page: pymupdf.Page) -> list[str]:

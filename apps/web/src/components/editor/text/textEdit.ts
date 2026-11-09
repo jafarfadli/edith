@@ -8,7 +8,8 @@ import { fontStore } from "@/lib/fonts";
 import { markupOverLines } from "@/lib/markup";
 import { noticeStore } from "@/lib/notices";
 import { newId } from "@/lib/id";
-import { paragraphBox, preloadFallback, prepareRuns, resolveLoadedRuns } from "@/lib/paragraphs";
+import { editedBox, keepFirstBaseline } from "@/lib/keepLines";
+import { keptLines, paragraphBox, preloadFallback, prepareRuns, replacedLines, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
 import { t } from "@/lib/strings";
@@ -73,18 +74,46 @@ export function fontsReady(box: TextBox): boolean {
   return boxFonts(box).every((f) => fontStore.peek(f) !== null);
 }
 
-/** Ids of the highlight/underline/strike ops on the original lines of the paragraphs `edits` rewrite: the
- *  bake removes those glyphs, so the marks would float over the new text (owner decision: delete them). */
+/** The original paragraph text.edit `paragraphId` on `pageKey` rewrites (undefined before the text loaded). */
+export function originalParagraph(doc: EditorDoc, pageKey: string, paragraphId: string): Paragraph | undefined {
+  const entry = doc.pages.find((p) => p.pageKey === pageKey);
+  return entry ? paragraphsOf(entry.src, textStore.getState().pages).find((x) => x.id === paragraphId) : undefined;
+}
+
+/** Ids of the highlight/underline/strike ops on the original lines the paragraphs `edits` rewrite: the bake removes
+ *  those glyphs, so the marks would float over the new text (owner decision: delete them). Marks on lines an edit
+ *  keeps (LayoutLine.source) stay with them. */
 export function markupUnderEdits(doc: EditorDoc, edits: TextEdit[]): string[] {
-  const { pages } = textStore.getState();
   const ops = doc.order.map((id) => doc.objects[id]).filter((op): op is ContentOp => !!op);
   const out = new Set<string>();
   for (const e of edits) {
-    const entry = doc.pages.find((p) => p.pageKey === e.pageKey);
-    const p = entry ? paragraphsOf(entry.src, pages).find((x) => x.id === e.paragraphId) : undefined;
-    if (p) for (const id of markupOverLines(ops, e.pageKey, p.lines)) out.add(id);
+    const p = originalParagraph(doc, e.pageKey, e.paragraphId);
+    if (p) for (const id of markupOverLines(ops, e.pageKey, replacedLines(p, e.box))) out.add(id);
   }
   return [...out];
+}
+
+/** Ids of the marks on original lines that text.edit `cur` keeps (LayoutLine.source) and `next` no longer does: once
+ *  moved, resized or restyled, those lines are redrawn and their glyphs removed, so the marks would float. */
+export function marksLostBy(doc: EditorDoc, cur: ContentOp, next: ContentOp): string[] {
+  if (cur.type !== "text.edit" || next.type !== "text.edit") return [];
+  const before = keptLines(cur.box), after = keptLines(next.box);
+  const p = originalParagraph(doc, cur.pageKey, cur.paragraphId);
+  const lost = p?.lines.filter((_, i) => before.has(i) && !after.has(i)) ?? [];
+  if (!lost.length) return [];
+  const ops = doc.order.map((id) => doc.objects[id]).filter((op): op is ContentOp => !!op);
+  return markupOverLines(ops, cur.pageKey, lost);
+}
+
+/** Every change of an existing object outside a text session (drag, nudge, transform, restyle) goes through here: a
+ *  text.edit that stops keeping original lines takes the marks on them along, in the same undo step, with a notice. */
+export function updateTextOp(id: string, patch: Partial<ContentOp>, opts?: { coalesce?: string }): void {
+  const st = editorStore.getState();
+  const cur = st.doc.objects[id];
+  if (!cur) return;
+  const removed = marksLostBy(st.doc, cur, { ...cur, ...patch } as ContentOp);
+  st.updateObject(id, patch, { ...opts, remove: removed });
+  noteMarkupRemoved(removed);
 }
 
 /** Tells the user their marks on edited text went (after markupUnderEdits() removed some). */
@@ -197,10 +226,14 @@ export function commitEditing(paragraphs: Run[][]): Promise<void> {
   const draft: TextBox = { ...e.box, paragraphs: normalized, ...(e.kind === "text.add" ? { lineHeight: boxLineHeight(normalized) } : {}) };
   if (e.isNew && e.initial && paragraphsEqual(draft.paragraphs, e.initial)) return Promise.resolve(); // opened, not changed
   const fonts = textStore.getState().fonts;
+  // An original paragraph keeps the lines the edit left alone (lib/keepLines.ts): it needs the original's runs as
+  // paragraphBox laid them out (same font fallback).
+  const original = e.kind === "text.edit" ? originalParagraph(s.doc, e.pageKey, e.paragraphId as string) : undefined;
   // Fast path: every font (after the whole fallback chain) already loaded → land synchronously.
   const ready = resolveLoadedRuns(draft.paragraphs, fonts, (f) => fontStore.peek(f));
-  if (ready) {
-    land(e, keepBaseline(e, relayout({ ...draft, paragraphs: ready }, (f) => fontStore.get(f))));
+  const readyOriginal = original ? resolveLoadedRuns([original.runs], fonts, (f) => fontStore.peek(f)) : null;
+  if (ready && (!original || readyOriginal)) {
+    land(e, committedBox(e, draft, ready, original && readyOriginal ? { ...original, runs: readyOriginal[0] } : undefined));
     return Promise.resolve();
   }
   const p: Promise<void> = (async () => {
@@ -212,18 +245,21 @@ export function commitEditing(paragraphs: Run[][]): Promise<void> {
       textEditStore.getState().start({ ...e, box: draft }); // keep the text editable instead of losing it
       return;
     }
-    land(e, keepBaseline(e, relayout({ ...draft, paragraphs: runs }, (f) => fontStore.get(f))));
+    // Without the original's fonts the edit still lands, redrawing every line.
+    const originalRuns = original ? await prepareRuns([original.runs], fonts).catch(() => null) : null;
+    land(e, committedBox(e, draft, runs, original && originalRuns ? { ...original, runs: originalRuns[0] } : undefined));
   })().finally(() => { if (pendingCommit === p) pendingCommit = null; });
   pendingCommit = p;
   return p;
 }
 
-/** An original paragraph keeps its first baseline where the session's box had it: a fallback font with a taller
- *  ascent in the first line (CJK fallbacks are) would otherwise push the whole paragraph down. */
-function keepBaseline(e: Editing, box: TextBox): TextBox {
-  const before = e.box.layout[0]?.baseline, after = box.layout[0]?.baseline;
-  if (e.kind !== "text.edit" || before === undefined || after === undefined) return box;
-  return { ...box, rect: { ...box.rect, y: e.box.rect.y + before - after } };
+/** The box a session lands: a text box re-laid out; an original paragraph (`original`: its runs prepared) also
+ *  keeps its first baseline where the session's box had it and the lines the edit left alone (editedBox). */
+function committedBox(e: Editing, draft: TextBox, runs: Run[][], original: Paragraph | undefined): TextBox {
+  const metrics = (f: Parameters<typeof fontStore.get>[0]) => fontStore.get(f);
+  if (e.kind !== "text.edit") return relayout({ ...draft, paragraphs: runs }, metrics);
+  if (original) return editedBox(e.box, runs, original, metrics);
+  return keepFirstBaseline(e.box, relayout({ ...draft, paragraphs: runs }, metrics));
 }
 
 function land(e: Editing, box: TextBox): void {

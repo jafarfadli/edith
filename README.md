@@ -56,6 +56,8 @@ Setelah mengubah `apps/api/edith/ops.py`:
 
 API dan web dirilis terpisah; rilis API lebih dulu, baru web. Web sejak M5 mengirim `paragraphs_version` saat ekspor dan pratinjau, dan API lama menolak field yang tidak dikenalnya (422), jadi web baru di atas API lama membuat unduhan gagal. Sebaliknya aman: API baru menerima permintaan web lama (tanpa field itu dianggap versi 1); hanya edit teks yang id paragrafnya dari versi lama ditolak (409 `text_outdated`) dan perlu muat ulang dokumen.
 
+M5b menegaskan urutan itu: web M5b mengirim `Run.hScale`/`charSpacing`/`wordSpacing` dan `LayoutLine.source`, yang ditolak API M5 dengan 422, dan `PARAGRAPHS_VERSION` naik dari 2 ke 3, sehingga ekspor dengan id paragraf versi 2 mendapat 409. Draf dari M5 kehilangan edit teksnya (paragraf asli yang diedit) setelah rilis ini; itu disengaja, dan pengguna melihat pemberitahuannya.
+
 ## Lisensi
 
 PyMuPDF berlisensi AGPL-3.0. Menjalankan Edith sebagai layanan tertutup memerlukan lisensi komersial dari Artifex atau membuka kode backend.

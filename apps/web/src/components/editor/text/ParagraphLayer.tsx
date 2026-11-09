@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type Konva from "konva";
 import { Rect, Transformer } from "react-konva";
 import { useStore } from "zustand";
-import type { TextEdit } from "@edith/ops";
+import type { TextBox, TextEdit } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
 import { maskRects } from "@/lib/paragraphs";
 import { editorStore, useEditor } from "@/store/editor";
@@ -21,7 +21,7 @@ function setCursor(e: Konva.KonvaEventObject<unknown>, cursor: string) {
   if (c) c.style.cursor = cursor;
 }
 
-/** Under the page's objects: white covers over edited paragraphs (the bake redacts them) and, for
+/** Under the page's objects: white covers over the lines edited paragraphs replace (the bake redacts them) and, for
  *  the select and text tools, hover/select/drag/resize targets over the paragraphs not edited yet. */
 export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   const entry = useEditor((s) => s.doc.pages.find((p) => p.pageKey === pageKey));
@@ -36,10 +36,12 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   const trRef = useRef<Konva.Transformer>(null);
 
   const paragraphs = entry ? paragraphsOf(entry.src, pages) : [];
-  const edited = new Set(order.map((id) => objects[id])
+  // Edited paragraph → its op's box (lines it keeps stay uncovered); undefined while its rich editor is open.
+  const edits = new Map<string, TextBox | undefined>(order.map((id) => objects[id])
     .filter((op): op is TextEdit => op?.type === "text.edit" && op.pageKey === pageKey)
-    .map((op) => op.paragraphId));
-  if (editing?.kind === "text.edit" && editing.pageKey === pageKey && editing.paragraphId) edited.add(editing.paragraphId);
+    .map((op) => [op.paragraphId, op.box]));
+  if (editing?.kind === "text.edit" && editing.pageKey === pageKey && editing.paragraphId) edits.set(editing.paragraphId, undefined);
+  const edited = new Set(edits.keys());
   const interactive = tool === "select" || tool === "text";
   // The selected paragraph only keeps its handles while it is still an original one under the select tool.
   const active = selected && tool === "select" && !edited.has(selected) ? selected : null;
@@ -59,7 +61,7 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
 
   return (
     <>
-      {paragraphs.filter((p) => edited.has(p.id)).flatMap((p) => maskRects(p).map((r, i) => (
+      {paragraphs.filter((p) => edited.has(p.id)).flatMap((p) => maskRects(p, edits.get(p.id)).map((r, i) => (
         <Rect key={`mask-${p.id}-${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="#ffffff" listening={false} />
       )))}
       {paragraphs.filter((p) => p.editable && !edited.has(p.id)).map((p) => (

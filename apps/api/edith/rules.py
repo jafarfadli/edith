@@ -16,9 +16,40 @@ class Segment:
     hi: float
 
 
+MERGE_AT = 0.5     # pt: segments this close across the rule are collinear …
+MERGE_GAP = 1.0    # … and are one rule when their ends are at most this far apart
+
+
+def _merged(segments: list[Segment]) -> list[Segment]:
+    """Collinear segments with small gaps as one rule: Word draws a table's vertical borders row by row, with
+    0.5 pt gaps between the rows (a test at the middle of two lines may fall into such a gap)."""
+    out: list[Segment] = []
+    cluster: list[Segment] = []
+
+    def flush() -> None:
+        merged: list[Segment] = []
+        for s in sorted(cluster, key=lambda s: s.lo):
+            if merged and s.lo <= merged[-1].hi + MERGE_GAP:
+                last = merged[-1]
+                merged[-1] = Segment(last.at, last.lo, max(last.hi, s.hi))
+            else:
+                merged.append(s)
+        out.extend(merged)
+
+    for s in sorted(segments, key=lambda s: s.at):
+        if cluster and s.at - cluster[0].at > MERGE_AT:
+            flush()
+            cluster = []
+        cluster.append(s)
+    if cluster:
+        flush()
+    return out
+
+
 def _sorted(segments: list[Segment]) -> tuple[list[Segment], list[float]]:
     # Shared cell borders are drawn by every neighbour: keep one of each (compared to 0.01 pt).
     segments = list({(round(s.at, 2), round(s.lo, 2), round(s.hi, 2)): s for s in reversed(segments)}.values())
+    segments = _merged(segments)
     segments.sort(key=lambda s: s.at)
     return segments, [s.at for s in segments]
 
