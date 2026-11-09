@@ -112,11 +112,23 @@ def redaction_rects(paragraph: dict, keep: frozenset[int] | set[int] = frozenset
     return out
 
 
-# A kept line (LayoutLine.source) must be in place: the box's left edge on the paragraph's (pt) and the line's
-# baseline on the original line's (pt, or this share of its size when larger: originals may space lines unevenly).
+# A kept line (LayoutLine.source) must be in place: the box anchored where the client's paragraphBox anchors it (pt)
+# and the line's baseline on the original line's (pt, or this share of its size when larger: originals may space
+# lines unevenly). Shared contract with KEEP_Y_TOL / KEEP_Y_EM in apps/web/src/lib/keepLines.ts: change both.
 KEEP_X_TOL = 0.5
 KEEP_Y_TOL, KEEP_Y_EM = 1.0, 0.4
 SIZE_TOL = 0.05
+
+
+def _anchor_offset(box: TextBox, paragraph: dict) -> float:
+    """How far the box is from where paragraphBox (apps/web/src/lib/paragraphs.ts) puts it: a single line that may
+    grow (not justified) keeps its centre or right edge when centred or right-aligned; anything else its left edge."""
+    r = paragraph["rect"]
+    if len(paragraph["lines"]) == 1 and box.align == "center":
+        return (box.rect.x + box.rect.w / 2) - (r["x"] + r["w"] / 2)
+    if len(paragraph["lines"]) == 1 and box.align == "right":
+        return (box.rect.x + box.rect.w) - (r["x"] + r["w"])
+    return box.rect.x - r["x"]
 
 
 def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
@@ -129,7 +141,7 @@ def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
     lines = paragraph["lines"]
     styles = [run for run in paragraph["runs"] for _ in run["text"]]  # original run of each character
     text = "".join(r["text"] for r in paragraph["runs"])
-    if box.align != paragraph["align"] or abs(box.rect.x - paragraph["rect"]["x"]) > KEEP_X_TOL:
+    if box.align != paragraph["align"] or abs(_anchor_offset(box, paragraph)) > KEEP_X_TOL:
         return {}
     out: dict[int, int] = {}
     for k, line in enumerate(box.layout):

@@ -5,7 +5,7 @@ import type { FontRef, Run, TextBox, TextEdit } from "@edith/ops";
 import { moveOp, resizeOp } from "@/lib/objects";
 import type { Paragraph, TextData } from "@/lib/api";
 import { fontKey, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
-import { editedBox } from "@/lib/keepLines";
+import { editedBox, KEEP_Y_EM, KEEP_Y_TOL } from "@/lib/keepLines";
 import { layoutText } from "@/lib/layout";
 import { keptLines, maskRects, paragraphBox, replacedLines } from "@/lib/paragraphs";
 import { runsText } from "@/lib/runs";
@@ -124,6 +124,27 @@ describe("editedBox keeps the lines an edit leaves alone", () => {
       expect(sources(editedBox({ ...start, rect }, start.paragraphs, LEFT, bundled)).every((s) => s === null)).toBe(true);
     }
     expect(sources(editedBox({ ...start, align: "center" }, start.paragraphs, LEFT, bundled)).every((s) => s === null)).toBe(true);
+  });
+
+  it("does not keep a line whose grid baseline is off its uneven original one (as the bake would not)", () => {
+    // Baselines 100, 112, 124, 141 at 10 pt (lineHeight = median 12): the grid puts line 4 at 136, 5 pt off.
+    const mono: FontMetrics = { unitsPerEm: 1, ascent: 0.8, descent: 0.2, advance: () => 1 };
+    const texts = ["aaaa bbbb cccc dddd", "ee ffff gggg hh", "iiiiii jjjj kkkk", "mmmm"];
+    let at = 0;
+    const lines = texts.map((t, i) => {
+      const b = [100, 112, 124, 141][i];
+      const line = { rect: { x: 10, y: b - 8, w: t.length * 10, h: 12 }, baseline: b, size: 10, start: at, end: at + t.length };
+      at += t.length + 1;
+      return line;
+    });
+    const p: Paragraph = { id: "g0", rect: { x: 10, y: 92, w: 200, h: 52 }, align: "left", lineHeight: 12, editable: true, lines,
+      runs: [{ text: texts.join(" "), font: { kind: "bundled", family: "Arimo" }, size: 10, color: "#000000" }] };
+    const start = paragraphBox(p, () => mono);
+    expect(sources(editedBox(start, start.paragraphs, p, () => mono))).toEqual([0, 1, 2, null]);
+    const typo = editedBox(start, [[{ ...p.runs[0], text: swap(p.runs[0].text, "aaaa", "aaab") }]], p, () => mono);
+    expect(sources(typo)).toEqual([null, 1, 2, null]);
+    expect(KEEP_Y_TOL).toBe(1);
+    expect(KEEP_Y_EM).toBe(0.4); // apps/api/edith/bake/text.py KEEP_Y_TOL, KEEP_Y_EM = 1.0, 0.4
   });
 
   it("drops the kept lines when the op is moved or resized (every line is drawn then)", () => {

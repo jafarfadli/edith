@@ -6,6 +6,10 @@ import { paragraphFrame, rawToBox, type MetricsFor } from "@/lib/paragraphs";
 
 /** How far (pt) a text.edit box may be from where paragraphBox put it and still count as in place. */
 const IN_PLACE = 0.01;
+/** A kept line's baseline may be this far from the original line's: max(KEEP_Y_TOL pt, KEEP_Y_EM × its size). Shared
+ *  contract with KEEP_Y_TOL / KEEP_Y_EM in apps/api/edith/bake/text.py (the bake redraws a line beyond it): change both. */
+export const KEEP_Y_TOL = 1.0;
+export const KEEP_Y_EM = 0.4;
 
 /** The box keeps its first baseline where `prev` had it: a fallback font with a taller ascent in the first line
  *  (CJK fallbacks are) would otherwise push the whole paragraph down. */
@@ -103,5 +107,14 @@ export function editedBox(prev: TextBox, paragraphs: Run[][], p: Paragraph, metr
       || (x.start >= tail && x.start - delta === was.start && x.end - delta === was.end));
     return same ? { ...line, source: k } : line;
   });
-  return done(r, layout);
+  // A kept line must also sit on its original baseline, as the bake requires: where the original spaced its lines
+  // unevenly, the grid line (lineHeight) is elsewhere, and keeping the glyphs there would disagree with the screen.
+  const box = done(r, layout);
+  const onBaseline = (line: LayoutLine, k: number) =>
+    Math.abs(box.rect.y + line.baseline - p.lines[k].baseline) <= Math.max(KEEP_Y_TOL, KEEP_Y_EM * p.lines[k].size);
+  return { ...box, layout: box.layout.map((line, k) => (line.source != null && !onBaseline(line, k) ? unkept(line) : line)) };
+}
+
+function unkept(line: LayoutLine): LayoutLine {
+  return { baseline: line.baseline, segments: line.segments };
 }
