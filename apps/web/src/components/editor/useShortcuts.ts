@@ -47,7 +47,8 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       else if (mod && k === "c" && !e.shiftKey && !e.altKey) { if (copySelection()) e.preventDefault(); } // else: the browser's copy
       else if (mod && k === "v" && !e.shiftKey && !e.altKey) { if (pasteClipboard()) e.preventDefault(); }
       else if (mod && k === "d" && !e.shiftKey && !e.altKey) { e.preventDefault(); duplicateSelection(); } // not the bookmark dialog
-      else if (zMoveForKey(e, isMac())) { e.preventDefault(); moveSelection(zMoveForKey(e, isMac())!); }
+      // Only with an object selected: otherwise Ctrl/Cmd+[ ] stay the browser's Back/Forward.
+      else if (s.selection && zMoveForKey(e, isMac())) { e.preventDefault(); moveSelection(zMoveForKey(e, isMac())!); }
       else if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && s.selection) { if (openMenuForSelection()) e.preventDefault(); }
       else if ((e.key === "Delete" || e.key === "Backspace") && s.selection) { e.preventDefault(); s.deleteObject(s.selection); }
       else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); }

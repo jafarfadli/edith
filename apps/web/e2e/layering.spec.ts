@@ -104,9 +104,19 @@ test("keyboard shortcuts move the selection one step or to the end; the mini-bar
   await rect(page, box, [150, 200], [350, 400], GREEN); // C: on top of both
   const center: [number, number] = [250, 300]; // inside all three
 
+  // Nothing selected: Ctrl/Cmd+] is left to the browser (Forward); with a selection the editor takes it.
+  await page.evaluate(() => {
+    const w = window as unknown as { brackets: boolean[] };
+    w.brackets = [];
+    window.addEventListener("keydown", (e) => { if (e.key === "]") w.brackets.push(e.defaultPrevented); });
+  });
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("mini-bar")).toHaveCount(0);
+  await page.keyboard.press("ControlOrMeta+BracketRight");
   await page.mouse.click(box.x + ONLY_A[0], box.y + ONLY_A[1]); // select A (bottom)
   expect(await canMove(page)).toEqual({ up: true, down: false });
   await page.keyboard.press("ControlOrMeta+BracketRight"); // Maju satu lapis: above B, under C
+  expect(await page.evaluate(() => (window as unknown as { brackets: boolean[] }).brackets)).toEqual([false, true]);
   expect(await canMove(page)).toEqual({ up: true, down: true });
   expect(colours(await download(page, "forward.pdf"), box, [center, [210, 420]])).toEqual([GREEN, BLUE]);
   // To the front/back: Cmd+Option on the Mac (Cmd+Shift+[ ] switch browser tabs there), Ctrl+Shift elsewhere.
