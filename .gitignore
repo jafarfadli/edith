@@ -13,10 +13,11 @@ apps/web/ui-shots/
 .env*.local
 .DS_Store
 apps/web/public/pdf.worker.min.mjs
+apps/web/public/pdfjs/
 .playwright-mcp/
 apps/web/AGENTS.md
 # Owner reference PDFs (not ours to publish)
-references/
+references
 # Optional CJK font pack: node packages/fonts/scripts/fetch-cjk.mjs
 packages/fonts/files/cjk
 # Local agent/tooling state

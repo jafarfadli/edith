@@ -59,6 +59,12 @@ class InvalidOp(EdithError):
     status, code = 422, "invalid_op"
 
 
+class TextLocked(InvalidOp):
+    """A text.edit of a paragraph whose text is invisible over a picture of it (M5c): the edit would draw the new text
+    over the old picture. Clients never offer it; a draft from before M5c may still hold one (`op_index`)."""
+    status, code = 422, "text_locked"
+
+
 class TextOutdated(EdithError):
     """text.edit ops name paragraphs of another segmentation version (a draft or tab from before an update)."""
     status, code = 409, "text_outdated"

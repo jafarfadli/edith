@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DocFont, Paragraph } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
-import { paragraphsOf, textStore } from "@/store/text";
+import { hasPictureText, imageTextOf, paragraphsOf, textStore } from "@/store/text";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  textStore.setState({ status: "idle", docId: null, pages: {}, fonts: {}, imports: {} });
+  textStore.setState({ status: "idle", docId: null, pages: {}, imageText: {}, fonts: {}, imports: {} });
 });
 
 const para: Paragraph = { id: "g0", rect: { x: 0, y: 0, w: 10, h: 10 }, lines: [], runs: [], align: "left", lineHeight: 12, editable: true };
@@ -59,5 +59,19 @@ describe("textStore", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     await textStore.getState().load("D");
     expect(textStore.getState().status).toBe("error");
+  });
+
+  it("keeps the images of print of every page and tells whether any text is a picture (M5c)", async () => {
+    const scan = { x: 84, y: 174, w: 429, h: 172 };
+    const body = { doc_id: "D", pages: [{ index: 0, paragraphs: [para], imageText: [scan] }, { index: 1, paragraphs: [] }], fonts: [] };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })));
+    await textStore.getState().load("D");
+    expect(imageTextOf({ doc: "D", index: 0 })).toEqual([scan]);
+    expect(imageTextOf({ doc: "D", index: 1 })).toEqual([]);
+    expect(imageTextOf({ blank: { width: 1, height: 1 } })).toEqual([]);
+    expect(hasPictureText()).toBe(true);
+    expect(hasPictureText({ imageText: {}, pages: { "D:0": [para] } })).toBe(false);
+    expect(hasPictureText({ imageText: {}, pages: { "D:0": [{ ...para, editable: false, lock: "hidden" }] } })).toBe(true);
+    expect(hasPictureText({ imageText: {}, pages: { "D:0": [{ ...para, editable: false, lock: "rotated" }] } })).toBe(false);
   });
 });

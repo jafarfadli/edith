@@ -11,14 +11,14 @@ import { loadDraft, saveDraft } from "@/lib/draft";
 import { noticeLifetime, noticeStore, type NoticeMsg } from "@/lib/notices";
 import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
-import { dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
+import { dropLockedTextEdits, dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
 import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
 import { pdfStore } from "@/store/pdfs";
 import { charsStore } from "@/store/chars";
-import { textStore } from "@/store/text";
+import { hasPictureText, textStore } from "@/store/text";
 import { BTN_PRIMARY } from "../ui/styles";
 import { FormLayer } from "./forms/FormLayer";
 import { Header } from "./Header";
@@ -84,7 +84,22 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       if (resolved?.missing) setNotice({ kind: "error", text: t.pages.importGone });
       else if (stale?.dropped) setNotice({ kind: "error", text: t.editor.textEditsDropped });
       else if (draft) setNotice({ kind: "info", text: t.editor.restored });
-      void textStore.getState().load(docId); // original paragraphs + fonts, in the background
+      // Original paragraphs + fonts, in the background. Text that is a picture (a scanned form, a letterhead image under
+      // invisible text) is said once it is known, unless a notice that matters more is showing.
+      void textStore.getState().load(docId).then(() => {
+        if (cancelled || textStore.getState().docId !== docId) return;
+        // A draft's edits of text that turned out to be a picture (M5c): the export refuses them. Dropped from the
+        // document and its history alike (no undo step brings them back); the autosave then stores the draft without.
+        const pages = textStore.getState().pages;
+        const drop = (d: EditorDoc) => dropLockedTextEdits(d, pages).doc;
+        const { dropped } = dropLockedTextEdits(editorStore.getState().doc, pages);
+        if (dropped) {
+          editorStore.setState((s) => ({ doc: drop(s.doc), past: s.past.map(drop), future: s.future.map(drop), selection: null }));
+          setNotice({ kind: "error", text: t.editor.lockedEditsDropped });
+        } else if (hasPictureText()) {
+          setNotice((n) => (n?.kind === "error" ? n : { kind: "info", text: t.editor.pictureText }));
+        }
+      });
       for (const id of Object.keys(resolved?.imports ?? {})) void textStore.getState().loadImport(id);
       charsStore.getState().reset();
       // Preload fonts of restored text boxes (in parallel with the PDF; TextNode also loads on demand).

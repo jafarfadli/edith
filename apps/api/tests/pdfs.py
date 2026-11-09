@@ -655,3 +655,172 @@ def make_spacing_pdf() -> bytes:
     doc.update_stream(xref, (head + tf + rest[:start] + tj + rest[end:]).encode("latin-1"))
     doc.subset_fonts()
     return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+# M5c: text that is a picture. The letterhead of a reference "Nota Dinas" is an image of its lines with the same text
+# laid over it invisibly (iLovePDF / OCR); the body of a reference form is an image of print with no text at all.
+SCAN_LINES = ("KEMENTERIAN CONTOH REPUBLIK", "SEKRETARIAT JENDERAL", "BIRO UMUM DAN ORGANISASI")
+SCAN_RECT = (72, 60, 432, 132)        # make_hidden_text_pdf: where the picture of SCAN_LINES sits (pt)
+RASTER_LINES = tuple(f"{i}. Nama pemohon dan keperluan surat pengantar baris {i}" for i in range(1, 9))
+RASTER_RECT = (72, 300, 512, 480)     # make_raster_text_pdf: the picture of RASTER_LINES
+PRINTED_RECT = (72, 560, 512, 680)    # make_raster_text_pdf: a picture of print with real text written over it
+
+
+def _text_image(lines: tuple[str, ...], width: float, height: float, size: float = 14, scale: float = 3,
+                color: tuple = (0.35, 0.35, 0.35)) -> pymupdf.Pixmap:
+    """`lines` printed in Helvetica Bold on white, as a `scale`× bitmap of a width × height pt box (a scan of them)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=width, height=height)
+    for i, line in enumerate(lines):
+        page.insert_text((4, size * 1.25 * (i + 1)), line, fontname="hebo", fontsize=size, color=color)
+    return page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
+
+
+def _resources(doc: pymupdf.Document, page: pymupdf.Page) -> tuple[int, str]:
+    """(xref, key prefix) under which `page`'s resource dictionary entries are set with xref_set_key."""
+    kind, value = doc.xref_get_key(page.xref, "Resources")
+    return (int(value.split()[0]), "") if kind == "xref" else (page.xref, "Resources/")
+
+
+def _fax_image(doc: pymupdf.Document, page: pymupdf.Page, pix: pymupdf.Pixmap, rect: tuple, name: str) -> None:
+    """`pix` thresholded to a 1-bit image placed in `rect` of `page` (call _to_fax afterwards: CCITT G4, as scanners and
+    iLovePDF store such images, which pdf.js draws only with its wasm decoders)."""
+    gray = pymupdf.Pixmap(pymupdf.csGRAY, pix)
+    w, h = gray.width, gray.height
+    rows = []
+    for y in range(h):
+        bits = bytearray((w + 7) // 8)
+        for x, v in enumerate(gray.samples[y * w:(y + 1) * w]):
+            if v >= 128:
+                bits[x >> 3] |= 0x80 >> (x & 7)
+        rows.append(bytes(bits))
+    xref = doc.get_new_xref()
+    doc.update_object(xref, f"<< /Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceGray"
+                            f" /BitsPerComponent 1 >>")
+    doc.update_stream(xref, b"".join(rows))
+    res, prefix = _resources(doc, page)
+    doc.xref_set_key(res, f"{prefix}XObject/{name}", f"{xref} 0 R")
+    x0, y0, x1, y1 = rect
+    c = page.get_contents()[-1]
+    ph = page.rect.height
+    doc.update_stream(c, doc.xref_stream(c) + f"\nq {x1 - x0} 0 0 {y1 - y0} {x0} {ph - y1} cm /{name} Do Q\n".encode())
+
+
+def _to_fax(doc: pymupdf.Document) -> None:
+    """Every 1-bit image of `doc` recompressed with CCITTFaxDecode."""
+    options = pymupdf.mupdf.PdfImageRewriterOptions()
+    options.bitonal_image_recompress_method = pymupdf.mupdf.FZ_RECOMPRESS_FAX
+    options.recompress_when = pymupdf.mupdf.FZ_RECOMPRESS_WHEN_ALWAYS
+    doc.rewrite_images(options=options)
+
+
+def make_picture_text_pdf() -> bytes:
+    """apps/web/e2e/fixtures/picture-text.pdf (M5c): the two reference cases on one page, with 1-bit CCITT pictures.
+    A letterhead: SCAN_LINES pictured in SCAN_RECT under the same lines as invisible text (render mode 3); a visible
+    paragraph at (72, 200); the body of a form pictured in RASTER_RECT, with no text."""
+    x0, y0, x1, y1 = SCAN_RECT
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 200), "Paragraf biasa yang terlihat.", fontname="helv", fontsize=12)
+    _fax_image(doc, page, _text_image(SCAN_LINES, x1 - x0, y1 - y0, color=(0, 0, 0)), SCAN_RECT, "Kop")
+    rx0, ry0, rx1, ry1 = RASTER_RECT
+    _fax_image(doc, page, _text_image(RASTER_LINES, rx1 - rx0, ry1 - ry0, size=11, color=(0, 0, 0)), RASTER_RECT, "Isi")
+    writer = pymupdf.TextWriter(page.rect)
+    for i, line in enumerate(SCAN_LINES):
+        writer.append((x0 + 4, y0 + 17.5 * (i + 1)), line, font=pymupdf.Font("tiro"), fontsize=13)
+    writer.write_text(page, render_mode=3)
+    _to_fax(doc)
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+def make_hidden_text_pdf(hide: str = "mode3") -> bytes:
+    """SCAN_LINES as a grey picture in SCAN_RECT and, laid over it, the same lines as invisible black text (`hide`:
+    "mode3", render mode 3; "opacity", a fill opacity of 0) in Times, narrower than the picture's print; below, a
+    visible paragraph at (72, 200)."""
+    x0, y0, x1, y1 = SCAN_RECT
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_image(pymupdf.Rect(*SCAN_RECT), pixmap=_text_image(SCAN_LINES, x1 - x0, y1 - y0))
+    page.insert_text((72, 200), "Paragraf biasa yang terlihat.", fontname="helv", fontsize=12)
+    writer = pymupdf.TextWriter(page.rect)
+    for i, line in enumerate(SCAN_LINES):
+        writer.append((x0 + 4, y0 + 17.5 * (i + 1)), line, font=pymupdf.Font("tiro"), fontsize=13)
+    if hide == "mode3":
+        writer.write_text(page, render_mode=3)
+    else:
+        writer.write_text(page, opacity=0)
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+def make_clip_text_pdf(mode: int = 7, clip_first: bool = False) -> bytes:
+    """"Gradient heading" in Helvetica 24 at (72, 142) shown with render mode `mode`, then a horizontal red-to-blue
+    shading painted through it: mode 7 is text used only as a clip (a gradient fill), modes 4–6 fill and/or stroke it
+    too. MuPDF reports the clip as a span with alpha 0. `clip_first`: the text sits inside a plain `re W n` clip
+    instead (mode 3 or opacity 0 text stays invisible there)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 300), "Teks biasa di bawahnya.", fontname="helv", fontsize=12)
+    sh = doc.get_new_xref()
+    doc.update_object(sh, "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [72 0 400 0] /Function << /FunctionType 2"
+                          " /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> /Extend [true true] >>")
+    res, prefix = _resources(doc, page)
+    doc.xref_set_key(res, f"{prefix}Shading/Sh1", f"{sh} 0 R")
+    font = next(name for _x, _e, _t, base, name, *_ in page.get_fonts(full=True) if base == "Helvetica")
+    clip = b"0 0 595 842 re W n " if clip_first else b""
+    paint = b"" if clip_first else b" /Sh1 sh"
+    xref = page.get_contents()[-1]
+    doc.update_stream(xref, doc.xref_stream(xref) + b"\nq " + clip + f"BT /{font} 24 Tf {mode} Tr 72 700 Td".encode()
+                      + b" (Gradient heading) Tj ET" + paint + b" Q\n")
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+def make_type3_pdf() -> bytes:
+    """A heading in a Type 3 font at (72, 100), each glyph a box painted with B (fill and stroke): MuPDF reports its
+    spans with alpha 0 and neither fill nor stroke, yet it shows (a reference visa form's "VISA APPLICATION FORM")."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 300), "Teks biasa di bawahnya.", fontname="helv", fontsize=12)
+    proc = doc.get_new_xref()
+    doc.update_object(proc, "<< >>")
+    doc.update_stream(proc, b"600 0 0 0 500 700 d1 0 0 500 700 re B")
+    font = doc.get_new_xref()
+    doc.update_object(font, f"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 600 700] /FontMatrix [0.001 0 0 0.001 0 0]"
+                            f" /CharProcs << /box {proc} 0 R >> /Encoding << /Type /Encoding /Differences [65 /box] >>"
+                            f" /FirstChar 65 /LastChar 65 /Widths [600] /Resources << >> >>")
+    res, prefix = _resources(doc, page)
+    doc.xref_set_key(res, f"{prefix}Font/T3", f"{font} 0 R")
+    xref = page.get_contents()[-1]
+    doc.update_stream(xref, doc.xref_stream(xref) + b"\nq 0 g BT /T3 16 Tf 72 742 Td (AAAA) Tj ET Q\n")
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+def make_raster_text_pdf(rotation: int = 0) -> bytes:
+    """A page whose body is a picture of print (RASTER_LINES in RASTER_RECT, no text layer), next to real text (a
+    title at (72, 100)), a photo-like picture (smooth shading) and a logo (one solid shape) that hold no text, and a
+    picture of print with real text written over it in PRINTED_RECT (a form typed on a scanned background)."""
+    import math
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 100), "Formulir permohonan", fontname="helv", fontsize=14)
+    x0, y0, x1, y1 = RASTER_RECT
+    page.insert_image(pymupdf.Rect(*RASTER_RECT),
+                      pixmap=_text_image(RASTER_LINES, x1 - x0, y1 - y0, size=11, color=(0, 0, 0)))
+    photo = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 120, 90), False)
+    for y in range(90):
+        for x in range(120):
+            v = int(128 + 100 * math.sin(x / 9) * math.cos(y / 7))
+            photo.set_pixel(x, y, (v, (v + 60) % 256, 255 - v))
+    page.insert_image(pymupdf.Rect(400, 120, 520, 210), pixmap=photo)
+    logo = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 80, 80), False)
+    logo.clear_with(255)
+    for y in range(80):
+        for x in range(80):
+            if (x - 40) ** 2 + (y - 40) ** 2 < 900:
+                logo.set_pixel(x, y, (20, 60, 160))
+    page.insert_image(pymupdf.Rect(80, 120, 160, 200), pixmap=logo)
+    px0, py0, px1, py1 = PRINTED_RECT
+    page.insert_image(pymupdf.Rect(*PRINTED_RECT), pixmap=_text_image(RASTER_LINES[:5], px1 - px0, py1 - py0, size=11))
+    page.insert_text((80, 600), "Isian yang diketik di atas latar pindaian", fontname="helv", fontsize=11)
+    if rotation:
+        page.set_rotation(rotation)
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)

@@ -72,6 +72,8 @@ API dan web dirilis terpisah; rilis API lebih dulu, baru web. Web sejak M5 mengi
 
 M5b menegaskan urutan itu: web M5b mengirim `Run.hScale`/`charSpacing`/`wordSpacing` dan `LayoutLine.source`, yang ditolak API M5 dengan 422, dan `PARAGRAPHS_VERSION` naik dari 2 ke 3, sehingga ekspor dengan id paragraf versi 2 mendapat 409. Draf dari M5 kehilangan edit teksnya (paragraf asli yang diedit) setelah rilis ini; itu disengaja, dan pengguna melihat pemberitahuannya.
 
+Sejak M5c web wajib dibangun ulang dengan `npm run build -w apps/web`: `prebuild` membuat `apps/web/public/pdfjs/` (dekoder wasm, cmaps, font standar, ICC pdf.js; 4,2 MB), tanpanya gambar hasil pindai 1-bit (JBIG2/CCITT, mis. kop surat) tidak tampil di editor; restart pm2 saja tidak cukup.
+
 ## Lisensi
 
 PyMuPDF berlisensi AGPL-3.0. Menjalankan Edith sebagai layanan tertutup memerlukan lisensi komersial dari Artifex atau membuka kode backend.

@@ -8,6 +8,7 @@ describe("strings", () => {
   it("maps known error codes and falls back", () => {
     expect(errorMessage("pdf_encrypted")).toContain("terkunci");
     expect(errorMessage("nope")).toBe(t.errors.generic);
+    expect(errorMessage("text_locked")).toContain("Whiteout");
   });
 });
 

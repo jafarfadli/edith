@@ -14,7 +14,7 @@ from edith.bake.text import links_under_redactions, restore_links
 from edith.bake.tounicode import trim_to_unicode
 from edith.bake.transform import draw_transformed
 from edith.bake.util import to_rect
-from edith.errors import BakeFailed, EdithError, InvalidOp
+from edith.errors import BakeFailed, EdithError, InvalidOp, TextLocked
 from edith.forms import FieldValueError, drop_xfa, fill_forms
 from edith.ops import DocSrc, LayoutPage, PageTarget, PagesLayout
 
@@ -154,8 +154,14 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                 raise InvalidOp(f"unknown pageKey {op.pageKey}", op_index=i)
             if op.type not in HANDLERS:
                 raise BakeFailed(f"no handler for {op.type}", op_id=op.id)
-            if op.type == "text.edit" and pages_src.paragraph(op.pageKey, op.paragraphId) is None:
-                raise InvalidOp(f"no paragraph {op.paragraphId} on {op.pageKey}", op_index=i)
+            if op.type == "text.edit":
+                paragraph = pages_src.paragraph(op.pageKey, op.paragraphId)
+                if paragraph is None:
+                    raise InvalidOp(f"no paragraph {op.paragraphId} on {op.pageKey}", op_index=i)
+                if paragraph.get("lock") == "hidden":
+                    # Invisible text over an image of it: removing it changes nothing, so the new text would be drawn
+                    # over the old picture (M5c). The client never offers it; a draft from before does.
+                    raise TextLocked(f"paragraph {op.paragraphId} on {op.pageKey} is invisible text", op_index=i)
             if op.type == "link.add" and isinstance(op.target, PageTarget) and op.target.pageKey not in keys:
                 raise InvalidOp(f"link to unknown pageKey {op.target.pageKey}", op_index=i)
 

@@ -1,4 +1,5 @@
 import { ApiError, PARAGRAPHS_VERSION, type FormField } from "@/lib/api";
+import { srcKey, type ParagraphPages } from "@/lib/sources";
 import type { EditorDoc, StructurePage } from "@/store/editor";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -72,6 +73,23 @@ export async function resolveImports(
 /** A restored draft without the text.edit ops of another paragraph segmentation (drafts from before M5 have none
  *  stamped: version 1): their ids now name other paragraphs, so they would replace the wrong text. `dropped`
  *  counts them (the editor tells the user). */
+/** `doc` without the text.edit ops of paragraphs the loaded text (`pages`) now locks as "hidden": invisible text over a
+ *  picture of it (M5c). A draft from before could edit one; the export refuses it (text_locked), since the new text
+ *  would be drawn over the old picture. `dropped` counts them (the editor tells the user); none: `doc` itself. */
+export function dropLockedTextEdits(doc: EditorDoc, pages: ParagraphPages): { doc: EditorDoc; dropped: number } {
+  const locked = doc.order.filter((id) => {
+    const op = doc.objects[id];
+    if (op?.type !== "text.edit") return false;
+    const entry = doc.pages.find((p) => p.pageKey === op.pageKey);
+    const src = entry && "doc" in entry.src ? entry.src : null;
+    return !!src && pages[srcKey(src.doc, src.index)]?.find((p) => p.id === op.paragraphId)?.lock === "hidden";
+  });
+  if (!locked.length) return { doc, dropped: 0 };
+  const objects = { ...doc.objects };
+  for (const id of locked) delete objects[id];
+  return { doc: { ...doc, objects, order: doc.order.filter((id) => !locked.includes(id)) }, dropped: locked.length };
+}
+
 export function dropStaleTextEdits(doc: EditorDoc): { doc: EditorDoc; dropped: number } {
   const version = doc.paragraphsVersion ?? 1;
   const stale = version === PARAGRAPHS_VERSION ? [] : doc.order.filter((id) => doc.objects[id]?.type === "text.edit");

@@ -7,4 +7,6 @@ export const CANVAS = {
   cropShade: "rgba(14, 15, 18, 0.55)",
   /** --warn on paper: the outline of a text box that runs past its original paragraph. */
   overflow: "#d97706",
+  /** A neutral grey on paper: the outline of text that can't be edited (a locked paragraph, an image of print). */
+  locked: "#6b7280",
 } as const;

@@ -27,6 +27,7 @@ describe("failedOpId", () => {
   it("maps bake_failed op_id and invalid_op op_index to the op", () => {
     expect(failedOpId("bake_failed", { op_id: "b" }, sent)).toBe("b");
     expect(failedOpId("invalid_op", { op_index: 1 }, sent)).toBe("a");
+    expect(failedOpId("text_locked", { op_index: 2 }, sent)).toBe("b"); // M5c: a text.edit of text that is a picture
   });
   it("ignores missing or out-of-range details", () => {
     expect(failedOpId("invalid_op", { op_index: 9 }, sent)).toBeUndefined();
