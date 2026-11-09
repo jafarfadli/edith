@@ -62,7 +62,7 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
               for (const seg of line.segments) {
                 const r = runs[seg.runIndex];
                 if (!r || !(r.bgColor || r.underline || r.strike)) continue;
-                const d = decorBands(seg.x, line.baseline, textWidth(seg.text, fontStore.get(r.font), r.size), r);
+                const d = decorBands(seg.x, line.baseline, textWidth(seg.text, fontStore.get(r.font), r.size, r), r);
                 if (d.bg) bands.push({ ...d.bg, color: r.bgColor!, over: false });
                 if (d.underline) bands.push({ ...d.underline, color: r.color, over: true });
                 if (d.strike) bands.push({ ...d.strike, color: r.color, over: true });
@@ -77,10 +77,18 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
                 const m = fontStore.get(r.font);
                 c.font = `${r.size}px "${cssFamily(r.font)}"`;
                 c.fillStyle = r.color;
-                const offs = charOffsets(seg.text, m, r.size);
+                const offs = charOffsets(seg.text, m, r.size, r);
+                const scale = r.hScale ?? 1; // the original's horizontal scale (Tz): glyphs as narrow as the bake draws them
                 let i = 0;
                 for (const ch of seg.text) {
-                  c.fillText(ch, seg.x + offs[i], line.baseline);
+                  if (scale === 1) c.fillText(ch, seg.x + offs[i], line.baseline);
+                  else {
+                    c.save();
+                    c.translate(seg.x + offs[i], line.baseline);
+                    c.scale(scale, 1);
+                    c.fillText(ch, 0, 0);
+                    c.restore();
+                  }
                   i++;
                 }
               }

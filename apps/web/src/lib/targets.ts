@@ -51,7 +51,7 @@ function boxRects(box: TextBox, m: Match, peek: Peek): Rect[] {
     const l = box.layout[line], seg = l.segments[segment], r = runs[seg.runIndex];
     const metrics = peek(r.font);
     if (!metrics) return [];
-    const offs = [...charOffsets(seg.text, metrics, r.size), textWidth(seg.text, metrics, r.size)];
+    const offs = [...charOffsets(seg.text, metrics, r.size, r), textWidth(seg.text, metrics, r.size, r)];
     return [{ x: box.rect.x + seg.x + offs[from], y: box.rect.y + l.baseline - HL_ASCENT * r.size, w: offs[to] - offs[from], h: HL_HEIGHT * r.size }];
   });
 }

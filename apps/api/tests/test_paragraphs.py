@@ -311,7 +311,10 @@ def test_single_lines_get_room_up_to_the_next_rule_or_text():
     assert ps["1.2 성별 Sex"]["maxWidth"] == pytest.approx(595 - left - 2 - 306, abs=0.01)  # margin before the table side (545)
     assert ps["<신청서 작성방법>"]["maxWidth"] == pytest.approx(595 - left - 2 - left, abs=0.01)  # mirrored left margin
     wrapped = paragraphs(make_paragraphs_pdf())[0]
-    assert len(wrapped["lines"]) == 3 and "maxWidth" not in wrapped  # wrapped text keeps its measure
+    # Wrapped left-aligned text (M5b F2): the room beside all its lines, here up to its frame (x 300) less ROOM_PAD.
+    assert len(wrapped["lines"]) == 3 and wrapped["maxWidth"] == pytest.approx(300 - 2 - 72, abs=0.01)
+    assert all("maxWidth" not in p for p in paragraphs(make_paragraphs_pdf()) if p["align"] in ("justify", "center")
+               and len(p["lines"]) > 1)
 
 
 @pytest.mark.parametrize("crop,width", [(None, 595), ((50, 60, 500, 700), 450)])

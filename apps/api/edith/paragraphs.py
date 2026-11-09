@@ -661,7 +661,7 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
     across a drawn rule (table borders, separators). Rects and line rects are the ink (no leading or trailing
     spaces). A single-line paragraph gets its alignment from where it sits (see _single) and `maxWidth`: how
     wide it may grow when edited, from its left edge (left), around its centre (center) or from its right
-    edge (right). With `program` (see _paragraph), runs carry the original's measured scale and spacing."""
+    edge (right). A left-aligned multi-line paragraph gets `maxWidth` too: the room beside all its lines. With `program` (see _paragraph), runs carry the original's measured scale and spacing."""
     rules = page_rules(page)
     blocks: list[list[_Line]] = []
     for block in page.get_text("rawdict", flags=FLAGS)["blocks"]:
@@ -697,6 +697,12 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
             if len(group) == 1 and group[0].horizontal:
                 paragraph["align"], paragraph["maxWidth"] = _single(group[0], every, rules, left_margin, right_margin,
                                                                     page.cropbox.width)
+            elif paragraph["align"] == "left" and all(line.horizontal for line in group):
+                # The room beside every line (M5b F2): the web wraps a little wider than the widest line, so a small
+                # edit does not re-wrap a paragraph that fit its column by a hair.
+                left = min(line.ink_x0 for line in group)
+                end = min(_room_end(line, every, rules, right_margin) for line in group)
+                paragraph["maxWidth"] = _num(max(end - left, max(line.ink_x1 for line in group) - left))
             paragraphs.append(paragraph)
     return paragraphs
 

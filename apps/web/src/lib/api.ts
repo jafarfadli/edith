@@ -18,7 +18,10 @@ export class ApiError extends Error {
 export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number }
 /** `maxWidth` (single-line paragraphs, M5): how wide the paragraph may grow when edited — up to the next cell border
  *  or text on its line. Measured per `align` (M5b): from the left edge (left), around the centre (center: the whole
- *  symmetric width) or leftwards from the right edge (right). Rects are the ink since M5b (no leading/trailing spaces). */
+ *  symmetric width) or leftwards from the right edge (right). Rects are the ink since M5b (no leading/trailing spaces).
+ *  Left-aligned multi-line paragraphs get it too (M5b F2): the room beside all their lines, the most the web may
+ *  widen their wrap width (lib/paragraphs.ts wrapWidth). Runs of original text carry the PDF's measured hScale /
+ *  charSpacing / wordSpacing (and the true size of horizontally scaled text). */
 export interface Paragraph {
   id: string; rect: Rect; lines: ParagraphLine[]; runs: Run[];
   align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean; maxWidth?: number;

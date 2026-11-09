@@ -42,14 +42,40 @@ function milliEm(ch: string, m: FontMetrics): number {
   return Math.floor((m.advance(ch) * 1000) / m.unitsPerEm);
 }
 
-export function textWidth(text: string, m: FontMetrics, size: number): number {
+/** The original PDF's horizontal scale and spacing of a run (Run.hScale / charSpacing / wordSpacing, pt): the pen
+ *  advance of a character is hScale · advance · size + charSpacing (+ wordSpacing for " "). Same rule as the
+ *  bake's run_width (apps/api/edith/bake/text.py). */
+export interface Spacing { hScale?: number; charSpacing?: number; wordSpacing?: number }
+
+export function spaced(sp?: Spacing): boolean {
+  return !!sp && ((sp.hScale ?? 1) !== 1 || !!sp.charSpacing || !!sp.wordSpacing);
+}
+
+function advance(ch: string, m: FontMetrics, size: number, sp: Spacing): number {
+  return (milliEm(ch, m) / 1000) * size * (sp.hScale ?? 1) + (sp.charSpacing ?? 0) + (ch === " " ? sp.wordSpacing ?? 0 : 0);
+}
+
+export function textWidth(text: string, m: FontMetrics, size: number, sp?: Spacing): number {
+  if (spaced(sp)) {
+    let w = 0;
+    for (const ch of text) w += advance(ch, m, size, sp!);
+    return w;
+  }
   let milli = 0;
   for (const ch of text) milli += milliEm(ch, m);
   return (milli / 1000) * size;
 }
 
-export function charOffsets(text: string, m: FontMetrics, size: number): number[] {
+export function charOffsets(text: string, m: FontMetrics, size: number, sp?: Spacing): number[] {
   const out: number[] = [];
+  if (spaced(sp)) {
+    let x = 0;
+    for (const ch of text) {
+      out.push(x);
+      x += advance(ch, m, size, sp!);
+    }
+    return out;
+  }
   let milli = 0;
   for (const ch of text) {
     out.push((milli / 1000) * size);
