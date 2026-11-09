@@ -10,7 +10,7 @@ import pymupdf
 import pytest
 
 from edith import ocr
-from edith.errors import OcrFailed, OcrTimeout, OcrTooComplex
+from edith.errors import OcrFailed, OcrTimeout, OcrTooComplex, OcrUnavailable
 from edith.fonts import FontRegistry
 from edith.settings import Settings
 from tests.pdfs import (SCAN_BODY, SCAN_ROWS, SCAN_TABLE, SCAN_TABLE_RECT, SCAN_TITLE, make_raster_text_pdf,
@@ -68,9 +68,52 @@ def test_tesseract_is_killed_at_the_timeout(tmp_path):
     assert time.monotonic() - start < 3
 
 
-def test_tesseract_failing_is_an_error(tmp_path):
-    with pytest.raises(OcrFailed):
-        ocr.run_tesseract(b"png", 300, 5, _script(tmp_path, "echo broken >&2; exit 3"))
+def test_tesseract_failing_is_an_error_that_tells_the_client_nothing_of_the_server(tmp_path, caplog):
+    cmd = _script(tmp_path, "echo broken at /secret/path >&2; exit 3")
+    with pytest.raises(OcrFailed) as err:
+        ocr.run_tesseract(b"png", 300, 5, cmd)
+    assert "secret" not in err.value.message and "broken" in caplog.text  # logged, not returned
+    with pytest.raises(OcrUnavailable) as err:
+        ocr.run_tesseract(b"png", 300, 5, str(tmp_path / "missing" / "tesseract"))
+    assert str(tmp_path) not in err.value.message
+
+
+def test_a_failed_language_check_is_asked_again(tmp_path):
+    cmd = _script(tmp_path, "exit 1")
+    assert ocr._languages(cmd) == frozenset()
+    (tmp_path / "fake-tesseract").write_text("#!/bin/sh\nprintf 'List of available languages (2):\\neng\\nind\\n'\n")
+    assert ocr._languages(cmd) == {"eng", "ind"}
+
+
+def test_the_timeout_error_names_the_configured_limit(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from edith.main import create_app
+    monkeypatch.setattr(ocr, "available", lambda configured=None: True)
+
+    def slow(*a, **k):
+        raise OcrTimeout("OCR took longer than the time allowed")
+    monkeypatch.setattr(ocr, "ocr_page", slow)
+    with TestClient(create_app(Settings(data_dir=tmp_path / "d", tesseract_cmd="tesseract", ocr_timeout_seconds=12))) as c:
+        doc = upload(c, make_scan_form_pdf()).json()["doc_id"]
+        r = c.post(f"/documents/{doc}/pages/0/ocr")
+        assert r.status_code == 504 and r.json()["error"] == {"code": "ocr_timeout", "message": "OCR took longer than 12 s", "seconds": 12}
+
+
+def test_a_checkbox_read_as_the_first_letter_of_a_word_is_split_off():
+    grey = np.full((60, 200), 255, dtype=np.uint8)
+    grey[10:12, 10:40] = grey[38:40, 10:40] = 0   # the box, 30 px square …
+    grey[10:40, 10:12] = grey[10:40, 38:40] = 0
+    for x in range(50, 190, 14):                   # … then letters after a gap
+        grey[18:40, x:x + 4] = 0
+    word = ocr.Word("OMengikuti", 90, (10, 8, 190, 42), (1, 1, 1))
+    box, rest = ocr._leading_box(word, _region(grey))
+    assert box.box == (10, 10, 40, 40) and rest.text == "Mengikuti" and rest.box[0] == 50
+    text, boxes, _ = ocr._usable([(word, 0)], [_region(grey)], usual=30)
+    assert [w.text for w, _ in text] == ["Mengikuti"] and len(boxes) == 1
+    plain = np.full((60, 200), 255, dtype=np.uint8)
+    for x in range(10, 190, 14):
+        plain[18:40, x:x + 4] = 0
+    assert ocr._leading_box(ocr.Word("Mengikuti", 90, (10, 8, 190, 42), (1, 1, 1)), _region(plain)) is None
 
 
 def test_tesseract_gets_the_image_on_stdin_and_no_shell(tmp_path):

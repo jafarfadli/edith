@@ -3,7 +3,7 @@ import threading
 from fastapi import APIRouter, Request
 
 from edith import ocr
-from edith.errors import OcrBusy, OcrUnavailable, PageNotFound
+from edith.errors import OcrBusy, OcrTimeout, OcrUnavailable, PageNotFound
 from edith.routes.text import _open_source
 
 router = APIRouter()
@@ -48,6 +48,9 @@ def ocr_page(request: Request, doc_id: str, index: int) -> dict:
         gate.enter(doc_id)
         try:
             result = ocr.ocr_page(doc[index], request.app.state.fonts, cmd, timeout=s.ocr_timeout_seconds)
+        except OcrTimeout:
+            limit = s.ocr_timeout_seconds
+            raise OcrTimeout(f"OCR took longer than {limit:g} s", seconds=limit) from None
         finally:
             gate.leave(doc_id)
     finally:

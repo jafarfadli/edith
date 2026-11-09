@@ -45,6 +45,9 @@ test("OCR reads a scanned page; an OCR paragraph edits in place, survives a relo
   const status = page.getByTestId("ocr-status");
   await expect(status).toContainText(/Hasil OCR: \d+ paragraf/, { timeout: 45_000 });
   await expect(page.getByRole("status").filter({ hasText: "klik dua kali untuk mengedit" })).toBeVisible();
+  // The status pill can be put away (clicks go through it to the page meanwhile).
+  await page.getByTestId("ocr-status-close").click();
+  await expect(status).toHaveCount(0);
 
   // The body paragraph: double-click it, replace its text.
   const editor = page.getByTestId("text-editor");

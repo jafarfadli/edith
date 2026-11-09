@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2, ScanText } from "lucide-react";
+import { useState } from "react";
+import { Loader2, ScanText, X } from "lucide-react";
 import type { Rect } from "@edith/ops";
 import { toScreen, type PageGeom, type Pt } from "@/lib/coords";
 import { isLowConfidence, ocrQualityMessage } from "@/lib/ocr";
@@ -27,7 +28,8 @@ export function OcrButton({ pageKey, geom, scale }: { pageKey: string; geom: Pag
   const state = useText((s) => (src ? ocrStateOf(src, s.ocr) : undefined));
   const busy = useText((s) => !!src && Object.entries(s.ocr).some(([k, v]) => v.status === "loading" && k.startsWith(src.doc + ":")
     && k !== srcKey(src.doc, src.index)));
-  if (!src || !rects.length) return null;
+  const [hidden, setHidden] = useState(false);
+  if (!src || !rects.length || (hidden && state?.status === "ready")) return null;
 
   // The top-right corner of the pictures, as shown (the page may be turned).
   const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
@@ -41,8 +43,9 @@ export function OcrButton({ pageKey, geom, scale }: { pageKey: string; geom: Pag
     const why = ocrQualityMessage(state.quality ?? "empty", state.angle ?? 0);
     const low = state.paragraphs.filter(isLowConfidence).length;
     return (
-      <div role="status" data-testid="ocr-status" title={why ?? t.ocr.foundHint} className={`${pill} pointer-events-auto cursor-default`} style={place}
-        onPointerDown={(e) => e.stopPropagation()}>
+      // Clicks go through the pill to the page under it (an OCR paragraph or object in the picture's corner); only its
+      // close button takes them.
+      <div role="status" data-testid="ocr-status" title={why ?? t.ocr.foundHint} className={`${pill} pointer-events-none cursor-default pr-1`} style={place}>
         <ScanText {...ICON_SM} className={why ? "text-muted" : "text-accent-text"} />
         {why ? <span className="truncate text-muted">{t.ocr.short[state.quality as keyof typeof t.ocr.short] ?? why}</span> : (
           <span className="truncate">
@@ -50,6 +53,11 @@ export function OcrButton({ pageKey, geom, scale }: { pageKey: string; geom: Pag
             {low > 0 && <span className="text-warn"> · {t.ocr.toCheck(low)}</span>}
           </span>
         )}
+        <button type="button" aria-label={t.ocr.hideStatus} title={t.ocr.hideStatus} data-testid="ocr-status-close"
+          className="pointer-events-auto grid h-5 w-5 shrink-0 place-items-center rounded text-muted hover:bg-line hover:text-ink"
+          onPointerDown={(e) => e.stopPropagation()} onClick={() => setHidden(true)}>
+          <X size={12} strokeWidth={1.75} aria-hidden />
+        </button>
       </div>
     );
   }

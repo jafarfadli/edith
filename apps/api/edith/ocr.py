@@ -11,6 +11,7 @@ paragraph adds `ocr`, `confidence` (0–1, mean of its words) and what an edit p
 
 Nothing is written into the stored PDF and nothing is kept on the server: the client keeps the result. Skewed scans
 (more than MAX_SKEW degrees) and unreadable ones are reported as such (`quality`), without paragraphs."""
+import logging
 import math
 import os
 import shutil
@@ -31,6 +32,8 @@ from edith.imagetext import Budget, image_text_regions
 from edith.paragraphs import JOIN_EM, ROOM_PAD, extract_paragraphs
 
 BAND = 8.0                # pt: height of the bands paragraph lines are looked up in (ocr_page)
+logger = logging.getLogger("edith")
+
 DPI = 300                 # what Tesseract reads print best at
 MIN_DPI = 150             # a larger image is rendered coarser to stay within MAX_PIXELS, but not below this
 MAX_PIXELS = 12_000_000   # pixels one page's OCR may render (A4 at 300 dpi: 8.7 M)
@@ -51,6 +54,7 @@ DENSE = 0.35              # a word's rows with this share of its busiest row's i
 TINY = 0.4                # a word less than this share of the page's usual word height: dots of a leader, specks
 LEADER = 0.7              # a word whose inked columns are this often short (≤ TINY × usual height): a dot leader
 BOX_EDGE, BOX_HOLLOW = 0.7, 0.15  # a checkbox: each side this much ink, its inside at most this much
+LEADING_EDGE = 0.9        # … sides this straight for a box at the start of a word (round capitals O, D: less)
 MAX_IMAGES = 64           # pictures on one page OCR looks at: judging each renders the ones under it (cost ~ n²)
 MAX_WORDS = 4000          # words one page may hold (a dense A4 page: ~600); more is noise or a crafted image
 FIND_SECONDS = 5.0        # of the page's time, at most this long to find its pictures of print
@@ -88,14 +92,23 @@ def tesseract_cmd(configured: str | None = None) -> str | None:
     return configured or shutil.which("tesseract")
 
 
-@lru_cache(maxsize=4)
+_LANGS: dict[str, frozenset[str]] = {}
+
+
 def _languages(cmd: str) -> frozenset[str]:
+    """The language data `cmd` has. Only an answer is kept: a failure (Tesseract installed after the server started,
+    a slow first start) is asked again next time."""
+    if cmd in _LANGS:
+        return _LANGS[cmd]
     try:
         out = subprocess.run([cmd, "--list-langs"], capture_output=True, timeout=10, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return frozenset()
     lines = out.stdout.decode("utf-8", "replace").splitlines()
-    return frozenset(line.strip() for line in lines[1:] if line.strip())
+    found = frozenset(line.strip() for line in lines[1:] if line.strip())
+    if out.returncode == 0 and found:
+        _LANGS[cmd] = found
+    return found
 
 
 def available(configured: str | None = None) -> bool:
@@ -115,10 +128,12 @@ def run_tesseract(png: bytes, dpi: int, timeout: float, cmd: str, psm: int = 3) 
                              input=png, capture_output=True, timeout=max(timeout, 0.1), env=env, check=False)
     except subprocess.TimeoutExpired:
         raise OcrTimeout("OCR took longer than the time allowed") from None
-    except OSError as exc:
-        raise OcrUnavailable(f"cannot run tesseract: {exc}") from None
+    except OSError:
+        logger.exception("cannot run tesseract")  # the path and the system's message stay in the server's log
+        raise OcrUnavailable("cannot run tesseract") from None
     if out.returncode != 0:
-        raise OcrFailed(f"tesseract failed ({out.returncode}): {out.stderr.decode('utf-8', 'replace')[-300:]}")
+        logger.error("tesseract failed (%s): %s", out.returncode, out.stderr.decode("utf-8", "replace")[-500:])
+        raise OcrFailed("tesseract failed")
     return parse_tsv(out.stdout.decode("utf-8", "replace"))
 
 
@@ -396,7 +411,7 @@ def _snap_sizes(lines: list[_Line]) -> None:
                 ln.size = round(mid * 2) / 2
 
 
-def _checkbox(word: Word, region: _Region) -> bool:
+def _checkbox(word: Word, region: _Region, edge: float = BOX_EDGE) -> bool:
     """A box drawn in the picture that Tesseract read as a letter ("O", "U", "D", "o"): a square-ish word of at most two
     characters whose four sides are ink and whose inside is paper. Left out of the text, so an edit neither paints it
     over nor redraws it as a letter."""
@@ -411,7 +426,9 @@ def _checkbox(word: Word, region: _Region) -> bool:
     sides = (ink[:t].any(axis=0).mean(), ink[-t:].any(axis=0).mean(),
              ink[:, :t].any(axis=1).mean(), ink[:, -t:].any(axis=1).mean())
     inside = ink[t + 1:h - t - 1, t + 1:w - t - 1]
-    return min(sides) >= BOX_EDGE and (inside.size == 0 or inside.mean() <= BOX_HOLLOW)
+    # A drawn box has ink in its four corners; a round letter (O, o, D) has none there.
+    corners = (ink[:t, :t].any(), ink[:t, -t:].any(), ink[-t:, :t].any(), ink[-t:, -t:].any())
+    return all(corners) and min(sides) >= edge and (inside.size == 0 or inside.mean() <= BOX_HOLLOW)
 
 
 def _leader(word: Word, region: _Region, usual: float) -> bool:
@@ -446,9 +463,47 @@ def _usable(words: list[tuple[Word, int]], regions: list[_Region], usual: float)
                 leaders.append((w, i))
         elif _checkbox(w, regions[i]):
             boxes.append((w, i))
+        elif (split := _leading_box(w, regions[i])) is not None:
+            boxes.append((split[0], i))
+            text.append((split[1], i))
         else:
             text.append((w, i))
     return text, boxes, leaders
+
+
+BOX_LETTERS = frozenset("OoUuDd0QaC□■[|")  # what Tesseract reads a checkbox as, at the start of a word
+
+
+def _leading_box(word: Word, region: _Region) -> tuple[Word, Word] | None:
+    """(checkbox, the rest) when a word begins with a checkbox Tesseract read as its first letter ("OMengikuti") or
+    swallowed: the word's first stretch of ink, up to a blank column, is a checkbox (_checkbox). The rest starts at the
+    next ink; it loses its first character only when that is what a checkbox reads as."""
+    if len(word.text) < 2:
+        return None
+    x0, y0, x1, y1 = (int(v) for v in word.box)
+    ink = region.grey[y0:y1, x0:x1] < region.threshold
+    cols = ink.any(axis=0)
+    if cols.size < 4 or not cols[0:max(2, cols.size // 20)].any():
+        return None
+    first = int(np.argmax(cols))
+    blank = np.nonzero(~cols[first:])[0]
+    if blank.size == 0:
+        return None
+    end = first + int(blank[0])  # the first stretch: columns first … end-1
+    rows = np.nonzero(ink[:, first:end].any(axis=1))[0]
+    if rows.size == 0:
+        return None
+    box = (x0 + first, y0 + int(rows[0]), x0 + end, y0 + int(rows[-1]) + 1)
+    candidate = Word(word.text[:1], word.conf, box, word.line)
+    rest = np.nonzero(cols[end:])[0]
+    # A clear gap after it (a box stands apart from the word, a first letter touches or nearly touches the next), as tall
+    # as a capital (a small round "o" is not), with straight sides.
+    side = box[3] - box[1]
+    if (rest.size == 0 or rest[0] < max(2, 0.15 * side) or side < 0.6 * (word.box[3] - word.box[1])
+            or not _checkbox(candidate, region, edge=LEADING_EDGE)):
+        return None
+    text = word.text[1:] if word.text[0] in BOX_LETTERS else word.text
+    return candidate, Word(text.lstrip(), word.conf, (x0 + end + int(rest[0]), word.box[1], word.box[2], word.box[3]), word.line)
 
 
 def _tall_runs(word: Word, region: _Region, usual: float) -> list[tuple[int, int]]:
@@ -677,7 +732,9 @@ def _render(page: pymupdf.Page, rect: pymupdf.Rect, dpi: int) -> _Region:
     pix = page.get_pixmap(clip=rect, dpi=dpi, colorspace=pymupdf.csRGB, alpha=False, annots=False)
     rgb = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.stride)[:, :pix.width * 3]
     rgb = rgb.reshape(pix.height, pix.width, 3)
-    grey = (rgb @ np.array([0.299, 0.587, 0.114])).astype(np.uint8)
+    # Integer luminance (×256 weights, 16-bit sums): no float64 copy of a 12-megapixel picture.
+    grey = ((rgb[:, :, 0].astype(np.uint16) * 77 + rgb[:, :, 1].astype(np.uint16) * 150
+             + rgb[:, :, 2].astype(np.uint16) * 29) >> 8).astype(np.uint8)
     region = _Region(rect=pymupdf.Rect(rect), dpi=dpi, rgb=rgb, grey=grey, threshold=_otsu(grey))
     cum = np.cumsum(np.bincount(grey.ravel(), minlength=256))
     cut = int(region.threshold)

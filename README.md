@@ -24,6 +24,13 @@ Mengedit paragraf hasil OCR membuat objek `text.ocr_edit`: area tulisan lama (ti
 
 Batasnya: halaman yang diputar di dalam PDF-nya, hasil pindai yang miring lebih dari 1,5°, dan gambar yang terlalu buram dilaporkan, bukan dibaca. Font hasil OCR ditebak (Arimo untuk sans, Tinos untuk serif, tebal dari ketebalan garis huruf), ukuran dari tinggi huruf, warna dari tinta. Kualitas pada formulir sintetis (`scripts/ocr_accuracy.py`): 93–95 % kata tepat, tepi kotak kata meleset 0,3–0,7 pt, ukuran huruf tepat.
 
+Catatan perilaku (review M5d):
+
+- **Tutupan per baris.** Setiap baris paragraf OCR punya persegi tutupannya sendiri (`covers`), dari tinta kata-kata baris itu: di samping baris terakhir yang pendek tidak ada yang ditutup, jadi teks lain, kotak centang atau stempel di pojok itu tetap terlihat. Tutupan berhenti sebelum tinta paragraf lain dan kotak centang; baris yang di dalam tintanya ada kata paragraf lain tidak ditutup sama sekali.
+- **Tutupan buram, bukan penghapus.** Persegi tutupan menutupi gambar lama; piksel aslinya tetap ada di dalam gambar PDF (bisa diekstrak). Untuk benar-benar menghapus, pakai Redaksi. Teks tak terlihat di bawah tutupan (lapisan OCR lama hasil pemindai) dihapus saat ekspor, jadi kata lama tidak ikut tersalin atau ditemukan.
+- **Batas server.** Halaman dengan lebih dari 64 gambar atau lebih dari 4000 kata ditolak (`ocr_too_complex`). Batas waktu (bawaan 30 detik) berlaku untuk seluruh halaman, termasuk mencari gambarnya. Menutup tab tidak membatalkan OCR yang sedang berjalan: slotnya baru lepas saat OCR selesai atau batas waktu habis.
+- **Hasil bisa sedikit berbeda antar-jalan.** Kata yang dibaca ulang (di dalam atau sesudah titik-titik isian) hanya dibaca bila waktu masih cukup, jadi pada server yang sibuk hasilnya bisa kurang satu dua kata dan nomor `ocrN` bisa bergeser.
+
 ## Struktur
 
 - `apps/api` — FastAPI + PyMuPDF. Menyimpan unggahan selama 1 jam dan menerapkan ("bake") operasi edit saat ekspor.

@@ -236,9 +236,9 @@ export const t = {
     badgeLow: "hasil OCR · perlu dicek",
     confidence: (pct: number) => `keyakinan ${pct}%`,
     found: (n: number) => `Hasil OCR: ${n} paragraf`,
+    hideStatus: "Sembunyikan keterangan OCR",
     toCheck: (n: number) => `${n} perlu dicek`,
     foundHint: "Teks bergaris putus-putus adalah hasil OCR: klik dua kali untuk mengedit. Yang berwarna kuning kurang yakin terbaca.",
-    edited: "Teks hasil OCR diganti: gambar lama di bawahnya ditutup warna latarnya.",
     uneven: "Latar di bawah teks ini tidak polos, jadi tutupan warnanya bisa terlihat.",
     /** The page's OCR pill after OCR found nothing to edit (the notice says why in full). */
     short: { none: "OCR: tidak ada gambar teks", empty: "OCR: tidak ada teks", rotated: "OCR: halaman diputar", skewed: "OCR: pindaian miring", unreadable: "OCR: tidak terbaca", too_large: "OCR: gambar terlalu besar" },
@@ -253,7 +253,7 @@ export const t = {
     errors: {
       ocr_unavailable: "OCR belum terpasang di server ini.",
       ocr_busy: "OCR sedang berjalan. Tunggu sebentar lalu coba lagi.",
-      ocr_timeout: "OCR terlalu lama (lebih dari 30 detik) dan dihentikan.",
+      ocr_timeout: "OCR terlalu lama dan dihentikan. Coba lagi, atau pindai ulang dengan resolusi lebih rendah.",
       timeout: "Server terlalu lama menjawab OCR.",
       ocr_failed: "OCR gagal di server.",
       ocr_too_complex: "Halaman ini terlalu rumit untuk OCR (terlalu banyak gambar atau tulisan).",
