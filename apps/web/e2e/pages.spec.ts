@@ -184,9 +184,10 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
 
   const file = await download("pages.pdf");
   const pages = pdfShapes(file);
-  // Page text includes the filled fields' appearances; the duplicate shares the main PDF's `nama` field.
+  // Page text includes the filled fields' appearances; the duplicate shares the main PDF's `nama` field. "Impor A" keeps
+  // its original glyphs (M5d: the words before an edit), so it stays where it was in the content; " diedit" is drawn.
   expect(pages.map((p) => p.text)).toEqual(["Halaman satu Utama Budi", "Halaman satu Utama Budi", "Halaman tiga",
-    "kata penting di sini Impor A diedit Impor Budi", "Impor B"]);
+    "Impor A kata penting di sini diedit Impor Budi", "Impor B"]);
   expect(pages.map((p) => p.rotation)).toEqual([0, 0, 90, 0, 0]);
   expect([pages[3].width, pages[3].height]).toEqual([400, 500]);
   // Crop: 5 % in from each edge, applied last.

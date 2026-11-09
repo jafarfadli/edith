@@ -1,5 +1,6 @@
 import math
 from collections import defaultdict
+from dataclasses import dataclass
 
 import pymupdf
 
@@ -8,6 +9,7 @@ from edith.bake.tounicode import fix_to_unicode
 from edith.bake.util import rgb
 from edith.doc_fonts import name_key
 from edith.ops import Run, TextAdd, TextBox, TextEdit
+from edith.paragraphs import SPACE_CHARS
 
 # Decoration geometry, in multiples of the run's font size relative to the baseline (y grows down).
 # Shared contract with apps/web/src/lib/textDecor.ts — change both together.
@@ -66,8 +68,10 @@ def _band(x: float, y: float, w: float, top: float, height: float, size: float) 
     return pymupdf.Rect(x, y + top * size, x + w, y + (top + height) * size)
 
 
-def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozenset[int] = frozenset()) -> None:
-    """Draws the box's layout, except the lines whose index is in `skip` (kept original lines of a text.edit)."""
+def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozenset[int] = frozenset(),
+                  heads: dict[int, int] | None = None) -> None:
+    """Draws the box's layout, except the lines whose index is in `skip` (kept original lines of a text.edit) and the
+    first `heads[k]` segments of line k (the kept prefix of an edited original line)."""
     runs = [r for paragraph in box.paragraphs for r in paragraph]
     writers: dict[tuple[str, float], pymupdf.TextWriter] = defaultdict(lambda: pymupdf.TextWriter(page.rect))
     backgrounds: list[tuple[pymupdf.Rect, str]] = []
@@ -75,7 +79,7 @@ def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozen
     for k, line in enumerate(box.layout):
         if k in skip:
             continue
-        for seg in line.segments:
+        for seg in line.segments[(heads or {}).get(k, 0):]:
             if not seg.text:
                 continue
             r = runs[seg.runIndex]
@@ -115,8 +119,11 @@ def text_add(page: pymupdf.Page, op: TextAdd, ctx) -> None:
     draw_text_box(page, op.box, ctx)
 
 
-def redaction_rects(paragraph: dict, keep: frozenset[int] | set[int] = frozenset()) -> list[pymupdf.Rect]:
-    """One thin band per original line of `paragraph` (see REDACT_BAND), except the lines in `keep`."""
+def redaction_rects(paragraph: dict, keep: frozenset[int] | set[int] = frozenset(),
+                    cut: dict[int, float | None] | None = None) -> list[pymupdf.Rect]:
+    """One thin band per original line of `paragraph` (see REDACT_BAND), except the lines in `keep`. A line in `cut`
+    keeps its first words: its band starts at that x (MuPDF removes a glyph only when the band reaches well into its
+    box, so the space glyph ending there stays and the glyph starting there goes); None: nothing of it goes."""
     out = []
     for i, line in enumerate(paragraph["lines"]):
         if i in keep:
@@ -124,7 +131,12 @@ def redaction_rects(paragraph: dict, keep: frozenset[int] | set[int] = frozenset
         r = line["rect"]
         y = line["baseline"] - REDACT_BAND * line["size"]
         inset = 0.5 if r["w"] > 2 else 0
-        out.append(pymupdf.Rect(r["x"] + inset, y - 0.5, r["x"] + r["w"] - inset, y + 0.5))
+        x0, x1 = r["x"] + inset, r["x"] + r["w"] - inset
+        if cut is not None and i in cut:
+            if cut[i] is None or cut[i] >= x1:
+                continue
+            x0 = cut[i]
+        out.append(pymupdf.Rect(x0, y - 0.5, x1, y + 0.5))
     return out
 
 
@@ -135,12 +147,8 @@ KEEP_X_TOL = 0.5
 KEEP_Y_TOL, KEEP_Y_EM = 1.0, 0.4
 SIZE_TOL = 0.05
 H_SCALE_TOL, SPACING_TOL = 0.0005, 0.005  # hScale, charSpacing / wordSpacing (pt) of a kept line: as measured
-# The whitespace a kept line is compared without: exactly what JavaScript's \s matches (ECMAScript WhiteSpace and
-# LineTerminator), which the client's layout drops at line ends and between justified words. Shared contract with
-# SPACE_CHARS in apps/web/src/lib/keepLines.ts. Not str.isspace(): that also takes U+001C–U+001F and U+0085, and
-# not U+FEFF.
-SPACE_CHARS = frozenset("\t\n\x0b\x0c\r \xa0 " + "".join(map(chr, range(0x2000, 0x200B)))
-                        + "    　﻿")
+# The whitespace a kept line is compared without (paragraphs.SPACE_CHARS): what the client's layout drops at line
+# ends and between justified words.
 
 
 def _anchor_offset(box: TextBox, paragraph: dict) -> float:
@@ -195,21 +203,79 @@ def _same_char(orig: tuple[str, dict], new: tuple[str, Run], font_keys) -> bool:
     return run.font.kind != "original" or name_key(span["font"]["name"]) in font_keys(run.font)
 
 
-def _kept(op: TextEdit, ctx) -> dict[int, int]:
+@dataclass(frozen=True)
+class KeptPrefix:
+    """A kept prefix (LayoutLine.prefix) the bake accepted: original line `source` keeps its glyphs left of `cut` (its
+    first other word's x; None: the whole line stays, the layout line only adds words after it), the first `segments`
+    segments of the layout line are not drawn."""
+    source: int
+    segments: int
+    cut: float | None
+
+
+def kept_prefixes(box: TextBox, paragraph: dict, font_keys, kept: dict[int, int]) -> dict[int, KeptPrefix]:
+    """Layout line index → KeptPrefix, for the lines of a text.edit `box` whose `prefix` still matches the original
+    `paragraph` (as kept_lines checks a whole line: in place, same characters whitespace aside, same styles), whose
+    original line is neither kept (`kept`, kept_lines) nor another line's prefix, and which ends at a word boundary
+    of the original line (whitespace after it: the band starting at the next word leaves the prefix's glyphs alone).
+    The layout line's other segments must start at or right of that word (they are drawn where its glyphs were)."""
+    if box.align != paragraph["align"] or abs(_anchor_offset(box, paragraph)) > KEEP_X_TOL:
+        return {}
+    runs = [r for p in box.paragraphs for r in p]
+    lines = paragraph["lines"]
+    styles = [run for run in paragraph["runs"] for _ in run["text"]]
+    text = "".join(r["text"] for r in paragraph["runs"])
+    out: dict[int, KeptPrefix] = {}
+    for k, line in enumerate(box.layout):
+        pre = line.prefix
+        if pre is None or k in kept or pre.source >= len(lines) or pre.source in kept.values() \
+                or any(p.source == pre.source for p in out.values()) or pre.segments > len(line.segments):
+            continue
+        orig = lines[pre.source]
+        if abs(box.rect.y + line.baseline - orig["baseline"]) > max(KEEP_Y_TOL, KEEP_Y_EM * orig["size"]):
+            continue
+        got = [(c, runs[seg.runIndex]) for seg in line.segments[:pre.segments] for c in seg.text if c not in SPACE_CHARS]
+        ink = [i for i in range(orig["start"], orig["end"]) if text[i] not in SPACE_CHARS]
+        if not got or len(got) > len(ink):
+            continue
+        if not all(_same_char((text[i], styles[i]), r, font_keys) for i, r in zip(ink, got)):
+            continue
+        cut: float | None = None
+        if len(got) < len(ink):
+            c = ink[len(got)]  # the original's first character after the prefix
+            xs = orig.get("wordX")
+            words = sum(1 for i in range(orig["start"], c + 1)
+                        if text[i] not in SPACE_CHARS and (i == orig["start"] or text[i - 1] in SPACE_CHARS))
+            if c == ink[len(got) - 1] + 1 or not xs or words > len(xs):
+                continue  # inside a word (no whitespace before it), or no word positions
+            cut = xs[words - 1]
+        limit = (orig["rect"]["x"] + orig["rect"]["w"]) if cut is None else cut
+        rest = [seg for seg in line.segments[pre.segments:] if seg.text.strip()]
+        if any(box.rect.x + seg.x < limit - KEEP_X_TOL for seg in rest):
+            continue
+        out[k] = KeptPrefix(pre.source, pre.segments, cut)
+    return out
+
+
+def _kept(op: TextEdit, ctx) -> tuple[dict[int, int], dict[int, KeptPrefix]]:
     paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
-    return kept_lines(op.box, paragraph, lambda f: ctx.source.font_keys(f.ref, f.doc))
+    font_keys = lambda f: ctx.source.font_keys(f.ref, f.doc)  # noqa: E731
+    kept = kept_lines(op.box, paragraph, font_keys)
+    return kept, kept_prefixes(op.box, paragraph, font_keys, kept)
 
 
 @register("text.edit", phase="redact_text")
 def text_edit_redact(page: pymupdf.Page, op: TextEdit, ctx) -> None:
     paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
-    for rect in redaction_rects(paragraph, set(_kept(op, ctx).values())):
+    kept, prefixes = _kept(op, ctx)
+    for rect in redaction_rects(paragraph, set(kept.values()), {p.source: p.cut for p in prefixes.values()}):
         page.add_redact_annot(rect, fill=False)  # fill=False: paint nothing over what stays
 
 
 @register("text.edit")
 def text_edit(page: pymupdf.Page, op: TextEdit, ctx) -> None:
-    draw_text_box(page, op.box, ctx, skip=set(_kept(op, ctx)))
+    kept, prefixes = _kept(op, ctx)
+    draw_text_box(page, op.box, ctx, skip=set(kept), heads={k: p.segments for k, p in prefixes.items()})
 
 
 def links_under_redactions(page: pymupdf.Page) -> list[str]:

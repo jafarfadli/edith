@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import { pdfInfo } from "./pdfText";
+import { pdfSpans } from "./pdfSpans";
 
 // apps/api/scripts/e2e_picture_pdf.py (M5c): a letterhead pictured as a 1-bit CCITT image in (72, 60)–(432, 132) under
 // the same three lines as invisible text, a visible paragraph on baseline 200, and the body of a form pictured as a CCITT
@@ -105,7 +106,11 @@ test("a pictured letterhead shows, its invisible text is locked, and a pictured 
   const file = path.join(test.info().outputDir, "picture-text.pdf");
   await (await download).saveAs(file);
   const text = (await pdfInfo(file)).pages[0].text;
-  expect(text).toContain("Paragraf biasa yang terlihat. Diubah.");
+  // The original words keep their glyphs (M5d) and " Diubah." is drawn after them: one line, read by position.
+  const line = pdfSpans(file)[0].filter((s) => s.text.includes("Paragraf biasa") || s.text.includes("Diubah"));
+  expect(new Set(line.map((s) => Math.round(s.origin[1]))).size).toBe(1);
+  expect(line.sort((a, b) => a.origin[0] - b.origin[0]).map((s) => s.text.trim()).join(" ")).toBe("Paragraf biasa yang terlihat. Diubah.");
+  expect(text.split("Paragraf biasa yang terlihat.").length - 1).toBe(1);
   expect(text.split("SEKRETARIAT JENDERAL").length - 1).toBe(1); // the invisible layer once, nothing drawn over it
 });
 

@@ -3,13 +3,13 @@
 import { createStore } from "zustand/vanilla";
 import type { Editor } from "@tiptap/core";
 import type { ContentOp, Run, TextBox, TextEdit } from "@edith/ops";
-import type { Paragraph } from "@/lib/api";
+import type { Paragraph, ParagraphLine } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
 import { markupOverLines } from "@/lib/markup";
 import { noticeStore } from "@/lib/notices";
 import { newId } from "@/lib/id";
 import { editedBox, keepFirstBaseline } from "@/lib/keepLines";
-import { keptLines, paragraphBox, preloadFallback, prepareRuns, replacedLines, resolveLoadedRuns } from "@/lib/paragraphs";
+import { keptLines, keptPrefixes, paragraphBox, preloadFallback, prepareRuns, replacedLines, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
 import { t } from "@/lib/strings";
@@ -97,9 +97,19 @@ export function markupUnderEdits(doc: EditorDoc, edits: TextEdit[]): string[] {
  *  moved, resized or restyled, those lines are redrawn and their glyphs removed, so the marks would float. */
 export function marksLostBy(doc: EditorDoc, cur: ContentOp, next: ContentOp): string[] {
   if (cur.type !== "text.edit" || next.type !== "text.edit") return [];
-  const before = keptLines(cur.box), after = keptLines(next.box);
   const p = originalParagraph(doc, cur.pageKey, cur.paragraphId);
-  const lost = p?.lines.filter((_, i) => before.has(i) && !after.has(i)) ?? [];
+  if (!p) return [];
+  // How far each original line's glyphs stay: all of it (LayoutLine.source), up to a kept prefix's end
+  // (LayoutLine.prefix, M5d) or nothing; what `next` keeps less of than `cur` is lost.
+  const extent = (box: TextBox) => {
+    const whole = keptLines(box), cuts = keptPrefixes(p, box);
+    return (l: ParagraphLine, i: number) => (whole.has(i) ? l.rect.x + l.rect.w : cuts.get(i) ?? l.rect.x);
+  };
+  const before = extent(cur.box), after = extent(next.box);
+  const lost = p.lines.flatMap((l, i) => {
+    const from = after(l, i), to = before(l, i);
+    return to > from ? [{ ...l, rect: { ...l.rect, x: from, w: to - from } }] : [];
+  });
   if (!lost.length) return [];
   const ops = doc.order.map((id) => doc.objects[id]).filter((op): op is ContentOp => !!op);
   return markupOverLines(ops, cur.pageKey, lost);

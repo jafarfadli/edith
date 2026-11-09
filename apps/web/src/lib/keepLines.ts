@@ -1,8 +1,14 @@
 import type { LayoutLine, Run, TextBox } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
 import { fontKey } from "@/lib/fonts";
+import { anchorLine, BoxText, JUSTIFY_SQUEEZE } from "@/lib/editLine";
 import { layoutText, type LineRange } from "@/lib/layout";
-import { paragraphFrame, rawToBox, type MetricsFor } from "@/lib/paragraphs";
+import { growWidth, paragraphFrame, rawToBox, WIDTH_SLACK, type MetricsFor } from "@/lib/paragraphs";
+
+/** How much more than its tightest original line (share of a space) a justified paragraph's lines may compress, and the
+ *  most they ever may (see justifyFrame). */
+const JUSTIFY_MORE = 0.2;
+const MAX_SQUEEZE = 0.6;
 
 /** How far (pt) a text.edit box may be from where paragraphBox put it and still count as in place. */
 const IN_PLACE = 0.01;
@@ -70,26 +76,29 @@ export function inPlace(box: TextBox, p: Paragraph, x: number, width: number): b
  * `paragraphs`, from the box `prev` the edit started with. Unchanged lines stay the original's (LayoutLine.source):
  *
  * - The text is compared character by character with its style: the common prefix and suffix are unchanged.
- * - Every original line that starts inside the prefix keeps its break (a forced break), so the lines before the edit
- *   are the original's.
- * - From the first changed line on, the text wraps as usual. Once a wrapped line starts where the original line of
- *   the same index starts (mapped through the edit, inside the suffix), the reflow has settled: every later original
- *   break is forced again, so those lines are the original's too. Lines that moved to another index (an insertion
- *   that added a line, a deleted line) are redrawn.
+ * - Every original line break the edit leaves stays where it was, as long as each edited line still fits: it may
+ *   grow into the room beside the paragraph (growWidth), a justified one may compress its spaces (JUSTIFY_SQUEEZE).
+ *   An edited line that got shorter keeps its break too, unless the next line's first word now fits on it where it
+ *   did not before (at the box width): then the text reflows, as it does when a line no longer fits or the edit
+ *   removed or added a break.
+ * - Reflow: the lines before the edit keep their breaks (forced); from the first changed line on, the text wraps as
+ *   usual. Once a wrapped line starts where the original line of the same index starts (mapped through the edit,
+ *   inside the suffix), the reflow has settled: every later original break is forced again. Lines that moved to
+ *   another index (an insertion that added a line, a deleted line) are redrawn.
  * - A line is kept when it holds exactly the characters of the original line of its index, unchanged, and is the
  *   last of its paragraph exactly when that one was (justification).
+ * - An edited line that starts where the original line of its index started is re-placed word by word where the
+ *   original had its words (anchorLine): the words before the edit keep their glyphs (LayoutLine.prefix).
  *
  * The box must be in place (inPlace), else every line is redrawn. The first baseline stays where `prev` had it.
  */
 export function editedBox(prev: TextBox, paragraphs: Run[][], p: Paragraph, metricsFor: MetricsFor): TextBox {
   const frame = paragraphFrame(p, metricsFor);
-  const lay = (breaks?: number[]) => layoutText({
-    width: prev.rect.w, align: prev.align ?? "left", lineHeight: prev.lineHeight, paragraphs, breaks,
-  }, metricsFor);
+  const align = prev.align ?? "left";
   const done = (r: ReturnType<typeof layoutText>, layout: LayoutLine[]) =>
     keepFirstBaseline(prev, { ...prev, paragraphs, layout, rect: { ...prev.rect, h: Math.max(r.height, prev.lineHeight) } });
   if (!inPlace(prev, p, frame.x, frame.width)) {
-    const r = lay();
+    const r = layoutText({ width: prev.rect.w, align, lineHeight: prev.lineHeight, paragraphs }, metricsFor);
     return done(r, r.lines);
   }
   const o = styledText(frame.paragraphs), n = styledText(paragraphs);
@@ -100,25 +109,89 @@ export function editedBox(prev: TextBox, paragraphs: Run[][], p: Paragraph, metr
   let b = 0;
   const at = (s: { text: string; styles: string[] }, k: number) => s.text.length - 1 - k;
   while (b < most - a && o.text[at(o, b)] === n.text[at(n, b)] && o.styles[at(o, b)] === n.styles[at(n, b)]) b++;
-  const delta = n.text.length - o.text.length, tail = n.text.length - b;
+  const delta = n.text.length - o.text.length, tail = n.text.length - b, oEnd = o.text.length - b;
+  const ob = new BoxText(frame.paragraphs, metricsFor), nb = new BoxText(paragraphs, metricsFor);
 
-  const before = orig.slice(1).filter((r) => r.start <= a).map((r) => r.start);
-  let r = lay(before);
-  const settled = r.ranges.findIndex((x, k) => k > 0 && k < orig.length && x.start >= tail && x.start - delta === orig[k].start);
-  if (settled > 0) r = lay([...before, ...orig.slice(settled).map((x) => x.start + delta)]);
+  // Justified text is set in its real column (the ink width of its lines), not the box paragraphFrame widened to the
+  // natural width of a line Word had compressed: its lines may compress their spaces by JUSTIFY_SQUEEZE, or by as much
+  // as an original line was (Word did it, so it may again).
+  const { width, squeeze } = align === "justify"
+    ? justifyFrame(orig, ob, prev.rect.w, p.rect.w + WIDTH_SLACK) : { width: prev.rect.w, squeeze: 0 };
+  const lay = (breaks: number[], fit?: number) => layoutText({
+    width, align, lineHeight: prev.lineHeight, paragraphs, breaks, fit, squeeze,
+  }, metricsFor);
+
+  // Every original break the edit leaves, where it is now; none inside the changed text.
+  const kept = orig.slice(1).flatMap((x) => (x.start <= a ? [x.start] : x.start >= oEnd ? [x.start + delta] : []));
+  let r = kept.length === orig.length - 1 ? lay(kept, growWidth(p, width, metricsFor)) : null;
+  if (r && !keepsBreaks(r.ranges, kept, orig, a, oEnd, ob, nb, width, squeeze)) r = null;
+  if (!r) {
+    const before = orig.slice(1).filter((x) => x.start <= a).map((x) => x.start);
+    r = lay(before);
+    const settled = r.ranges.findIndex((x, k) => k > 0 && k < orig.length && x.start >= tail && x.start - delta === orig[k].start);
+    if (settled > 0) r = lay([...before, ...orig.slice(settled).map((x) => x.start + delta)]);
+  }
+  const ranges = r.ranges;
+  const edit = { o: ob, n: nb, a, tail, delta };
   const layout = r.lines.map((line, k) => {
-    const x = r.ranges[k], was = orig[k];
+    const x = ranges[k], was = orig[k];
     const same = !!was && x.end > x.start && x.last === was.last && (
       (x.end <= a && x.start === was.start && x.end === was.end)
       || (x.start >= tail && x.start - delta === was.start && x.end - delta === was.end));
-    return same ? { ...line, source: k } : line;
+    if (same) return { ...line, source: k };
+    // An edited original line (same index, same start): its words where the original had them.
+    const starts = !!was && (x.start <= a ? x.start === was.start : x.start >= tail && x.start - delta === was.start);
+    const pl = p.lines[k];
+    // Justified out to the paragraph's right edge in the original (a line the layout ends a logical paragraph with, at a
+    // break it guessed hard, may still be one).
+    const stretched = align === "justify" && k < p.lines.length - 1 && Math.abs(pl.rect.x + pl.rect.w - (p.rect.x + p.rect.w)) <= 1;
+    return (starts && anchorLine(edit, line, x, was, pl, k, { align, stretched, boxX: prev.rect.x, squeeze })) || line;
   });
-  // A kept line must also sit on its original baseline, as the bake requires: where the original spaced its lines
-  // unevenly, the grid line (lineHeight) is elsewhere, and keeping the glyphs there would disagree with the screen.
+  // A kept line (or prefix) must also sit on its original baseline, as the bake requires: where the original spaced its
+  // lines unevenly, the grid line (lineHeight) is elsewhere, and keeping the glyphs there would disagree with the screen.
   const box = done(r, layout);
   const onBaseline = (line: LayoutLine, k: number) =>
     Math.abs(box.rect.y + line.baseline - p.lines[k].baseline) <= Math.max(KEEP_Y_TOL, KEEP_Y_EM * p.lines[k].size);
-  return { ...box, layout: box.layout.map((line, k) => (line.source != null && !onBaseline(line, k) ? unkept(line) : line)) };
+  return { ...box, layout: box.layout.map((line, k) => ((line.source != null || line.prefix) && !onBaseline(line, k) ? unkept(line) : line)) };
+}
+
+/**
+ * Whether a layout with the original breaks `kept` (M5d) holds: it broke nowhere else (every edited line fit), and no
+ * edited original line (one holding characters [a, oEnd) of the original, or the insertion point) that is not the last
+ * of its paragraph got short enough for the next line's first word to fit on it at the box `width`, where it did not
+ * fit on the original line (an edit that shortens a line by a letter leaves it alone, as Word would).
+ */
+function keepsBreaks(ranges: LineRange[], kept: number[], orig: LineRange[], a: number, oEnd: number, o: BoxText,
+  n: BoxText, width: number, squeeze: number): boolean {
+  if (ranges.length !== kept.length + 1 || ranges.some((x, k) => k > 0 && x.start !== kept[k - 1])) return false;
+  // Holds characters [s, e) and the first word at `next` (paragraph text `t`) on one line at `width`?
+  const fits = (t: BoxText, s: number, next: number) => {
+    const word = /^\S*/.exec(t.text.slice(next))![0];
+    return t.ink(s, next + word.length) <= width + squeeze * t.spaces(s, next) + 1e-6;
+  };
+  return orig.every((was, k) => {
+    const end = k + 1 < orig.length ? orig[k + 1].start - 1 : o.text.length;
+    if (was.last || oEnd < was.start || a > end) return true; // not edited, or nothing to pull up
+    return !fits(n, ranges[k].start, ranges[k + 1].start) || fits(o, was.start, orig[k + 1].start);
+  });
+}
+
+/** The width and squeeze (share by which spaces may compress) an edited justified paragraph is set with: its real column
+ *  `column` (the ink width of its lines) and JUSTIFY_SQUEEZE. Where Word compressed an original line, its lines may
+ *  compress JUSTIFY_MORE beyond the tightest one (Word set them so, a letter more is still a tight line, not a reflow),
+ *  up to MAX_SQUEEZE. When an original line can't fit the column so (a line without spaces measured wider), the box
+ *  width `box` as before. */
+function justifyFrame(orig: LineRange[], o: BoxText, box: number, column: number): { width: number; squeeze: number } {
+  let tightest = 0;
+  for (const x of orig) {
+    const over = o.ink(x.start, x.end) - column;
+    if (over <= 0) continue;
+    const spaces = o.spaces(x.start, x.end);
+    if (!spaces || over / spaces > MAX_SQUEEZE) return { width: box, squeeze: JUSTIFY_SQUEEZE };
+    tightest = Math.max(tightest, over / spaces);
+  }
+  const squeeze = tightest ? Math.min(MAX_SQUEEZE, Math.max(JUSTIFY_SQUEEZE, tightest + JUSTIFY_MORE)) : JUSTIFY_SQUEEZE;
+  return { width: Math.min(box, column), squeeze };
 }
 
 function unkept(line: LayoutLine): LayoutLine {

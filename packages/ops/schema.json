@@ -492,7 +492,7 @@
     },
     "LayoutLine": {
       "additionalProperties": false,
-      "description": "`source` (text.edit only): the index of the original paragraph line this line repeats unchanged (same\ntext, styles and line break, in place). The bake then keeps that line's original glyphs: it neither redacts\nnor redraws it. If the line no longer matches the original, the bake redraws it from `segments`.",
+      "description": "`source` (text.edit only): the index of the original paragraph line this line repeats unchanged (same\ntext, styles and line break, in place). The bake then keeps that line's original glyphs: it neither redacts\nnor redraws it. If the line no longer matches the original, the bake redraws it from `segments`.\n`prefix` (text.edit only, M5d): the line is an edited original line whose first words stay as they were. The\nbake keeps their original glyphs and redraws the rest of the line, from the original x of its first other\nword on; if the prefix no longer matches the original, it redraws the whole line from `segments`.",
       "properties": {
         "baseline": {
           "title": "Baseline",
@@ -517,6 +517,17 @@
           ],
           "default": null,
           "title": "Source"
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LinePrefix"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -574,6 +585,28 @@
         "src"
       ],
       "title": "LayoutPage",
+      "type": "object"
+    },
+    "LinePrefix": {
+      "additionalProperties": false,
+      "description": "The first `segments` segments of a layout line repeat the first words of original line `source` unchanged,\nin place (see LayoutLine.prefix).",
+      "properties": {
+        "source": {
+          "minimum": 0,
+          "title": "Source",
+          "type": "integer"
+        },
+        "segments": {
+          "minimum": 1,
+          "title": "Segments",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source",
+        "segments"
+      ],
+      "title": "LinePrefix",
       "type": "object"
     },
     "LinkAdd": {
