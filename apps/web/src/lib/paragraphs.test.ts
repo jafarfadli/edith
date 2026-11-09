@@ -103,11 +103,18 @@ describe("paragraphBox", () => {
 });
 
 describe("maskRects", () => {
-  it("covers each line around its baseline", () => {
+  it("covers each line around its baseline, down to the next covered line", () => {
     const p = paragraphs[0];
-    const [m] = maskRects(p);
-    expect(m.y).toBeCloseTo(p.lines[0].baseline - 0.95 * p.lines[0].size);
-    expect(m.h).toBeCloseTo(1.2 * p.lines[0].size);
+    expect(p.lines.length).toBeGreaterThan(1);
+    const masks = maskRects(p);
+    const [first, second] = p.lines;
+    expect(masks[0].y).toBeCloseTo(first.baseline - 0.95 * first.size);
+    // No gap between two covers for descenders to peek through (at most one size below the baseline).
+    expect(masks[0].y + masks[0].h).toBeCloseTo(Math.max(first.baseline + 0.25 * first.size,
+      Math.min(second.baseline - 0.95 * second.size, first.baseline + first.size)));
+    const last = p.lines[p.lines.length - 1], m = masks[masks.length - 1];
+    expect(m.y).toBeCloseTo(last.baseline - 0.95 * last.size);
+    expect(m.h).toBeCloseTo(1.2 * last.size);
   });
 });
 

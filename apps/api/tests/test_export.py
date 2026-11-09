@@ -137,6 +137,35 @@ def test_export_text_edit(client):
     assert r.status_code == 422 and r.json()["error"] == {"code": "invalid_op", "message": "no paragraph g9 on o0", "op_index": 0}
 
 
+@pytest.mark.parametrize("layout", [[], [{"baseline": 12, "segments": []}]])
+def test_export_blank_text_edit_deletes_only_that_paragraph(client, layout):
+    """A deleted paragraph as the editor sends it (Delete, or every character removed): one empty run, no segments
+    (or no line). Its words leave the text and the pixels; the neighbour, the red line through it and the image stay."""
+    from tests.pdfs import make_edit_pdf
+    src = make_edit_pdf()
+    doc_id = client.post("/documents", files={"file": ("e.pdf", src, "application/pdf")}).json()["doc_id"]
+    run = {"text": "", "font": {"kind": "bundled", "family": "Arimo"}, "size": 12, "color": "#000000"}
+    edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
+        "rect": R(72, 88, 300, 28), "lineHeight": 12, "paragraphs": [[run]], "layout": layout}}
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": 3})
+    assert r.status_code == 200, r.text
+    out, before = pymupdf.open(stream=r.content, filetype="pdf")[0], pymupdf.open(stream=src, filetype="pdf")[0]
+    text = " ".join(out.get_text().split())
+    assert "diedit" not in text and "baris dua" not in text
+    assert "Paragraf tetangga tetap utuh di sini sampai akhir." in text
+
+    def gray(page, rect):
+        return page.get_pixmap(dpi=144, clip=pymupdf.Rect(*rect), colorspace=pymupdf.csGRAY).samples
+
+    g0 = (84, 91, 290, 110)  # right of the red line, above the neighbour's ascenders
+    assert min(gray(before, g0)) < 100 and min(gray(out, g0)) == 255
+    for rect in [(84, 118, 300, 140), (300, 90, 340, 115)]:  # the neighbour, the image
+        assert gray(out, rect) == gray(before, rect)
+    # The red line, under the deleted glyphs too: red all along (redaction painted nothing).
+    line = out.get_pixmap(dpi=144, clip=pymupdf.Rect(79.6, 86, 80.4, 117))
+    assert {line.pixel(x, y) for x in range(line.width) for y in range(line.height)} == {(255, 0, 0)}
+
+
 def test_export_with_imported_document(client):
     doc_id = new_doc(client, pages=1)
     imported = new_doc(client, pages=2, size=(300, 400))

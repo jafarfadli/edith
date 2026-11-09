@@ -32,8 +32,10 @@ export function movesFor(ids: readonly string[]): Record<ZMove, boolean> {
 /** The object context menu: where it opens (window coordinates), the object it acts on, and the objects under the
  *  pointer (topmost first) for "Pilih elemen di bawah". */
 export interface ObjectMenu { x: number; y: number; target: string; stack: string[] }
+/** The menu of the selected paragraph of original (or OCR) text, not edited yet: Edit teks, Hapus teks. */
+export interface ParagraphMenu { x: number; y: number; paragraph: { pageKey: string; id: string } }
 
-export const contextMenuStore = createStore<{ menu: ObjectMenu | null; open(m: ObjectMenu): void; close(): void }>()((set) => ({
+export const contextMenuStore = createStore<{ menu: ObjectMenu | ParagraphMenu | null; open(m: ObjectMenu | ParagraphMenu): void; close(): void }>()((set) => ({
   menu: null,
   open: (menu) => set({ menu }),
   close: () => set({ menu: null }),

@@ -221,6 +221,9 @@ export function maskRects(p: Paragraph, box?: TextBox): Rect[] {
     let top = l.baseline - MASK_ASCENT * l.size, bottom = l.baseline + MASK_DESCENT * l.size;
     if (above && kept.has(i - 1)) top = Math.max(top, Math.min(meet(above, l), above.baseline + MASK_DESCENT * above.size));
     if (below && kept.has(i + 1)) bottom = Math.min(bottom, Math.max(meet(l, below), below.baseline - MASK_ASCENT * below.size));
+    // Down to the next covered line when the leading leaves a gap: descenders reaching past the band (antialiased
+    // edges, a deleted paragraph's 'g' and 'y') do not peek out between two covers.
+    else if (below && !cuts.has(i + 1)) bottom = Math.max(bottom, Math.min(below.baseline - MASK_ASCENT * below.size, l.baseline + l.size));
     const rest = rightOf(l, cuts.get(i));
     if (!rest) return [];
     // A kept prefix shows up to its next word: the cover starts there (that word's glyph starts at its x).

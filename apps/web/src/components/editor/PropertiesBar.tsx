@@ -1,7 +1,7 @@
 "use client";
 
 import type { ContentOp } from "@edith/ops";
-import { Info, Trash2, Undo2 } from "lucide-react";
+import { Info, Trash2, Type, Undo2 } from "lucide-react";
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { useStore } from "zustand";
 import type { Dash } from "@/lib/geometry";
@@ -13,10 +13,10 @@ import { srcKey } from "@/lib/sources";
 import { toolHint } from "@/lib/toolKeys";
 import { STAMP_COLORS } from "@/lib/stamps";
 import { ICON, ICON_SM } from "../ui/icon";
-import { BTN_DANGER, FIELD, PROP_LABEL, swatch } from "../ui/styles";
+import { BTN_DANGER, BTN_QUIET, FIELD, PROP_LABEL, swatch } from "../ui/styles";
 import { Tip } from "../ui/Tooltip";
 import { ColorField } from "./ColorField";
-import { textEditStore } from "./text/textEdit";
+import { deleteObjectOrText, deleteSelectedParagraph, editSelectedParagraph, isDeletedText, isTextEdit, textEditStore } from "./text/textEdit";
 
 // Filled by the text tool once its (lazily loaded) module is installed. The bar can already be open by then (the text
 // tool's hint keeps it visible), so installing it re-renders the bar.
@@ -96,10 +96,12 @@ export function PropertiesBar() {
   const renderTextProps = useSyncExternalStore(subscribeSlot, getSlot, getSlot);
   const selection = useEditor((s) => s.selection);
   const op = useEditor((s) => (s.selection ? s.doc.objects[s.selection] : undefined));
-  const reverts = op?.type === "text.edit" || op?.type === "text.ocr_edit";
+  const reverts = isTextEdit(op);
   const tool = useEditor((s) => s.tool);
   const style = useEditor((s) => s.style);
   const editingText = useStore(textEditStore, (st) => !!st.editing);
+  // An original (or OCR) paragraph selected with the select tool, not edited yet.
+  const paragraphSelected = useStore(textEditStore, (st) => !!st.paragraph) && tool === "select" && !selection && !editingText;
   const kind = editingText ? "text" : kindOf(op, tool);
   // The text tool on a page without text (a scan): say why there is nothing to edit.
   const scanned = useEditor((st) => {
@@ -160,8 +162,9 @@ export function PropertiesBar() {
     }
   }
 
-  // What the active tool does, while nothing is selected (with a selection the bar is about that object).
-  const hint = !selection && !editingText ? toolHint(tool) : null;
+  // What the active tool does, while nothing is selected (with a selection the bar is about that object); with an
+  // original paragraph selected, what can be done to it.
+  const hint = paragraphSelected ? t.text.selectedHint : !selection && !editingText ? toolHint(tool) : null;
   const [foldHint, observeRow] = useHintFold(hint);
   // Hidden when it would be empty (Pilih with nothing selected).
   const empty = !hint && !selection && !showOpacity && !scanned && !noText
@@ -244,6 +247,28 @@ export function PropertiesBar() {
           </label>
         )}
         {kind === "text" && scanned && <span className="text-xs text-warn">{t.text.scanned}</span>}
+        {paragraphSelected && (
+          <>
+            <span aria-hidden className="h-5 w-px shrink-0 bg-line" />
+            <button onClick={editSelectedParagraph} className={BTN_QUIET}><Type {...ICON} />{t.text.edit}</button>
+            <Tip label={t.text.delete} keys="Delete">
+              <button onClick={() => { deleteSelectedParagraph(); }} aria-keyshortcuts="Delete" className={BTN_DANGER}>
+                <Trash2 {...ICON} />{t.text.delete}
+              </button>
+            </Tip>
+          </>
+        )}
+        {reverts && selection && !isDeletedText(op) && (
+          // Delete on an edit of original text: its text goes, the edit stays (blank).
+          <>
+            <span aria-hidden className="h-5 w-px shrink-0 bg-line" />
+            <Tip label={t.text.delete} keys="Delete">
+              <button onClick={() => deleteObjectOrText(selection)} aria-keyshortcuts="Delete" className={BTN_DANGER}>
+                <Trash2 {...ICON} />{t.text.delete}
+              </button>
+            </Tip>
+          </>
+        )}
         {selection && (
           // Deleting a text.edit op brings the original paragraph back; a text.ocr_edit op, the original picture of it.
           <>

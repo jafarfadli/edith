@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCopy, Copy, Trash2, type LucideIcon } from "lucide-react";
+import { ClipboardCopy, Copy, Trash2, Type, Undo2, type LucideIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
@@ -18,7 +18,8 @@ import { useIsMac } from "../../ui/useIsMac";
 import { usePopupFocus } from "../../ui/usePopupFocus";
 import { OBJECT_ICONS } from "../objectIcons";
 import { copySelection, duplicateSelection } from "./clipboard";
-import { contextMenuStore, Z_COMMANDS, type ObjectMenu } from "./layering";
+import { contextMenuStore, Z_COMMANDS, type ObjectMenu, type ParagraphMenu } from "./layering";
+import { deleteObjectOrText, deleteSelectedParagraph, editSelectedParagraph, isDeletedText, isTextEdit, textEditStore } from "../text/textEdit";
 
 /** Distance (px) the menu keeps from the window's edges. */
 const EDGE = 8;
@@ -44,10 +45,11 @@ function colourOf(op: ContentOp): string | null {
 export function ObjectContextMenu() {
   const menu = useStore(contextMenuStore, (s) => s.menu);
   // A new menu (another right-click) is a new instance: position, focus and "focus before" start over.
-  return menu ? <Menu key={`${menu.target}:${menu.x}:${menu.y}`} menu={menu} /> : null;
+  const target = menu && ("paragraph" in menu ? `${menu.paragraph.pageKey}/${menu.paragraph.id}` : menu.target);
+  return menu ? <Menu key={`${target}:${menu.x}:${menu.y}`} menu={menu} /> : null;
 }
 
-function Menu({ menu }: { menu: ObjectMenu }) {
+function Menu({ menu }: { menu: ObjectMenu | ParagraphMenu }) {
   const ref = useRef<HTMLDivElement>(null);
   const before = useRef<HTMLElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -55,7 +57,11 @@ function Menu({ menu }: { menu: ObjectMenu }) {
   const selection = useEditor((s) => s.selection);
   const tool = useEditor((s) => s.tool);
   const mac = useIsMac();
-  const op = doc.objects[menu.target];
+  const paragraph = "paragraph" in menu ? menu.paragraph : null;
+  const op = paragraph ? undefined : doc.objects[(menu as ObjectMenu).target];
+  // A paragraph's menu lasts while it stays selected and not edited.
+  const paragraphOn = useStore(textEditStore, (s) => !!paragraph && s.paragraph?.pageKey === paragraph.pageKey
+    && s.paragraph.id === paragraph.id && !s.editing);
 
   // Where focus was (to give it back on Escape); read before usePopupFocus moves it into the menu.
   useLayoutEffect(() => {
@@ -88,11 +94,12 @@ function Menu({ menu }: { menu: ObjectMenu }) {
     };
   }, []);
 
-  useEffect(() => { if (!op) close(); }, [op]); // deleted or undone meanwhile
+  const gone = paragraph ? !paragraphOn : !op;
+  useEffect(() => { if (gone) close(); }, [gone]); // deleted, undone or edited meanwhile
   useEffect(() => { if (tool !== "select") close(); }, [tool]); // a tool key pressed while focus was elsewhere
 
   const onKey = usePopupFocus({ open: true, popup: ref, trigger: before, items: "[role^=menuitem]:not(:disabled)", orientation: "vertical", close });
-  if (!op) return null;
+  if (gone) return null;
 
   /** Closes, gives focus back (keyboard use), then runs the command. */
   const pick = (run: () => void) => () => {
@@ -100,14 +107,6 @@ function Menu({ menu }: { menu: ObjectMenu }) {
     close();
     run();
   };
-  const moves = zMoves(doc, [op.id]);
-  const copyable = isCopyable(op);
-  const stage = zStage(op);
-  const pageHasMarkup = doc.order.some((id) => { const o = doc.objects[id]; return !!o && o.pageKey === op.pageKey && zStage(o) === "annot"; });
-  const note = stage === "redact" ? t.layers.redactBelow : stage === "link" ? t.layers.linkAbove
-    : stage === "annot" || pageHasMarkup ? t.layers.markupAbove : null;
-  const s = editorStore.getState();
-
   const item = (key: string, label: string, Icon: LucideIcon, run: () => void, opts: { keys?: string; disabled?: boolean; danger?: boolean } = {}) => (
     <button key={key} role="menuitem" disabled={opts.disabled} aria-keyshortcuts={opts.keys && ariaKeys(opts.keys, mac)} onClick={pick(run)}
       className={`${MENU_ITEM} ${opts.danger ? "text-danger-text" : "text-ink"}`}>
@@ -116,9 +115,8 @@ function Menu({ menu }: { menu: ObjectMenu }) {
       {opts.keys && <Kbd keys={opts.keys} />}
     </button>
   );
-
-  return createPortal(
-    <div ref={ref} role="menu" aria-label={t.layers.contextMenu} data-testid="object-menu"
+  const shell = (label: string, testId: string, children: React.ReactNode) => createPortal(
+    <div ref={ref} role="menu" aria-label={label} data-testid={testId}
       // Every key stays in the menu: arrows, Enter, Escape, Tab are its own (usePopupFocus); letters must not switch
       // the editor's tool, Delete not delete the object, behind it.
       onKeyDown={(e) => { onKey(e); e.stopPropagation(); }}
@@ -128,19 +126,47 @@ function Menu({ menu }: { menu: ObjectMenu }) {
       // usePopupFocus focuses the first item right after that first render.
       style={{ left: pos?.left ?? menu.x, top: pos?.top ?? menu.y, maxHeight: `calc(100dvh - ${2 * EDGE}px)` }}
       className={`fixed z-50 flex w-max min-w-60 max-w-80 flex-col overflow-y-auto p-1 ${POPOVER}`}>
+      {children}
+    </div>,
+    document.body,
+  );
+
+  // Original (or OCR) text not edited yet: what can be done to it.
+  if (!op) {
+    return shell(t.text.menu, "text-menu", <>
+      {item("edit", t.text.edit, Type, editSelectedParagraph)}
+      {item("delete", t.text.delete, Trash2, () => { deleteSelectedParagraph(); }, { keys: "Delete", danger: true })}
+    </>);
+  }
+
+  // An edit of original text: Delete takes its text (once); bringing the original back is said as such.
+  const textEdit = isTextEdit(op);
+  const moves = zMoves(doc, [op.id]);
+  const copyable = isCopyable(op);
+  const stage = zStage(op);
+  const pageHasMarkup = doc.order.some((id) => { const o = doc.objects[id]; return !!o && o.pageKey === op.pageKey && zStage(o) === "annot"; });
+  const note = stage === "redact" ? t.layers.redactBelow : stage === "link" ? t.layers.linkAbove
+    : stage === "annot" || pageHasMarkup ? t.layers.markupAbove : null;
+  const s = editorStore.getState();
+  const stack = (menu as ObjectMenu).stack;
+
+  return shell(t.layers.contextMenu, "object-menu", <>
       {Z_COMMANDS.map((c) => item(c.move, c.label, c.icon, () => s.reorderObjects([op.id], c.move), { keys: zKeys(mac)[c.move], disabled: !moves[c.move] }))}
       <div role="separator" className="mx-1 my-1 h-px bg-line" />
       {copyable && item("duplicate", t.objects.duplicate, Copy, () => { s.select(op.id); duplicateSelection(); }, { keys: "Mod+D" })}
       {copyable && item("copy", t.objects.copy, ClipboardCopy, () => { s.select(op.id); copySelection(); }, { keys: "Mod+C" })}
-      {item("delete", t.editor.delete, Trash2, () => s.deleteObject(op.id), { keys: "Delete", danger: true })}
-      {menu.stack.length > 1 && (
+      {textEdit && item("revert", t.text.revert, Undo2, () => s.deleteObject(op.id))}
+      {textEdit
+        ? item("delete", t.text.delete, Trash2, () => deleteObjectOrText(op.id), { keys: "Delete", danger: true, disabled: isDeletedText(op) })
+        : item("delete", t.editor.delete, Trash2, () => s.deleteObject(op.id), { keys: "Delete", danger: true })}
+      {stack.length > 1 && (
         <div role="group" aria-label={t.layers.pickBelow} className="flex flex-col">
           <div role="separator" className="mx-1 my-1 h-px bg-line" />
           <div aria-hidden className="flex h-7 items-center gap-2 px-2 text-2xs font-medium text-faint">
             <span className="flex-1 uppercase tracking-wider">{t.layers.pickBelow}</span>
             <Kbd keys={t.layers.altClick} />
           </div>
-          {menu.stack.map((id) => {
+          {stack.map((id) => {
             const o = doc.objects[id];
             if (!o) return null;
             const { icon, label, detail } = objectLabel(o);
@@ -161,7 +187,5 @@ function Menu({ menu }: { menu: ObjectMenu }) {
         </div>
       )}
       {note && <p className="max-w-60 px-2 pb-1.5 pt-2 text-2xs leading-snug text-faint">{note}</p>}
-    </div>,
-    document.body,
-  );
+  </>);
 }
