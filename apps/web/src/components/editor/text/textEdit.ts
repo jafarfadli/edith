@@ -2,13 +2,13 @@
 
 import { createStore } from "zustand/vanilla";
 import type { Editor } from "@tiptap/core";
-import type { ContentOp, Rect, Run, TextBox, TextEdit } from "@edith/ops";
+import type { ContentOp, Run, TextBox, TextEdit } from "@edith/ops";
 import type { OcrParagraph, Paragraph, ParagraphLine } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
 import { markupOverLines } from "@/lib/markup";
 import { noticeStore } from "@/lib/notices";
 import { newId } from "@/lib/id";
-import { ocrEditOp } from "@/lib/ocr";
+import { ocrEditOp, type OcrCover } from "@/lib/ocr";
 import { editedBox, keepFirstBaseline } from "@/lib/keepLines";
 import { keptLines, keptPrefixes, paragraphBox, preloadFallback, prepareRuns, replacedLines, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
@@ -27,7 +27,7 @@ export interface Editing {
   id: string; pageKey: string; box: TextBox; isNew: boolean;
   kind: "text.add" | "text.edit" | "text.ocr_edit";
   paragraphId?: string;
-  ocr?: { cover: Rect; coverColor: string };
+  ocr?: OcrCover;
   /** Paragraphs the session started with (a new text.edit that ends unchanged adds nothing). */
   initial?: Run[][];
 }
@@ -203,10 +203,10 @@ export async function startOcrEdit(pageKey: string, p: OcrParagraph): Promise<vo
   if (textEditStore.getState().editing || pendingCommit) return;
   editorStore.getState().select(null);
   textEditStore.getState().selectParagraph(null);
-  const ocr = { cover: p.cover, coverColor: p.coverColor };
+  const ocr: OcrCover = { cover: p.cover, covers: p.covers, coverColor: p.coverColor };
   const existing = ocrEditFor(editorStore.getState().doc, pageKey, p.id);
   if (existing) {
-    textEditStore.getState().start({ id: existing.id, pageKey, box: existing.box, isNew: false, kind: "text.ocr_edit", paragraphId: p.id, ocr: { cover: existing.cover, coverColor: existing.coverColor } });
+    textEditStore.getState().start({ id: existing.id, pageKey, box: existing.box, isNew: false, kind: "text.ocr_edit", paragraphId: p.id, ocr: { cover: existing.cover, covers: existing.covers, coverColor: existing.coverColor } });
     return;
   }
   let box: TextBox;

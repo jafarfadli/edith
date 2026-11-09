@@ -46,6 +46,7 @@ export type Id2 = string;
 export type Pagekey2 = string;
 export type Type2 = "text.ocr_edit";
 export type Paragraphid1 = string;
+export type Covers = [Rect, ...Rect[]] | null;
 export type Covercolor = string;
 export type Id3 = string;
 export type Pagekey3 = string;
@@ -370,7 +371,9 @@ export interface TextEdit {
  * with `coverColor` (the picture's own background there) over the page's original content, under every drawn object
  * — as a text.edit's original glyphs go — and `box` is drawn in the op's stacking order. Self-contained: the bake
  * reads neither the OCR result nor the source page, so a draft restores and exports without OCR running again.
- * `paragraphId` names the OCR paragraph (ocr0, ocr1, …) for the client: one op per page and id.
+ * `paragraphId` names the OCR paragraph (ocr0, ocr1, …) for the client: one op per page and id. `covers`: one rect per
+ * line of the paragraph (its words' ink, padded): what is painted when given, so a short last line leaves the corner
+ * beside it alone; `cover` is their bounding box (all that is painted without `covers`).
  *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "TextOcrEdit".
@@ -381,6 +384,7 @@ export interface TextOcrEdit {
   type: Type2;
   paragraphId: Paragraphid1;
   cover: Rect;
+  covers?: Covers;
   coverColor: Covercolor;
   box: TextBox;
 }

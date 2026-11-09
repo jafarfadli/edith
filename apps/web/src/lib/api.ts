@@ -34,11 +34,12 @@ export interface Paragraph {
   lock?: ParagraphLock;
 }
 /** A paragraph OCR read in a picture of text (POST /documents/{id}/pages/{n}/ocr, M5d): ids `ocr0`, `ocr1`, … (never an
- *  original paragraph's `gN`), runs in a bundled font. `confidence`: 0–1, the mean of its words. An edit paints `cover`
- *  with `coverColor` (the picture's own background there; `coverUniform` false: not plain, the cover may show) and
- *  draws the new text: a text.ocr_edit op, which carries both. */
+ *  original paragraph's `gN`), runs in a bundled font. `confidence`: 0–1, the mean of its words. An edit paints `covers`
+ *  (one rect per line: its words' ink, padded, clear of other text; `cover` is their bounding box) with `coverColor`
+ *  (the picture's own background there; `coverUniform` false: not plain, the cover may show) and draws the new text: a
+ *  text.ocr_edit op, which carries them. */
 export interface OcrParagraph extends Paragraph {
-  ocr: true; confidence: number; cover: Rect; coverColor: string; coverUniform: boolean;
+  ocr: true; confidence: number; cover: Rect; covers: Rect[]; coverColor: string; coverUniform: boolean;
 }
 /** "ok" (paragraphs found), "none" (no picture of print on the page), "empty" (nothing read), "rotated" (the page is
  *  turned in the PDF), "skewed" (`angle` degrees, too much to read into straight lines), "unreadable", "too_large". */

@@ -29,7 +29,7 @@ export function installTextTool(): void {
     textEditStore.getState().start(op.type === "text.edit"
       ? { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.edit", paragraphId: op.paragraphId }
       : op.type === "text.ocr_edit"
-        ? { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.ocr_edit", paragraphId: op.paragraphId, ocr: { cover: op.cover, coverColor: op.coverColor } }
+        ? { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.ocr_edit", paragraphId: op.paragraphId, ocr: { cover: op.cover, covers: op.covers, coverColor: op.coverColor } }
         : { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.add" });
   };
 

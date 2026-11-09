@@ -765,26 +765,31 @@ def _clear_of(cover: pymupdf.Rect, ink: pymupdf.Rect, others: list[pymupdf.Rect]
     return c
 
 
-def _background(cover: pymupdf.Rect, region: _Region) -> tuple[str, bool]:
-    """The picture's background inside `cover`: the median colour of its pixels away from ink (2 px), and whether it
-    is plain (luminance p90 − p10 ≤ UNIFORM)."""
+def _paper(cover: pymupdf.Rect, region: _Region) -> tuple[np.ndarray, np.ndarray]:
+    """(RGB, luminance) of the picture's pixels inside `cover` away from ink (2 px; all non-ink when that leaves
+    too few)."""
     x0, y0, x1, y1 = region.to_px(cover)
     grey = region.grey[y0:y1, x0:x1]
     if grey.size == 0:
-        return "#ffffff", True
+        return np.zeros((0, 3), dtype=np.uint8), np.zeros(0, dtype=np.uint8)
     ink = grey < region.threshold
     near = ink.copy()
     for dy in (-2, -1, 1, 2):
         near |= np.roll(ink, dy, axis=0)
     for dx in (-2, -1, 1, 2):
         near |= np.roll(ink, dx, axis=1)
-    paper = ~near
-    if paper.sum() < 20:
-        paper = ~ink
-    if paper.sum() < 20:
-        return "#ffffff", False
-    rgb = region.rgb[y0:y1, x0:x1][paper]
-    lum = grey[paper]
+    paper = ~near if (~near).sum() >= 20 else ~ink
+    return region.rgb[y0:y1, x0:x1][paper], grey[paper]
+
+
+def _background(covers: list[pymupdf.Rect], region: _Region) -> tuple[str, bool]:
+    """The picture's background inside `covers` (one paragraph's): the median colour of its pixels away from ink, and
+    whether it is plain (luminance p90 − p10 ≤ UNIFORM)."""
+    parts = [_paper(c, region) for c in covers]
+    rgb = np.concatenate([p[0] for p in parts]) if parts else np.zeros((0, 3), dtype=np.uint8)
+    lum = np.concatenate([p[1] for p in parts]) if parts else np.zeros(0, dtype=np.uint8)
+    if lum.size < 20:
+        return "#ffffff", lum.size == 0
     spread = float(np.percentile(lum, 90) - np.percentile(lum, 10))
     return _hex(np.median(rgb, axis=0)), spread <= UNIFORM
 
@@ -975,14 +980,35 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
             continue
         if not any(c.isalnum() for c in text) and confidence < 0.6:
             continue
-        ws2 = [(w, r) for w, r, _ in ws]
-        cover, region = _cover(ws2, p["lines"], max(r["size"] for r in p["runs"]))
-        mine = {id(w) for w, _ in ws2}
+        # One cover per line, from that line's words: a short last line leaves the corner beside it alone (another
+        # paragraph, a checkbox, a stamp may stand there). Each stops short of other text and of checkboxes; a line
+        # with another paragraph's word inside its own ink gets none (that word's letters would go).
+        region = ws[0][1]
+        mine = {id(w) for w, _, _ in ws}
         others = [regions[i].to_page(w.box) for w, i in words if id(w) not in mine and regions[i] is region]
-        cover = _clear_of(cover, region.to_page(_ink_box([w for w, _ in ws2])), others, region.scale)
-        colour, uniform = _background(cover, region)
+        others += [b for i, b in marks if regions[i] is region]
+        size = max(r["size"] for r in p["runs"])
+        covers = []
+        for j, line in enumerate(p["lines"]):
+            own = [(w, r) for w, r, k in ws if k == j and r is region]
+            if not own:
+                continue
+            ink = region.to_page(_ink_box([w for w, _ in own]))
+            if any(ink.contains((o.tl + o.br) / 2) for o in others):
+                continue
+            cover, _ = _cover(own, [line], size)
+            cover = _clear_of(cover, ink, others, region.scale)
+            if not cover.is_empty:
+                covers.append(cover)
+        if not covers:
+            continue
+        colour, uniform = _background(covers, region)
+        bound = pymupdf.Rect()
+        for c in covers:
+            bound |= c
         p = dict(p, id=f"ocr{len(out)}", ocr=True, confidence=round(confidence, 2),
-                 cover={"x": _num(cover.x0), "y": _num(cover.y0), "w": _num(cover.width), "h": _num(cover.height)},
+                 cover={"x": _num(bound.x0), "y": _num(bound.y0), "w": _num(bound.width), "h": _num(bound.height)},
+                 covers=[{"x": _num(c.x0), "y": _num(c.y0), "w": _num(c.width), "h": _num(c.height)} for c in covers],
                  coverColor=colour, coverUniform=uniform)
         out.append(p)
     return {**result, "quality": "ok" if out else "empty", "paragraphs": out}

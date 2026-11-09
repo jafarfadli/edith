@@ -49,10 +49,10 @@ def overlay(page: pymupdf.Page, result: dict, words: list, out: Path) -> None:
     p = doc[0]
     p.set_rotation(0)
     for para in result["paragraphs"]:
-        c = para["cover"]
         rgb = tuple(int(para["coverColor"][i:i + 2], 16) / 255 for i in (1, 3, 5))
-        p.draw_rect(pymupdf.Rect(c["x"], c["y"], c["x"] + c["w"], c["y"] + c["h"]), color=(0, 0.6, 0), fill=rgb,
-                    fill_opacity=0.35, width=0.4)
+        for c in para["covers"]:
+            p.draw_rect(pymupdf.Rect(c["x"], c["y"], c["x"] + c["w"], c["y"] + c["h"]), color=(0, 0.6, 0), fill=rgb,
+                        fill_opacity=0.35, width=0.4)
         r = para["rect"]
         low = para["confidence"] < LOW
         p.draw_rect(pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"]),

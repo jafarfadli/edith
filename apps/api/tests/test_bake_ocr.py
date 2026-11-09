@@ -151,3 +151,24 @@ def test_export_needs_no_ocr_and_no_paragraph_version(client, scan, monkeypatch)
     r = client.post(f"/documents/{doc}/export", json={"ops": [ocr_edit(body_cover())], "paragraphs_version": 1})
     assert r.status_code == 200, r.text
     assert pymupdf.open(stream=r.content, filetype="pdf")[0].get_text().count(NEW) == 1
+
+
+def test_per_line_covers_leave_the_corner_beside_a_short_last_line(ctx):
+    """An L-shaped paragraph: its two line covers are painted, the text standing in the corner beside its short last
+    line is not (a cover of the bounding box would take it)."""
+    from tests.pdfs import make_lshape_scan_pdf
+    scan = make_lshape_scan_pdf()
+    first = pymupdf.Rect(70.5, 190, 450, 203)    # "Dengan ini kami menyatakan … benar"
+    last = pymupdf.Rect(70.5, 204, 230, 217)     # "dan dapat dipertanggungjawabkan."
+    corner = pymupdf.Rect(328, 204, 440, 217)    # "Jumlah: Rp 500.000", beside the short last line
+    op = ocr_edit(first | last, text="x")
+    op["covers"] = [R(first), R(last)]
+    op["coverColor"] = "#ffffff"
+    before, after = pixels(scan), pixels(bake(scan, ops(op), ctx))
+    assert np.array_equal(before[px(corner)], after[px(corner)])
+    assert (before[px(corner)] < 128).any()  # there is ink there
+    assert (after[px(pymupdf.Rect(80, 206, 220, 215))] > 245).all()  # the old last line is gone
+    bad = ocr_edit(first, text="x")
+    bad["covers"] = [R(first), {"x": 0, "y": 0, "w": float("nan"), "h": 1}]
+    with pytest.raises(ValidationError):
+        ops(bad)

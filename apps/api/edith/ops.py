@@ -138,6 +138,7 @@ class TextEdit(_Content):
 
 
 MAX_SIDE = 14400  # pt: the largest page side PDF allows
+MAX_COVERS = 500  # lines one OCR paragraph's edit may cover
 
 
 class TextOcrEdit(_Content):
@@ -145,18 +146,21 @@ class TextOcrEdit(_Content):
     with `coverColor` (the picture's own background there) over the page's original content, under every drawn object
     — as a text.edit's original glyphs go — and `box` is drawn in the op's stacking order. Self-contained: the bake
     reads neither the OCR result nor the source page, so a draft restores and exports without OCR running again.
-    `paragraphId` names the OCR paragraph (ocr0, ocr1, …) for the client: one op per page and id."""
+    `paragraphId` names the OCR paragraph (ocr0, ocr1, …) for the client: one op per page and id. `covers`: one rect per
+    line of the paragraph (its words' ink, padded): what is painted when given, so a short last line leaves the corner
+    beside it alone; `cover` is their bounding box (all that is painted without `covers`)."""
     type: Literal["text.ocr_edit"]
     paragraphId: str = Field(pattern=r"^ocr\d+$")
     cover: Rect
+    covers: list[Rect] | None = Field(default=None, min_length=1, max_length=MAX_COVERS)
     coverColor: HexColor
     box: TextBox
 
     @model_validator(mode="after")
     def _cover_finite(self):
-        c = self.cover
-        if not all(math.isfinite(v) for v in (c.x, c.y, c.w, c.h)) or c.w > MAX_SIDE or c.h > MAX_SIDE:
-            raise ValueError("cover must be finite and at most 14400 pt wide and high")
+        for c in [self.cover, *(self.covers or [])]:
+            if not all(math.isfinite(v) for v in (c.x, c.y, c.w, c.h)) or c.w > MAX_SIDE or c.h > MAX_SIDE:
+                raise ValueError("covers must be finite and at most 14400 pt wide and high")
         return self
 
 

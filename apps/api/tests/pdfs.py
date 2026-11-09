@@ -959,3 +959,25 @@ def make_scan_form_pdf(family: str = "Tinos", angle: float = 0.0, noise: float =
     target = scan.new_page(width=595, height=842)
     target.insert_image(target.rect, stream=data)
     return scan.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+LSHAPE_CORNER = "Jumlah: Rp 500.000"
+
+
+def make_lshape_scan_pdf(dpi: int = 200) -> bytes:
+    """A scanned page whose first paragraph ends in a short line with other text beside it in the corner (at x 330 on
+    the same baseline): a cover of the paragraph's bounding box would paint that text over. Filler lines below."""
+    src = pymupdf.open()
+    p = src.new_page(width=595, height=842)
+    f = dict(fontname="tiro", fontsize=11)
+    p.insert_text((72, 200), "Dengan ini kami menyatakan bahwa seluruh data yang kami isi adalah benar", **f)
+    p.insert_text((72, 214), "dan dapat dipertanggungjawabkan.", **f)
+    p.insert_text((330, 214), LSHAPE_CORNER, **f)
+    p.insert_text((72, 260), "Paragraf lain yang tidak berhubungan sama sekali dengan yang di atas.", **f)
+    for i in range(25):
+        p.insert_text((72, 300 + i * 16), f"Baris pengisi nomor {i} untuk membuat halaman tampak seperti hasil pindai.", **f)
+    pix = p.get_pixmap(dpi=dpi, alpha=False)
+    out = pymupdf.open()
+    q = out.new_page(width=595, height=842)
+    q.insert_image(q.rect, stream=pix.tobytes("png"))
+    return out.tobytes(garbage=3, deflate=True, no_new_id=True)

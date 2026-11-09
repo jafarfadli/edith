@@ -6,7 +6,7 @@ import { Label, Rect, Tag, Text, Transformer } from "react-konva";
 import { useStore } from "zustand";
 import type { Rect as Box, TextBox, TextEdit } from "@edith/ops";
 import type { OcrParagraph, Paragraph } from "@/lib/api";
-import { isLowConfidence, ocrBadge, ocrEditsOn, unedited } from "@/lib/ocr";
+import { coverRects, isLowConfidence, ocrBadge, ocrEditsOn, unedited, type OcrCover } from "@/lib/ocr";
 import { noticeStore } from "@/lib/notices";
 import { maskRects } from "@/lib/paragraphs";
 import { srcKey } from "@/lib/sources";
@@ -65,7 +65,7 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   if (editing?.kind === "text.edit" && editing.pageKey === pageKey && editing.paragraphId) edits.set(editing.paragraphId, undefined);
   const edited = new Set(edits.keys());
   // OCR edits of this page (and the one being typed): their covers, and the OCR paragraphs they replace.
-  const ocrEdits: { id: string; paragraphId: string; cover: Box; coverColor: string }[] = ocrEditsOn(order.map((id) => objects[id]), pageKey);
+  const ocrEdits: ({ id: string; paragraphId: string } & OcrCover)[] = ocrEditsOn(order.map((id) => objects[id]), pageKey);
   if (editing?.kind === "text.ocr_edit" && editing.pageKey === pageKey && editing.ocr && !ocrEdits.some((e) => e.id === editing.id)) {
     ocrEdits.push({ id: editing.id, paragraphId: editing.paragraphId!, ...editing.ocr });
   }
@@ -122,9 +122,9 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
       {paragraphs.filter((p) => edited.has(p.id)).flatMap((p) => maskRects(p, edits.get(p.id)).map((r, i) => (
         <Rect key={`mask-${p.id}-${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="#ffffff" listening={false} />
       )))}
-      {ocrEdits.map((e) => (
-        <Rect key={`cover-${e.id}`} name="ocr-cover" x={e.cover.x} y={e.cover.y} width={e.cover.w} height={e.cover.h} fill={e.coverColor} listening={false} />
-      ))}
+      {ocrEdits.flatMap((e) => coverRects(e).map((r, i) => (
+        <Rect key={`cover-${e.id}-${i}`} name="ocr-cover" x={r.x} y={r.y} width={r.w} height={r.h} fill={e.coverColor} listening={false} />
+      )))}
       {locked.map((l) => (
         <Rect
           key={l.key}

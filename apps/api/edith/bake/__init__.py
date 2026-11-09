@@ -20,7 +20,7 @@ from edith.ops import DocSrc, LayoutPage, PageTarget, PagesLayout
 
 # Handler modules register themselves on import (later tasks add more, e.g. text):
 from edith.bake import annots, draw, ocr, stamps, symbols, text  # noqa: F401,E402  (registers handlers)
-from edith.bake.ocr import keep_redactions  # noqa: E402
+from edith.bake.ocr import cover_rects, keep_redactions  # noqa: E402
 
 # text.edit removes only the glyphs of the edited lines; images and vector art stay.
 TEXT_ONLY = dict(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
@@ -198,7 +198,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             for op in covers:
                 _run(COVERS[op.type], page, op, ctx)
             if covers and boxes:
-                keep_redactions(page, [to_rect(op.cover) for op in covers],
+                keep_redactions(page, [r for op in covers for r in cover_rects(op)],
                                 [(to_rect(op.rect), op.fill) for op in page_ops if op.type == "redact.add"])
             # Drawn content in stacking order (the ops' order is the web's z-order, lowest first: a later op is
             # drawn over an earlier one), then native annotations over it in that order, then links (none under

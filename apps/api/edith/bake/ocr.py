@@ -14,11 +14,17 @@ from edith.bake.util import rgb, to_rect
 from edith.ops import TextOcrEdit
 
 
+def cover_rects(op: TextOcrEdit) -> list[pymupdf.Rect]:
+    """What `op` paints: one rect per line (`covers`), else its one `cover`."""
+    return [to_rect(r) for r in (op.covers or [op.cover])]
+
+
 @register("text.ocr_edit", phase="cover")
 def cover(page: pymupdf.Page, op: TextOcrEdit, ctx) -> None:
-    r = to_rect(op.cover) & page.rect
-    if not r.is_empty:
-        page.draw_rect(r, color=None, fill=rgb(op.coverColor), width=0, overlay=True)
+    for c in cover_rects(op):
+        r = c & page.rect
+        if not r.is_empty:
+            page.draw_rect(r, color=None, fill=rgb(op.coverColor), width=0, overlay=True)
 
 
 @register("text.ocr_edit")

@@ -14,7 +14,8 @@ from edith.errors import OcrFailed, OcrTimeout, OcrTooComplex
 from edith.fonts import FontRegistry
 from edith.settings import Settings
 from tests.pdfs import (SCAN_BODY, SCAN_ROWS, SCAN_TABLE, SCAN_TABLE_RECT, SCAN_TITLE, make_raster_text_pdf,
-                        make_scan_form_pdf, make_pdf, scan_form_words)
+                        make_scan_form_pdf, make_pdf, scan_form_words,
+                        make_lshape_scan_pdf, LSHAPE_CORNER)
 from tests.test_documents import upload
 
 HAVE_TESSERACT = ocr.available()
@@ -138,10 +139,10 @@ def test_background_is_the_paper_around_the_ink_and_says_when_it_is_not_plain():
     grey[40:60, 20:180:6] = 20  # strokes
     rgb[40:60, 20:180:6] = (20, 20, 20)
     region = _region(grey, rgb)
-    colour, plain = ocr._background(pymupdf.Rect(0, 0, 48, 24), region)
+    colour, plain = ocr._background([pymupdf.Rect(0, 0, 48, 24)], region)
     assert colour == "#f0e9dc" and plain
     gradient = np.tile(np.linspace(140, 250, 200).astype(np.uint8), (100, 1))
-    colour, plain = ocr._background(pymupdf.Rect(0, 0, 48, 24), _region(gradient))
+    colour, plain = ocr._background([pymupdf.Rect(0, 0, 48, 24)], _region(gradient))
     assert not plain
 
 
@@ -344,3 +345,26 @@ def test_coloured_paper_and_ink_are_sampled():
         assert max(abs(a - b) for a, b in zip(rgb(p["coverColor"]), (245, 240, 224))) <= 4
         ink = rgb(p["runs"][0]["color"])
         assert ink[2] > ink[0] + 40 and max(ink) < 130  # dark blue
+
+
+@needs_tesseract
+def test_covers_are_per_line_and_leave_other_text_alone():
+    """A paragraph whose short last line has other text beside it: its covers (one per line) hold none of that text."""
+    page = pymupdf.open(stream=make_lshape_scan_pdf(), filetype="pdf")[0]
+    words: list = []
+    ps = ocr.ocr_page(page, registry(), ocr.tesseract_cmd(), words_out=words)["paragraphs"]
+    texts = [text(p) for p in ps]
+    first = ps[next(i for i, t in enumerate(texts) if t.startswith("Dengan ini kami"))]
+    assert len(first["covers"]) == len(first["lines"]) == 2
+    corner = [w[2] for w in words if w[0] in LSHAPE_CORNER.split()]
+    assert corner and all(w.y0 > 200 for w in corner)
+
+    def rect(c):
+        return pymupdf.Rect(c["x"], c["y"], c["x"] + c["w"], c["y"] + c["h"])
+    for p in ps:
+        own = {i for i, w in enumerate(words) if any(rect(ln["rect"]).contains((w[2].tl + w[2].br) / 2) for ln in p["lines"])}
+        for c in map(rect, p["covers"]):
+            assert c in rect(p["cover"]) + (-0.02, -0.02, 0.02, 0.02)
+            for i, w in enumerate(words):
+                if i not in own:
+                    assert not c.intersects(w[2]), (text(p), w[0])

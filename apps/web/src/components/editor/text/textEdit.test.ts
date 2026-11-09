@@ -451,7 +451,7 @@ describe("paragraphs OCR read (M5d)", () => {
     id: "ocr4", rect: { x: 72, y: 290, w: 300, h: 12 }, align: "left", lineHeight: 15, editable: true,
     runs: [{ text: "Halo dunia", font, size: 11, color: "#000000" }],
     lines: [{ rect: { x: 72, y: 290, w: 300, h: 12 }, baseline: 300, size: 11, start: 0, end: 10 }],
-    ocr: true, confidence: 0.9, cover: { x: 70.5, y: 288.5, w: 303, h: 15 }, coverColor: "#f7f5eb", coverUniform: true,
+    ocr: true, confidence: 0.9, cover: { x: 70.5, y: 288.5, w: 303, h: 15 }, covers: [{ x: 70.5, y: 288.5, w: 303, h: 15 }], coverColor: "#f7f5eb", coverUniform: true,
   };
 
   it("an edit becomes a text.ocr_edit with its cover, first baseline in place, one undo step; undo brings the picture back", async () => {
@@ -463,7 +463,7 @@ describe("paragraphs OCR read (M5d)", () => {
     const ops = Object.values(editorStore.getState().doc.objects);
     expect(ops).toHaveLength(1);
     const op = ops[0] as Extract<ContentOp, { type: "text.ocr_edit" }>;
-    expect(op).toMatchObject({ type: "text.ocr_edit", pageKey: "o0", paragraphId: "ocr4", cover: ocrPara.cover, coverColor: "#f7f5eb" });
+    expect(op).toMatchObject({ type: "text.ocr_edit", pageKey: "o0", paragraphId: "ocr4", cover: ocrPara.cover, covers: ocrPara.covers, coverColor: "#f7f5eb" });
     expect(op.box.rect.y + op.box.layout[0].baseline).toBeCloseTo(300);
     expect(editorStore.getState().selection).toBe(op.id);
     editorStore.getState().undo();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TextBox } from "@edith/ops";
 import type { OcrParagraph } from "@/lib/api";
-import { isLowConfidence, LOW_CONFIDENCE, ocrBadge, ocrEditOp, ocrEditsOn, ocrOverflows, ocrQualityMessage, unedited } from "@/lib/ocr";
+import { coverRects, isLowConfidence, LOW_CONFIDENCE, ocrBadge, ocrEditOp, ocrEditsOn, ocrOverflows, ocrQualityMessage, unedited } from "@/lib/ocr";
 import { objectLabel } from "@/lib/objectLabels";
 import { hasOpacity, isCopyable, isRotatable, isTextOp, moveOp } from "@/lib/objects";
 import { zStage } from "@/lib/zorder";
@@ -11,7 +11,8 @@ const run = { text: "Nama Lengkap", font: { kind: "bundled" as const, family: "T
 const para = (id: string, x: number, y: number, confidence = 0.95): OcrParagraph => ({
   id, rect: { x, y, w: 80, h: 12 }, lines: [{ rect: { x, y, w: 80, h: 12 }, baseline: y + 10, size: 11, start: 0, end: 12 }],
   runs: [run], align: "left", lineHeight: 13, editable: true,
-  ocr: true, confidence, cover: { x: x - 1.5, y: y - 1.5, w: 83, h: 15 }, coverColor: "#f7f5eb", coverUniform: true,
+  ocr: true, confidence, cover: { x: x - 1.5, y: y - 1.5, w: 83, h: 15 }, covers: [{ x: x - 1.5, y: y - 1.5, w: 83, h: 15 }],
+  coverColor: "#f7f5eb", coverUniform: true,
 });
 const box = (y: number, lines: number[]): TextBox => ({
   rect: { x: 90, y, w: 200, h: 0 }, align: "left", lineHeight: 13, paragraphs: [[run]],
@@ -29,15 +30,18 @@ describe("OCR paragraphs", () => {
   it("an edit carries its cover, so a restored draft exports without OCR", () => {
     const p = para("ocr3", 90, 166);
     const op = ocrEditOp("e1", "o0", p, box(156, [10]));
-    expect(op).toEqual({ id: "e1", type: "text.ocr_edit", pageKey: "o0", paragraphId: "ocr3", cover: p.cover, coverColor: "#f7f5eb", box: box(156, [10]) });
+    expect(op).toEqual({ id: "e1", type: "text.ocr_edit", pageKey: "o0", paragraphId: "ocr3", cover: p.cover, covers: p.covers, coverColor: "#f7f5eb", box: box(156, [10]) });
     expect(op.cover).not.toBe(p.cover); // a copy: the OCR result may go, the op stays
+    expect(op.covers![0]).not.toBe(p.covers[0]);
+    expect(coverRects(op)).toEqual(p.covers);
+    expect(coverRects({ cover: p.cover })).toEqual([p.cover]); // an op without per-line covers: its one cover
     expect(JSON.parse(JSON.stringify(op))).toEqual(op); // survives a draft (JSON)
   });
 
-  it("an edited paragraph no longer shows as OCR text, by id or under an edit's cover", () => {
+  it("an edited paragraph no longer shows as OCR text, matched by id only (never a neighbour under its cover)", () => {
     const a = para("ocr0", 90, 166), b = para("ocr1", 90, 188), c = para("ocr2", 90, 210);
     const edits = [ocrEditOp("e1", "o0", a, box(156, [10])), ocrEditOp("e2", "o0", { ...b, id: "ocr9" }, box(178, [10]))];
-    expect(unedited([a, b, c], edits).map((p) => p.id)).toEqual(["ocr2"]);
+    expect(unedited([a, b, c], edits).map((p) => p.id)).toEqual(["ocr1", "ocr2"]);
     expect(ocrEditsOn([...edits, undefined, { ...edits[0], pageKey: "o1" }], "o0")).toEqual(edits);
   });
 
