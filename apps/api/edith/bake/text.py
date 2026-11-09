@@ -134,6 +134,7 @@ def redaction_rects(paragraph: dict, keep: frozenset[int] | set[int] = frozenset
 KEEP_X_TOL = 0.5
 KEEP_Y_TOL, KEEP_Y_EM = 1.0, 0.4
 SIZE_TOL = 0.05
+H_SCALE_TOL, SPACING_TOL = 0.0005, 0.005  # hScale, charSpacing / wordSpacing (pt) of a kept line: as measured
 # The whitespace a kept line is compared without: exactly what JavaScript's \s matches (ECMAScript WhiteSpace and
 # LineTerminator), which the client's layout drops at line ends and between justified words. Shared contract with
 # SPACE_CHARS in apps/web/src/lib/keepLines.ts. Not str.isspace(): that also takes U+001C–U+001F and U+0085, and
@@ -182,12 +183,13 @@ def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
 
 def _same_char(orig: tuple[str, dict], new: tuple[str, Run], font_keys) -> bool:
     (c, span), (d, run) = orig, new
-    # GET /text gives horizontally scaled text its true size; the bake's extraction (no font programs) MuPDF's
-    # size · √hScale (paragraphs._scale).
-    sizes = (run.size, run.size * math.sqrt(run.hScale))
-    if c != d or min(abs(s - span["size"]) for s in sizes) > SIZE_TOL or run.color.lower() != span["color"].lower():
+    if c != d or abs(run.size - span["size"]) > SIZE_TOL or run.color.lower() != span["color"].lower():
         return False
     if run.bgColor or run.underline or run.strike:
+        return False
+    # The original's measured scale and spacing (SourcePages measures them as GET /text does): unchanged.
+    if (abs(run.hScale - span.get("hScale", 1)) > H_SCALE_TOL or abs(run.charSpacing - span.get("charSpacing", 0)) > SPACING_TOL
+            or abs(run.wordSpacing - span.get("wordSpacing", 0)) > SPACING_TOL):
         return False
     # A bundled font stands in for an original one the client could not reuse (or lacked a glyph of): accepted.
     return run.font.kind != "original" or name_key(span["font"]["name"]) in font_keys(run.font)

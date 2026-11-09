@@ -235,27 +235,46 @@ def test_a_kept_line_must_name_the_original_font_when_it_uses_one(ctx):
     assert all("Batang" in s["font"] for s in line_spans(other[0], 100))
 
 
-def test_kept_lines_of_a_condensed_paragraph_keep_their_scaling(ctx):
-    """Hancom condenses text with Tz: a redrawn line comes out wider, a kept one exactly as it was."""
+def _condensed_edit(run_style: dict):
+    """keep-lines.pdf (Tz 94.7) with one letter deleted from line 2: lines 1 and 3 sent as kept, runs in `run_style`."""
     from tests.pdfs import KEEP_LINES, make_keep_lines_pdf
     data = make_keep_lines_pdf()
     src = pymupdf.open(stream=data, filetype="pdf")
     p = next(p for p in extract_paragraphs(src[0]) if len(p["lines"]) == 3)
-    font = cid_font_ref(data, "Dotum")
     texts = [KEEP_LINES[0], KEEP_LINES[1].replace("Applicants", "Applicant"), KEEP_LINES[2]]
     layout = [{"baseline": 10.0 + 14 * k, "segments": [{"x": 0, "text": t, "runIndex": 0}], **({"source": k} if k != 1 else {})}
               for k, t in enumerate(texts)]
     op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": p["id"],
           "box": {"rect": {"x": 56, "y": 110, "w": 330, "h": 42}, "align": "left", "lineHeight": 14,
-                  # MuPDF reports a Tz-scaled span's size scaled too (9.73): GET /text and so the client send that.
-                  "paragraphs": [[{"text": " ".join(texts), "font": font, "size": p["runs"][0]["size"], "color": "#000000"}]],
+                  "paragraphs": [[{"text": " ".join(texts), "font": cid_font_ref(data, "Dotum"), "color": "#000000", **run_style}]],
                   "layout": layout}}
+    return data, src, texts, op
+
+
+def test_kept_lines_of_a_condensed_paragraph_keep_their_scaling(ctx):
+    """Hancom condenses text with Tz: GET /text gives the runs the true size and hScale (M5b F2), the kept lines stay
+    exactly as they were and the redrawn one is condensed like them (one letter less: it ends earlier)."""
+    from edith.extract import extract_text
+    data, src, texts, _ = _condensed_edit({})
+    run = next(p for p in extract_text(src, ctx.fonts)["pages"][0]["paragraphs"] if len(p["lines"]) == 3)["runs"][0]
+    assert (run["size"], run["hScale"]) == (10.0, pytest.approx(0.947, abs=0.001))
+    *_, op = _condensed_edit({"size": run["size"], "hScale": run["hScale"]})
     out = reload(bake(data, ops(op), ctx))
     for baseline in (120, 148):
         assert [(s["text"], s["bbox"]) for s in line_spans(out[0], baseline)] == [(s["text"], s["bbox"]) for s in line_spans(src[0], baseline)]
     redrawn, original = line_spans(out[0], 134), line_spans(src[0], 134)
     assert "".join(s["text"] for s in redrawn).strip() == texts[1]
-    assert redrawn[-1]["bbox"][2] > original[-1]["bbox"][2] + 2  # font advances, not Tz 94.7: wider, one letter less
+    assert original[-1]["bbox"][2] - 8 < redrawn[-1]["bbox"][2] < original[-1]["bbox"][2]
+
+
+@pytest.mark.parametrize("style", [{"size": 9.73}, {"size": 10.0}, {"size": 10.0, "hScale": 0.9},
+                                   {"size": 10.0, "hScale": 0.947, "charSpacing": 0.5}])
+def test_a_kept_line_whose_scale_or_spacing_differs_from_the_original_is_redrawn(ctx, style):
+    """Kept lines must carry the original's measured size, hScale, charSpacing and wordSpacing (web keepLines compares
+    the same fields): MuPDF's 9.73, no scale, another scale or added spacing redraw the line."""
+    data, src, _texts, op = _condensed_edit(style)
+    out = reload(bake(data, ops(op), ctx))
+    assert [s["bbox"] for s in line_spans(out[0], 120)] != [s["bbox"] for s in line_spans(src[0], 120)]
 
 
 def synthetic(texts, baselines, align="left", rect=None, size=10.0):

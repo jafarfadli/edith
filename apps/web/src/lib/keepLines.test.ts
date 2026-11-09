@@ -60,6 +60,15 @@ describe("editedBox keeps the lines an edit leaves alone", () => {
     expect(laidOut(box)).toEqual(lineTexts(LEFT).map((t, i) => (i === 0 ? swap(t, "rapi", "rapih") : t)));
   });
 
+  it.each([{ hScale: 0.95 }, { charSpacing: 0.01 }, { wordSpacing: 0.01 }])(
+    "keeps no line whose run's scale or spacing differs from the original's (%o), as the bake checks", (spacing) => {
+      const start = paragraphBox(LEFT, bundled);
+      const run = start.paragraphs[0][0];
+      const box = editedBox(start, [[{ ...run, ...spacing }]], LEFT, bundled);
+      expect(keptLines(box).size).toBe(0);
+      expect(keptLines(editedBox(start, [[{ ...run }]], LEFT, bundled)).size).toBe(LEFT.lines.length);
+    });
+
   it("redraws only a middle line after an edit in it", () => {
     const { box } = edit(LEFT, (t) => swap(t, "selebar", "selebat"));
     expect(sources(box)).toEqual([0, null, 2, 3]);

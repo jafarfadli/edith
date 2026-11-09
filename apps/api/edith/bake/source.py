@@ -4,6 +4,8 @@ import pymupdf
 
 from edith.doc_fonts import load_font, name_key
 from edith.errors import BakeFailed, DocExpired, DocNotFound
+from edith.extract import TextFonts
+from edith.fonts import FontRegistry
 from edith.paragraphs import extract_paragraphs
 
 
@@ -15,11 +17,15 @@ class SourcePages:
     """Read-only views of the uploaded PDFs a layout uses — the edited one and imported ones — for ops that
     refer to their original content: paragraphs (`text.edit`) and embedded fonts (`FontRef` kind "original",
     whose `doc` names an imported PDF; none = the edited one). Paragraph ids come from the same extraction
-    GET /documents/{id}/text uses, run on the untouched source file."""
+    GET /documents/{id}/text uses, run on the untouched source file. With the font `registry`, paragraph runs carry
+    what GET /text measures (true size, hScale, charSpacing, wordSpacing) and name their span's font (`font.name`);
+    without it, only the span's font name and MuPDF's size."""
 
     def __init__(self, main_id: str, source: bytes, page_src: dict[str, tuple[str, int] | None],
-                 load: Callable[[str], bytes] | None = None):
+                 load: Callable[[str], bytes] | None = None, registry: FontRegistry | None = None):
         self._main = main_id
+        self._registry = registry
+        self._text_fonts: dict[str, TextFonts] = {}
         self._docs: dict[str, pymupdf.Document | None] = {main_id: pymupdf.open(stream=source, filetype="pdf")}
         self._load = load
         self._page_src = page_src  # pageKey → (doc id, source page index); None for blank pages
@@ -54,7 +60,18 @@ class SourcePages:
             return None
         if src not in self._paragraphs:
             # Runs name the span's font (not a FontRef): text.edit checks a kept line against it (see kept_lines).
-            self._paragraphs[src] = {p["id"]: p for p in extract_paragraphs(doc[src[1]], _span_font)}
+            page = doc[src[1]]
+            if self._registry is None:
+                found = extract_paragraphs(page, _span_font)
+            else:
+                # As GET /text measures them (true size, hScale, charSpacing, wordSpacing), with the span's font name.
+                if src[0] not in self._text_fonts:
+                    self._text_fonts[src[0]] = TextFonts(doc, self._registry)
+                text_fonts = self._text_fonts[src[0]]
+                resolve, _locked = text_fonts.page(page)
+                found = extract_paragraphs(page, lambda span: {**resolve(span), "name": span["font"]}, None,
+                                           text_fonts.program)
+            self._paragraphs[src] = {p["id"]: p for p in found}
         return self._paragraphs[src].get(paragraph_id)
 
     def font_keys(self, ref: str, doc_id: str | None = None) -> frozenset[str]:

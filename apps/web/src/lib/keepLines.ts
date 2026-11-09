@@ -22,8 +22,11 @@ export function keepFirstBaseline(prev: TextBox, box: TextBox): TextBox {
   return { ...box, rect: { ...box.rect, y: prev.rect.y + before - after } };
 }
 
+/** A character's style, as the bake's kept-line check (bake/text.py _same_char) compares it: with the original's
+ *  measured scale and spacing (Run.hScale / charSpacing / wordSpacing). */
 function styleKey(r: Run): string {
-  return JSON.stringify([fontKey(r.font), r.size, r.color, r.bgColor ?? null, !!r.underline, !!r.strike]);
+  return JSON.stringify([fontKey(r.font), r.size, r.color, r.bgColor ?? null, !!r.underline, !!r.strike,
+    r.hScale ?? 1, r.charSpacing ?? 0, r.wordSpacing ?? 0]);
 }
 
 /** The box text (paragraphs joined by "\n") and the style of each of its characters. */
