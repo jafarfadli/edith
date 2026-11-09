@@ -2,6 +2,19 @@
 
 Editor PDF berbasis web: unggah PDF, edit teks aslinya (paragraf dipisah per sel tabel, butir dan baris formulir; font asli PDF dipakai ulang, termasuk subset CJK tanpa cmap; rich text per kata, Cari & Ganti), tambah teks, bentuk (termasuk poligon, garis bersambung dan awan; garis putus-putus, opasitas dan rotasi), gambar, gambar bebas, whiteout, redaksi, stabilo/garis bawah/coret (anotasi PDF asli), tanda tangan (dengan pustaka di browser), stamp (34 preset Indonesia/Inggris), centang/silang, isi form (opsional diratakan), kelola halaman (putar, duplikat, pindah, hapus, sisip halaman kosong, impor PDF lain yang teks dan form-nya juga bisa diedit), crop, salin/tempel/ratakan objek dan panel Anotasi, lalu unduh.
 
+## Urutan lapisan objek
+
+Objek yang bertumpuk punya urutan lapisan per halaman (posisi di `doc.order`, paling bawah dulu). Klik kanan objek → **Bawa ke depan** (Ctrl/⌘ Shift ]), **Maju satu lapis** (Ctrl/⌘ ]), **Mundur satu lapis** (Ctrl/⌘ [), **Kirim ke belakang** (Ctrl/⌘ Shift [); juga lewat tombol lapisan di bilah kecil objek, dan Shift+F10 membuka menu itu dari keyboard. Alt+klik memilih objek di bawah objek yang dipilih (berulang), dan menu klik kanan mendaftar semua objek di titik itu ("Pilih elemen di bawah"). Setiap perubahan urutan satu langkah urungkan, tersimpan di draf dan ikut diekspor (ops dikirim dalam urutan lapisan, API menggambarnya dalam urutan itu).
+
+Batasnya mengikuti tahap bake API, dan layar menumpuk objek dengan aturan yang sama:
+
+- Redaksi selalu paling bawah: diterapkan sebelum objek apa pun digambar.
+- Objek gambar (whiteout, bentuk, gambar bebas, teks, gambar, tanda tangan, stamp, centang/silang) bisa disusun bebas di antara sesamanya. Whiteout menutupi isi asli PDF dan objek di bawahnya saja.
+- Stabilo, garis bawah, coret dan catatan adalah anotasi PDF asli: selalu di atas semua objek gambar (urutan hanya berlaku di antara sesama anotasi). Link paling atas.
+- Teks asli yang diedit: baris yang diubah ikut urutan lapisan objek editnya, baris yang dipertahankan (glif asli) tetap bagian dari halaman, jadi selalu di bawah semua objek.
+
+Urutan hanya bertukar dengan objek di halaman dan tahap yang sama; tombol yang tidak berpengaruh dinonaktifkan, dan menu menjelaskan batas ini bila relevan.
+
 ## Struktur
 
 - `apps/api` — FastAPI + PyMuPDF. Menyimpan unggahan selama 1 jam dan menerapkan ("bake") operasi edit saat ekspor.
