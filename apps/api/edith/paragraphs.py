@@ -54,6 +54,11 @@ SPACING_MIN = 0.02   # pt: smaller character / word spacing is 0
 FIT_GLYPHS = 3       # glyph advances a span needs before its scale and spacing are measured
 OUTLIER_EM = 0.25    # an advance this far (× size) from the median extra is a jump, not spacing
 MERGE_H, MERGE_TC, MERGE_TW = 0.003, 0.03, 0.15  # spans this close in scale / spacing (pt) share a run
+# What ops.Run accepts: a measurement outside it (an invisible OCR layer at Tz 450, a squashed or degenerate text
+# matrix) leaves the span unmeasured (hScale 1, the reported size, no spacing) rather than an op the export rejects.
+H_RANGE = (0.25, 4.0)
+SIZE_RANGE = (1.0, 500.0)  # pt: a true size outside it is a degenerate matrix, not text to measure
+SPACING_MAX = 100.0        # pt: |charSpacing|, |wordSpacing|
 
 
 @dataclass
@@ -471,18 +476,24 @@ def _quantized(font: "pymupdf.Font", c: str) -> float:
     return math.floor(round(font.glyph_advance(ord(c)) * 1000, 3)) / 1000
 
 
-def _scale(a: float, size: float, original: bool) -> tuple[float, float]:
+def _scale(a: float, size: float, original: bool) -> tuple[float, float] | None:
     """(true size, hScale) of a span whose glyphs advance `a` pt per em. MuPDF reports the size of horizontally
     scaled text (Tz) as size · √hScale (the square root of its matrix's determinant): for an original font, whose
     program widths are the PDF's, the scale is therefore (a / reported size)². A bundled substitute keeps the
-    reported size and is scaled to the original widths (within H_SUBSTITUTE)."""
+    reported size and is scaled to the original widths (within H_SUBSTITUTE). None: no usable measurement (a scale
+    outside H_RANGE, a size outside SIZE_RANGE): the span stays unmeasured."""
+    if not (a > 0 and SIZE_RANGE[0] <= size <= SIZE_RANGE[1]):
+        return None
     if original:
         h = (a / size) ** 2
         if abs(h - 1) <= H_TOL:
             return size, 1.0
         true = round(size / math.sqrt(h), 2)
-        return true, a / true
-    h = a / size
+        if not SIZE_RANGE[0] <= true <= SIZE_RANGE[1]:
+            return None
+        h = round(a / true, 4)
+        return (true, h) if H_RANGE[0] <= h <= H_RANGE[1] else None
+    h = round(a / size, 4)
     return size, (h if abs(h - 1) > H_TOL and H_SUBSTITUTE[0] <= h <= H_SUBSTITUTE[1] else 1.0)
 
 
@@ -496,7 +507,10 @@ def _fit(span: dict, prog: "pymupdf.Font", original: bool, spaces: bool) -> _Fit
               and (q := _quantized(prog, c["c"])) > 0.05 and c["bbox"][2] > c["bbox"][0]]
     if len(ratios) < FIT_GLYPHS:
         return None
-    true, h = _scale(median(ratios), size, original)
+    scaled = _scale(median(ratios), size, original)
+    if scaled is None:
+        return None
+    true, h = scaled
     a = true * h
     glyph, space = [], []
     for c, nxt in zip(chars, chars[1:]):
@@ -510,9 +524,11 @@ def _fit(span: dict, prog: "pymupdf.Font", original: bool, spaces: bool) -> _Fit
     if len(glyph) < FIT_GLYPHS - 1:
         return None
     tc = _mean(glyph, OUTLIER_EM * true)
-    if abs(tc) > 0.25 * true:  # a substitute far off the original widths: no spacing makes it fit
+    if not original and abs(tc) > 0.25 * true:  # a substitute far off the original widths: no spacing makes it fit
         tc = 0.0
     tw = _mean(space, OUTLIER_EM * true) - tc if spaces and space else None
+    if abs(tc) > SPACING_MAX or (tw is not None and abs(tw) > SPACING_MAX):
+        return None
     return _Fit(a, tc, tw, len(glyph))
 
 
@@ -547,13 +563,15 @@ def _finish(run: dict, fits: list[_Fit | None]) -> None:
     if not known:
         return
     a, tc, tw = _merged(known)
-    size, h = _scale(a, run["size"], (run["font"] or {}).get("kind") == "original")
-    run["size"] = size
+    scaled = _scale(a, run["size"], (run["font"] or {}).get("kind") == "original")
+    if scaled is None:
+        return  # unmeasured: the reported size, no scale or spacing
+    run["size"], h = scaled
     if h != 1.0:
-        run["hScale"] = round(h, 4)
-    if abs(tc) >= SPACING_MIN:
+        run["hScale"] = h
+    if SPACING_MIN <= abs(tc) <= SPACING_MAX:
         run["charSpacing"] = round(tc, 3)
-    if tw is not None and abs(tw) >= SPACING_MIN:
+    if tw is not None and SPACING_MIN <= abs(tw) <= SPACING_MAX:
         run["wordSpacing"] = round(tw, 3)
 
 

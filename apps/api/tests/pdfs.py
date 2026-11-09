@@ -610,6 +610,28 @@ SPACING_GAP = 130  # thousandths of an em after every space of the third line (H
 SPACING_Y = (100, 160, 220)
 
 
+def make_text_state_pdf(state: str = "", matrix: str | None = None, text: str = "Teks dengan keadaan aneh",
+                        size: float = 13) -> bytes:
+    """One line of `text` in an embedded Tinos at (72, 100) with text state operators `state` set after Tf (e.g.
+    "20 Tz", "3 Tr 450 Tz", "8 Tc") and, with `matrix` ("1 0 0 0.22"), a text matrix instead of the plain position:
+    the odd and degenerate cases the spacing measurement must survive (M5b F2 review)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_font(fontname="TI", fontbuffer=(FONT_FILES / "Tinos-Regular.ttf").read_bytes())
+    page.insert_text((72, 100), text, fontname="TI", fontsize=size)
+    page.clean_contents()
+    xref = page.get_contents()[0]
+    stream = doc.xref_stream(xref).decode("latin-1")
+    tf = f"/TI {size:g} Tf"
+    assert tf in stream and " 742 TD" in stream
+    stream = stream.replace(tf, f"{tf} {state}", 1)
+    if matrix:
+        stream = stream.replace("72 742 TD", f"{matrix} 72 742 Tm", 1)
+    doc.update_stream(xref, stream.encode("latin-1"))
+    doc.subset_fonts()
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
 def make_spacing_pdf() -> bytes:
     """apps/web/e2e/fixtures/spacing.pdf and the F2 unit tests: SPACING_LINES at x 72 on baselines SPACING_Y."""
     tinos = (FONT_FILES / "Tinos-Regular.ttf").read_bytes()

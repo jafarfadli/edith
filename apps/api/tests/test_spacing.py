@@ -104,3 +104,65 @@ def test_a_kept_line_of_scaled_text_is_accepted_with_its_true_size(data, paragra
 def test_spacing_fixture_is_current():
     """apps/web/src/lib/fixtures/spacing.json (regenerate: cd apps/api && uv run python -m scripts.spacing_fixture)."""
     assert json.loads(FIXTURE.read_text()) == json.loads(json.dumps(build()))
+
+
+# Review: measurements outside what ops.Run accepts must never reach the client (a 422 on export) nor fail GET /text.
+ODD = {
+    "Tz 20": ("20 Tz", None),
+    "Tz 500": ("500 Tz", None),
+    "invisible OCR layer": ("3 Tr 450 Tz", None),
+    "squashed matrix": ("", "1 0 0 0.22"),
+    "degenerate matrix": ("", "1 0 0 0.0001"),
+    "huge character spacing": ("150 Tc", None),
+    "huge word spacing": ("150 Tw", None),
+}
+
+
+@pytest.mark.parametrize("state,matrix", ODD.values(), ids=ODD.keys())
+def test_odd_text_states_give_valid_runs_and_an_edit_exports(client, state, matrix):
+    from tests.pdfs import make_text_state_pdf
+    from tests.test_documents import upload
+    doc_id = upload(client, make_text_state_pdf(state, matrix)).json()["doc_id"]
+    r = client.get(f"/documents/{doc_id}/text")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    paragraphs = [p for page in body["pages"] for p in page["paragraphs"]]
+    runs = [run for p in paragraphs for run in p["runs"]]
+    assert runs
+    for run in runs:
+        Run.model_validate(run)
+    p = next((p for p in paragraphs if p["editable"]), None)
+    if p is None:
+        return
+    line = p["lines"][0]
+    op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": p["id"],
+          "box": {"rect": {"x": p["rect"]["x"], "y": line["baseline"] - 10, "w": 400, "h": 20}, "align": "left",
+                  "lineHeight": 14, "paragraphs": [[{**p["runs"][0], "text": "Teks"}]],  # characters the subset has
+                  "layout": [{"baseline": 10, "segments": [{"x": 0, "text": "Teks", "runIndex": 0}]}]}}
+    r = client.post(f"/documents/{doc_id}/export",
+                    json={"ops": [op], "paragraphs_version": body["paragraphsVersion"]})
+    assert r.status_code == 200, r.text
+
+
+def _spaced_span(tc: float, size: float = 13, text: str = "JUDULBERJARAK") -> dict:
+    """A span as MuPDF's rawdict gives it: glyph boxes as wide as the advance, pens `tc` further apart. (MuPDF itself
+    reads gaps this wide as spaces between the letters — "J U D U L" — so the span is built by hand.)"""
+    from edith.fonts import FontRegistry as _Registry
+    tinos = _Registry(Settings().fonts_dir).font("Tinos", False, False)
+    chars, x = [], 72.0
+    for c in text:
+        w = tinos.glyph_advance(ord(c)) * size
+        chars.append({"c": c, "origin": (x, 100.0), "bbox": (x, 88.0, x + w, 103.0)})
+        x += w + tc
+    return {"size": size, "chars": chars}, tinos
+
+
+def test_letter_spacing_of_an_original_font_is_kept_however_wide():
+    """Tc 8 at 13 pt (0.6 em) is real letter spacing in an original font; only a substitute's misfit is dropped."""
+    from edith.paragraphs import _fit
+    span, tinos = _spaced_span(8)
+    assert _fit(span, tinos, original=True, spaces=True).tc == pytest.approx(8, abs=0.05)
+    assert _fit(span, tinos, original=False, spaces=True).tc == 0
+    # Beyond what ops.Run accepts (±100 pt): unmeasured, never an op the export rejects.
+    huge, _ = _spaced_span(150, size=400)
+    assert _fit(huge, tinos, original=True, spaces=True) is None
