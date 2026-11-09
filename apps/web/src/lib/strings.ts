@@ -256,6 +256,7 @@ export const t = {
       ocr_timeout: "OCR terlalu lama (lebih dari 30 detik) dan dihentikan.",
       timeout: "Server terlalu lama menjawab OCR.",
       ocr_failed: "OCR gagal di server.",
+      ocr_too_complex: "Halaman ini terlalu rumit untuk OCR (terlalu banyak gambar atau tulisan).",
     },
   },
   errors: {

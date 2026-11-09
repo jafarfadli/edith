@@ -67,6 +67,7 @@ describe("OCR paragraphs", () => {
     expect(ocrQualityMessage("skewed", 3)).toContain("3.0°");
     expect(ocrQualityMessage("unreadable", 0)).toBe(t.ocr.quality.unreadable);
     expect(ocrErrorMessage("ocr_unavailable")).toBe(t.ocr.errors.ocr_unavailable);
+    expect(ocrErrorMessage("ocr_too_complex")).toContain("terlalu rumit");
     expect(ocrErrorMessage("doc_expired")).toBe(t.errors.doc_expired);
     expect(ocrErrorMessage("whatever")).toBe(t.errors.generic);
   });

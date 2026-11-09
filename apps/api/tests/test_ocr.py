@@ -10,7 +10,7 @@ import pymupdf
 import pytest
 
 from edith import ocr
-from edith.errors import OcrFailed, OcrTimeout
+from edith.errors import OcrFailed, OcrTimeout, OcrTooComplex
 from edith.fonts import FontRegistry
 from edith.settings import Settings
 from tests.pdfs import (SCAN_BODY, SCAN_ROWS, SCAN_TABLE, SCAN_TABLE_RECT, SCAN_TITLE, make_raster_text_pdf,
@@ -181,6 +181,53 @@ def test_a_page_without_a_picture_of_print_reads_nothing():
 def test_a_picture_too_large_even_at_the_lowest_resolution_is_refused():
     page = pymupdf.open(stream=make_scan_form_pdf(), filetype="pdf")[0]
     assert ocr.ocr_page(page, registry(), "tesseract-not-called", max_pixels=100_000)["quality"] == "too_large"
+
+
+def stacked_scan_pdf(n: int) -> bytes:
+    """The scanned form's picture placed `n` times, each copy a little offset (a crafted or broken PDF): judging every
+    copy renders all the copies under it, a cost that grows with n²."""
+    src = pymupdf.open(stream=make_scan_form_pdf(dpi=100), filetype="pdf")
+    (xref, *_), = src[0].get_images(full=True)
+    img = src.extract_image(xref)["image"]
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    first = page.insert_image(pymupdf.Rect(0, 0, 595, 842), stream=img)
+    for i in range(1, n):
+        o = (i % 50) * 0.7
+        page.insert_image(pymupdf.Rect(o, (i // 50) * 0.7, 555 + o, 802 + (i // 50) * 0.7), xref=first)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+def test_a_page_of_too_many_pictures_is_refused_at_once():
+    page = pymupdf.open(stream=stacked_scan_pdf(200), filetype="pdf")[0]
+    start = time.monotonic()
+    with pytest.raises(OcrTooComplex):
+        ocr.ocr_page(page, registry(), "tesseract-not-called")
+    assert time.monotonic() - start < 2
+
+
+def test_every_phase_keeps_to_the_deadline(monkeypatch):
+    """The time limit holds for the whole page, not only for Tesseract: finding the pictures counts too."""
+    page = pymupdf.open(stream=make_scan_form_pdf(), filetype="pdf")[0]
+    now = [0.0]
+
+    def slow_regions(p, budget=None, visible=None):
+        now[0] += 31  # finding the pictures took the whole time
+        return [{"x": 0, "y": 0, "w": 595, "h": 842}]
+    monkeypatch.setattr(ocr, "image_text_regions", slow_regions)
+    with pytest.raises(OcrTimeout):
+        ocr.ocr_page(page, registry(), "tesseract-not-called", timeout=30, clock=lambda: now[0])
+
+
+def test_endpoint_refuses_a_page_of_too_many_pictures(client, monkeypatch):
+    monkeypatch.setattr(ocr, "available", lambda configured=None: True)
+    monkeypatch.setattr(ocr, "tesseract_cmd", lambda configured=None: "tesseract")
+    doc = upload(client, stacked_scan_pdf(200)).json()["doc_id"]
+    r = client.post(f"/documents/{doc}/pages/0/ocr")
+    assert r.status_code == 422 and r.json()["error"]["code"] == "ocr_too_complex"
+    gate = client.app.state.ocr_gate
+    gate.enter(doc)  # the slot was given back
+    gate.leave(doc)
 
 
 # --- the endpoint ------------------------------------------------------------------------------------------------------

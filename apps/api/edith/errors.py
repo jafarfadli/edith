@@ -84,6 +84,11 @@ class OcrBusy(EdithError):
     status, code = 429, "ocr_busy"
 
 
+class OcrTooComplex(EdithError):
+    """A page OCR will not read: too many pictures on it (a crafted or broken PDF), or too many words."""
+    status, code = 422, "ocr_too_complex"
+
+
 class OcrTimeout(EdithError):
     status, code = 504, "ocr_timeout"
 

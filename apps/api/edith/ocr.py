@@ -25,11 +25,12 @@ import numpy as np
 import pymupdf
 from fontTools.ttLib import TTFont
 
-from edith.errors import OcrFailed, OcrTimeout, OcrUnavailable
+from edith.errors import OcrFailed, OcrTimeout, OcrTooComplex, OcrUnavailable
 from edith.fonts import FontRegistry
-from edith.imagetext import image_text_regions
+from edith.imagetext import Budget, image_text_regions
 from edith.paragraphs import JOIN_EM, ROOM_PAD, extract_paragraphs
 
+BAND = 8.0                # pt: height of the bands paragraph lines are looked up in (ocr_page)
 DPI = 300                 # what Tesseract reads print best at
 MIN_DPI = 150             # a larger image is rendered coarser to stay within MAX_PIXELS, but not below this
 MAX_PIXELS = 12_000_000   # pixels one page's OCR may render (A4 at 300 dpi: 8.7 M)
@@ -50,6 +51,9 @@ DENSE = 0.35              # a word's rows with this share of its busiest row's i
 TINY = 0.4                # a word less than this share of the page's usual word height: dots of a leader, specks
 LEADER = 0.7              # a word whose inked columns are this often short (≤ TINY × usual height): a dot leader
 BOX_EDGE, BOX_HOLLOW = 0.7, 0.15  # a checkbox: each side this much ink, its inside at most this much
+MAX_IMAGES = 64           # pictures on one page OCR looks at: judging each renders the ones under it (cost ~ n²)
+MAX_WORDS = 4000          # words one page may hold (a dense A4 page: ~600); more is noise or a crafted image
+FIND_SECONDS = 5.0        # of the page's time, at most this long to find its pictures of print
 MAX_RESCUES, RESCUE_TIME = 40, 3.0  # stretches read again (_rescue) at most, and only with this many seconds left
 
 
@@ -110,7 +114,7 @@ def run_tesseract(png: bytes, dpi: int, timeout: float, cmd: str, psm: int = 3) 
                               "tsv"],
                              input=png, capture_output=True, timeout=max(timeout, 0.1), env=env, check=False)
     except subprocess.TimeoutExpired:
-        raise OcrTimeout(f"OCR took longer than {TIMEOUT:g} s") from None
+        raise OcrTimeout("OCR took longer than the time allowed") from None
     except OSError as exc:
         raise OcrUnavailable(f"cannot run tesseract: {exc}") from None
     if out.returncode != 0:
@@ -815,10 +819,20 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
     (diagnostics): receives every word read as (text, confidence 0–100, page rect)."""
     clock = clock or time.monotonic
     deadline = clock() + timeout
+
+    def in_time() -> None:  # between the phases: the time limit holds for the whole page, not only for Tesseract
+        if clock() > deadline:
+            raise OcrTimeout("OCR took longer than the time allowed")
+
     result = {"quality": "none", "angle": 0.0, "dpi": dpi, "regions": [], "paragraphs": []}
     if page.rotation:
         return {**result, "quality": "rotated"}
-    rects = _merged([pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"]) for r in image_text_regions(page)])
+    if len(page.get_image_info()) > MAX_IMAGES:
+        raise OcrTooComplex(f"more than {MAX_IMAGES} pictures on the page", max_images=MAX_IMAGES)
+    # Finding the pictures renders each one (with what lies under it): within the page's time, and the pixel budget.
+    found = image_text_regions(page, Budget(deadline=time.monotonic() + max(min(FIND_SECONDS, deadline - clock()), 0)))
+    in_time()
+    rects = _merged([pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"]) for r in found])
     if not rects:
         return result
     regions: list[_Region] = []
@@ -829,10 +843,12 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
     for rect in rects:
         region = _render(page, rect, dpi_used)
         regions.append(region)
+        in_time()
         for w in run_tesseract(_png(region), region.dpi, deadline - clock(), cmd):
             words.append((w, len(regions) - 1))
-        if clock() > deadline:
-            raise OcrTimeout(f"OCR took longer than {timeout:g} s")
+        in_time()
+        if len(words) > MAX_WORDS:
+            raise OcrTooComplex(f"more than {MAX_WORDS} words on the page", max_words=MAX_WORDS)
     result["regions"] = [{"x": _num(r.x0), "y": _num(r.y0), "w": _num(r.width), "h": _num(r.height)} for r in rects]
     result["dpi"] = min(r.dpi for r in regions)
     boxes: list[tuple[Word, int]] = []
@@ -846,6 +862,7 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
             if not any(j == i and _overlap(w.box, v.box) > 0.5 for v, j in words):
                 words.append((w, i))
         boxes += more_boxes
+        in_time()
     if words_out is not None:
         words_out.extend((w.text, w.conf, regions[i].to_page(w.box)) for w, i in words)
     if not words:
@@ -884,6 +901,7 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
             _measure(ln, regions[ln.region], faces.get(family, ln.bold))  # sizes and baselines in the face drawn with
     _snap_sizes(lines)
     _snap_colours(lines)
+    in_time()
 
     # Stand-ins (GHOST) for what was left out of the text but shapes it, as a PDF's own text would: a checkbox before a
     # piece starts an item of a list ("□", a line of its own, kept JOIN_EM clear); ink going on after a piece (dots, a
@@ -926,33 +944,42 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
             block.append({"dir": (1.0, 0.0), "wmode": 0, "bbox": bbox, "spans": spans})
         raw.append({"type": 0, "bbox": (0, 0, 0, 0), "lines": block})
     stand_in = _OcrPage(page.rect.width, page.rect.height, raw, _drawings(regions))
+    in_time()
     paragraphs = [q for p in extract_paragraphs(stand_in, lambda span: dict(span["ocr_font"]))
                   if (q := _unghost(p, leaders)) is not None]
+    in_time()
 
-    # Words to paragraphs: the paragraph line whose box holds the word's centre.
-    placed: list[list[tuple[Word, _Region]]] = [[] for _ in paragraphs]
+    # Words to paragraphs: the paragraph line whose box holds the word's centre (lines looked up by height, in bands of
+    # BAND pt: no pass over every line for every word).
+    band: dict[int, list[tuple[int, int, dict]]] = {}
+    for k, p in enumerate(paragraphs):
+        for j, ln in enumerate(p["lines"]):
+            r = ln["rect"]
+            for b in range(int((r["y"] - 0.5) // BAND), int((r["y"] + r["h"] + 0.5) // BAND) + 1):
+                band.setdefault(b, []).append((k, j, r))
+    placed: list[list[tuple[Word, _Region, int]]] = [[] for _ in paragraphs]
     for w, i in words:
         r = regions[i].to_page(w.box)
         cx, cy = (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2
-        for k, p in enumerate(paragraphs):
-            if any(ln["rect"]["x"] - 0.5 <= cx <= ln["rect"]["x"] + ln["rect"]["w"] + 0.5
-                   and ln["rect"]["y"] - 0.5 <= cy <= ln["rect"]["y"] + ln["rect"]["h"] + 0.5 for ln in p["lines"]):
-                placed[k].append((w, regions[i]))
+        for k, j, lr in band.get(int(cy // BAND), ()):
+            if lr["x"] - 0.5 <= cx <= lr["x"] + lr["w"] + 0.5 and lr["y"] - 0.5 <= cy <= lr["y"] + lr["h"] + 0.5:
+                placed[k].append((w, regions[i], j))
                 break
     out = []
     for p, ws in zip(paragraphs, placed):
         if not ws:
             continue
-        confidence = sum(w.conf for w, _ in ws) / len(ws) / 100
+        confidence = sum(w.conf for w, _, _ in ws) / len(ws) / 100
         text = "".join(r["text"] for r in p["runs"])
         if confidence < JUNK_CONFIDENCE and len(text.replace(" ", "")) <= 2:
             continue
         if not any(c.isalnum() for c in text) and confidence < 0.6:
             continue
-        cover, region = _cover(ws, p["lines"], max(r["size"] for r in p["runs"]))
-        mine = {id(w) for w, _ in ws}
+        ws2 = [(w, r) for w, r, _ in ws]
+        cover, region = _cover(ws2, p["lines"], max(r["size"] for r in p["runs"]))
+        mine = {id(w) for w, _ in ws2}
         others = [regions[i].to_page(w.box) for w, i in words if id(w) not in mine and regions[i] is region]
-        cover = _clear_of(cover, region.to_page(_ink_box([w for w, _ in ws])), others, region.scale)
+        cover = _clear_of(cover, region.to_page(_ink_box([w for w, _ in ws2])), others, region.scale)
         colour, uniform = _background(cover, region)
         p = dict(p, id=f"ocr{len(out)}", ocr=True, confidence=round(confidence, 2),
                  cover={"x": _num(cover.x0), "y": _num(cover.y0), "w": _num(cover.width), "h": _num(cover.height)},
