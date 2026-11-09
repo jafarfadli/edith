@@ -123,6 +123,30 @@ test("keyboard shortcuts move the selection one step or to the end; the mini-bar
   await expect(page).toHaveURL(/\/edit\//); // Cmd+[ did not go back in the browser's history
 });
 
+test("Maju satu lapis jumps past objects it does not overlap; with nothing overlapping it is disabled", async ({ page }) => {
+  const box = await open(page);
+  await rect(page, box, ...A, RED);
+  await rect(page, box, [440, 560], [520, 640], GREEN); // C: elsewhere, between A and B in the order
+  await rect(page, box, ...B, BLUE);
+
+  // C overlaps nothing: one step either way would change nothing, so both are disabled (the ends still work).
+  await page.mouse.click(box.x + 480, box.y + 600, { button: "right" });
+  await expect(item(page, "Maju satu lapis")).toBeDisabled();
+  await expect(item(page, "Mundur satu lapis")).toBeDisabled();
+  await expect(item(page, "Bawa ke depan")).toBeEnabled();
+  await expect(item(page, "Kirim ke belakang")).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await expect(menu(page)).toHaveCount(0);
+
+  await page.mouse.click(box.x + ONLY_A[0], box.y + ONLY_A[1]); // A
+  await page.keyboard.press("ControlOrMeta+BracketRight"); // one step: past C (not touching) and above B
+  expect(colours(await download(page, "skip.pdf"), box, [OVERLAP])).toEqual([RED]);
+  // Now on top of everything it touches: no further step up.
+  await page.mouse.click(box.x + ONLY_A[0], box.y + ONLY_A[1], { button: "right" });
+  await expect(item(page, "Maju satu lapis")).toBeDisabled();
+  await expect(item(page, "Mundur satu lapis")).toBeEnabled();
+});
+
 test("Alt+click cycles through the objects under the pointer; the menu lists them", async ({ page }) => {
   const box = await open(page);
   await rect(page, box, ...A, RED);

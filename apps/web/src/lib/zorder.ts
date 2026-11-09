@@ -1,4 +1,5 @@
-import type { ContentOp } from "@edith/ops";
+import type { ContentOp, Rect } from "@edith/ops";
+import { visualBounds } from "@/lib/objects";
 
 /** Stacking (z-order) of the objects of a page: their position in `doc.order`, lowest first.
  *
@@ -31,26 +32,52 @@ type Doc = { order: string[]; objects: Record<string, ContentOp | undefined> };
 
 const classOf = (op: ContentOp) => `${op.pageKey}\u0000${zStage(op)}`;
 
+/** Whether two objects' boxes (as shown: rotation included) meet; edges touching count, so a straight line (a box
+ *  without height) still overlaps what it crosses. */
+export function overlaps(a: ContentOp, b: ContentOp): boolean {
+  const r = norm(visualBounds(a)), s = norm(visualBounds(b));
+  return r.x <= s.x + s.w && s.x <= r.x + r.w && r.y <= s.y + s.h && s.y <= r.y + r.h;
+}
+
+function norm(r: Rect): Rect {
+  return { x: Math.min(r.x, r.x + r.w), y: Math.min(r.y, r.y + r.h), w: Math.abs(r.w), h: Math.abs(r.h) };
+}
+
 /** One stacking step of the peers `ids` (lowest first) where `sel` are the moved ones; selected objects keep their
- *  relative order and move as a group. */
-function step(ids: string[], sel: ReadonlySet<string>, move: ZMove): string[] {
-  const out = [...ids];
+ *  relative order. Front/back: the whole selection to the end of the stack. Forward/backward (as in Figma or Canva):
+ *  each selected object jumps past the nearest unselected peer above/below it that it overlaps, passing the
+ *  objects in between that it does not touch (moving past those would change nothing visible); it never passes
+ *  another selected object, and stays where it is when nothing it overlaps lies in that direction. */
+function step(ids: string[], sel: ReadonlySet<string>, move: ZMove, hits: (a: string, b: string) => boolean): string[] {
   switch (move) {
     case "front": return [...ids.filter((id) => !sel.has(id)), ...ids.filter((id) => sel.has(id))];
     case "back": return [...ids.filter((id) => sel.has(id)), ...ids.filter((id) => !sel.has(id))];
-    case "forward":
-      // From the top down, each selected object swaps with the unselected one right above it: a selected block
-      // climbs one object as a whole.
-      for (let i = out.length - 2; i >= 0; i--) if (sel.has(out[i]) && !sel.has(out[i + 1])) [out[i], out[i + 1]] = [out[i + 1], out[i]];
+    case "forward": case "backward": {
+      const out = [...ids];
+      const up = move === "forward";
+      // The object nearest the moving end goes first, so the ones behind it see where it went.
+      const moving = out.filter((id) => sel.has(id));
+      if (up) moving.reverse();
+      for (const id of moving) {
+        const i = out.indexOf(id);
+        let target = -1;
+        for (let j = up ? i + 1 : i - 1; j >= 0 && j < out.length && !sel.has(out[j]); j += up ? 1 : -1) {
+          if (hits(id, out[j])) { target = j; break; }
+        }
+        if (target < 0) continue;
+        out.splice(i, 1);
+        // Forward: the removal shifted the overlapped object to target - 1, so `target` is just above it; backward:
+        // it is still at `target`, so inserting there puts the moved object just below it.
+        out.splice(target, 0, id);
+      }
       return out;
-    case "backward":
-      for (let i = 1; i < out.length; i++) if (sel.has(out[i]) && !sel.has(out[i - 1])) [out[i], out[i - 1]] = [out[i - 1], out[i]];
-      return out;
+    }
   }
 }
 
-/** The new `doc.order` after moving the objects `ids` one step or to the end of their stack, or null when nothing
- *  changes (already at the front/back, unknown ids, nothing to pass). Each object moves among its peers only (same
+/** The new `doc.order` after moving the objects `ids` one step (past the next object they overlap) or to the end of
+ *  their stack, or null when nothing changes (already at the front/back, nothing overlapping in that direction,
+ *  unknown ids). Each object moves among its peers only (same
  *  page, same stage); the slots those peers occupy in the global order stay the same, so objects of other pages and
  *  stages keep their places. A selection spanning several pages or stages moves within each of them. */
 export function reorder(doc: Doc, ids: readonly string[], move: ZMove): string[] | null {
@@ -63,7 +90,7 @@ export function reorder(doc: Doc, ids: readonly string[], move: ZMove): string[]
     const slots: number[] = [];
     order.forEach((id, i) => { const op = doc.objects[id]; if (op && classOf(op) === cls) slots.push(i); });
     const peers = slots.map((i) => order[i]);
-    const next = step(peers, sel, move);
+    const next = step(peers, sel, move, (a, b) => overlaps(doc.objects[a]!, doc.objects[b]!));
     next.forEach((id, k) => { if (order[slots[k]] !== id) { order[slots[k]] = id; changed = true; } });
   }
   return changed ? order : null;

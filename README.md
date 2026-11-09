@@ -4,7 +4,7 @@ Editor PDF berbasis web: unggah PDF, edit teks aslinya (paragraf dipisah per sel
 
 ## Urutan lapisan objek
 
-Objek yang bertumpuk punya urutan lapisan per halaman (posisi di `doc.order`, paling bawah dulu). Klik kanan objek → **Bawa ke depan** (Ctrl/⌘ Shift ]), **Maju satu lapis** (Ctrl/⌘ ]), **Mundur satu lapis** (Ctrl/⌘ [), **Kirim ke belakang** (Ctrl/⌘ Shift [); juga lewat tombol lapisan di bilah kecil objek, dan Shift+F10 membuka menu itu dari keyboard. Alt+klik memilih objek di bawah objek yang dipilih (berulang), dan menu klik kanan mendaftar semua objek di titik itu ("Pilih elemen di bawah"). Setiap perubahan urutan satu langkah urungkan, tersimpan di draf dan ikut diekspor (ops dikirim dalam urutan lapisan, API menggambarnya dalam urutan itu).
+Objek yang bertumpuk punya urutan lapisan per halaman (posisi di `doc.order`, paling bawah dulu). Klik kanan objek → **Bawa ke depan** (Ctrl/⌘ Shift ]), **Maju satu lapis** (Ctrl/⌘ ]), **Mundur satu lapis** (Ctrl/⌘ [), **Kirim ke belakang** (Ctrl/⌘ Shift [); juga lewat tombol lapisan di bilah kecil objek, dan Shift+F10 membuka menu itu dari keyboard. Seperti di Figma/Canva, "satu lapis" melompati objek yang tidak bersinggungan dengan objek terpilih: objek naik/turun tepat melewati objek terdekat yang kotaknya beririsan dengannya; bila tidak ada, tombol itu nonaktif. Alt+klik memilih objek di bawah objek yang dipilih (berulang), dan menu klik kanan mendaftar semua objek di titik itu ("Pilih elemen di bawah"). Setiap perubahan urutan satu langkah urungkan, tersimpan di draf dan ikut diekspor (ops dikirim dalam urutan lapisan, API menggambarnya dalam urutan itu).
 
 Batasnya mengikuti tahap bake API, dan layar menumpuk objek dengan aturan yang sama:
 

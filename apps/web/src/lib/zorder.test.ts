@@ -4,8 +4,9 @@ import { compact } from "@/lib/compact";
 import { nextBelow, reorder, stacked, zMoveForKey, zMoves, zStage } from "@/lib/zorder";
 
 const R = { x: 0, y: 0, w: 10, h: 10 };
-const rect = (id: string, pageKey = "o0"): ContentOp =>
-  ({ id, type: "shape.add", pageKey, kind: "rect", rect: R, stroke: "#000000", fill: null, width: 1 }) as ContentOp;
+const rect = (id: string, pageKey = "o0", r = R, extra: Record<string, unknown> = {}): ContentOp =>
+  ({ id, type: "shape.add", pageKey, kind: "rect", rect: r, stroke: "#000000", fill: null, width: 1, ...extra }) as ContentOp;
+const at = (x: number, y: number, w = 10, h = 10) => ({ x, y, w, h });
 const hl = (id: string, pageKey = "o0"): ContentOp =>
   ({ id, type: "annot.add", pageKey, kind: "highlight", quads: [R], color: "#ffeb3b" }) as ContentOp;
 const redact = (id: string, pageKey = "o0"): ContentOp => ({ id, type: "redact.add", pageKey, rect: R, fill: "black" }) as ContentOp;
@@ -82,6 +83,52 @@ describe("reorder", () => {
     const base = doc(rect("a"), rect("b"));
     const order = reorder(base, ["a"], "front")!;
     expect(compact({ pages, ...base, order }).slice(1).map((o) => o.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("reorder: one step goes past the next object it overlaps", () => {
+  // a and b overlap each other; c (elsewhere on the page) sits between them in the order.
+  const a = rect("a", "o0", at(0, 0, 50, 50)), c = rect("c", "o0", at(200, 200)), b = rect("b", "o0", at(25, 25, 50, 50));
+
+  it("skips objects it does not overlap", () => {
+    const d = doc(a, c, b);
+    expect(reorder(d, ["a"], "forward")).toEqual(["c", "b", "a"]);
+    expect(reorder(d, ["b"], "backward")).toEqual(["b", "a", "c"]);
+  });
+
+  it("is a no-op (disabled) with nothing overlapping in that direction", () => {
+    const d = doc(a, c, b);
+    expect(zMoves(d, ["c"])).toEqual({ front: true, forward: false, backward: false, back: true });
+    expect(zMoves(d, ["a"])).toEqual({ front: true, forward: true, backward: false, back: false });
+    expect(reorder(doc(b, a, c), ["a"], "forward")).toBeNull(); // only c (not touching) above it
+  });
+
+  it("stops at the nearest overlapping object, not the farthest", () => {
+    const e = rect("e", "o0", at(20, 20, 10, 10)); // overlaps a and b
+    expect(reorder(doc(a, c, e, b), ["a"], "forward")).toEqual(["c", "e", "a", "b"]);
+    expect(reorder(doc(a, e, c, b), ["b"], "backward")).toEqual(["a", "b", "e", "c"]);
+  });
+
+  it("counts touching edges, lines without height and rotation", () => {
+    const line = { id: "l", type: "shape.add", pageKey: "o0", kind: "line", points: [[0, 60], [100, 60]], stroke: "#000000", width: 1 } as unknown as ContentOp;
+    const tall = rect("t", "o0", at(40, 55, 10, 20));
+    expect(reorder(doc(line, c, tall), ["l"], "forward")).toEqual(["c", "t", "l"]);
+    const edge = rect("g", "o0", at(50, 0, 10, 10)); // touches a's right edge
+    expect(reorder(doc(a, edge), ["a"], "forward")).toEqual(["g", "a"]);
+    // A 10 x 100 bar beside a, turned 90° about its centre, lies across it.
+    const bar = rect("r", "o0", at(100, -20, 10, 100), { rotation: 90 });
+    expect(reorder(doc(a, bar), ["a"], "forward")).toBeNull();
+    expect(reorder(doc(a, rect("r", "o0", at(100, -20, 10, 100))), ["a"], "forward")).toBeNull();
+    const across = rect("x", "o0", at(60, -20, 10, 100), { rotation: 90 });
+    expect(reorder(doc(a, across), ["a"], "forward")).toEqual(["x", "a"]);
+  });
+
+  it("moves a group without one member passing another", () => {
+    // a and b selected, x overlaps only a and sits above b: a may not jump over b.
+    const x = rect("x", "o0", at(0, 0, 5, 5));
+    const bb = rect("b", "o0", at(300, 300));
+    expect(reorder(doc(a, bb, x), ["a", "b"], "forward")).toBeNull();
+    expect(reorder(doc(a, x, bb), ["a", "b"], "forward")).toEqual(["x", "a", "b"]);
   });
 });
 
