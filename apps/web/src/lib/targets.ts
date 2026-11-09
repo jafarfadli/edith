@@ -1,7 +1,7 @@
-import type { ContentOp, Rect, Run, TextAdd, TextBox, TextEdit } from "@edith/ops";
+import type { ContentOp, Rect, Run, TextBox, TextEdit } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
 import { charOffsets, textWidth, type FontMetrics } from "@/lib/fonts";
-import { isTextOp } from "@/lib/objects";
+import { isTextOp, type TextOp } from "@/lib/objects";
 import { measureRange, substituteOf, type FontTable } from "@/lib/paragraphs";
 import { matchSegments, type Match, type SearchTarget } from "@/lib/search";
 import { srcKey, type ParagraphPages } from "@/lib/sources";
@@ -18,7 +18,7 @@ export const paraKey = (pageKey: string, id: string) => `para:${pageKey}:${id}`;
 export function buildTargets(doc: EditorDoc, pages: ParagraphPages): SearchTarget[] {
   const out: SearchTarget[] = [];
   for (const entry of doc.pages) {
-    const ops = doc.order.map((id) => doc.objects[id]).filter((op): op is TextAdd | TextEdit => isTextOp(op) && op.pageKey === entry.pageKey);
+    const ops = doc.order.map((id) => doc.objects[id]).filter((op): op is TextOp => isTextOp(op) && op.pageKey === entry.pageKey);
     const edited = new Set(ops.filter((op): op is TextEdit => op.type === "text.edit").map((op) => op.paragraphId));
     const items: { x: number; y: number; target: SearchTarget }[] = [];
     if ("doc" in entry.src) {

@@ -1,3 +1,4 @@
+import math
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -123,6 +124,29 @@ class TextEdit(_Content):
     type: Literal["text.edit"]
     paragraphId: str = Field(pattern=r"^g\d+$")
     box: TextBox
+
+
+MAX_SIDE = 14400  # pt: the largest page side PDF allows
+
+
+class TextOcrEdit(_Content):
+    """Replaces a paragraph OCR read in a picture of text (POST /documents/{id}/pages/{n}/ocr, M5d). `cover` is painted
+    with `coverColor` (the picture's own background there) over the page's original content, under every drawn object
+    — as a text.edit's original glyphs go — and `box` is drawn in the op's stacking order. Self-contained: the bake
+    reads neither the OCR result nor the source page, so a draft restores and exports without OCR running again.
+    `paragraphId` names the OCR paragraph (ocr0, ocr1, …) for the client: one op per page and id."""
+    type: Literal["text.ocr_edit"]
+    paragraphId: str = Field(pattern=r"^ocr\d+$")
+    cover: Rect
+    coverColor: HexColor
+    box: TextBox
+
+    @model_validator(mode="after")
+    def _cover_finite(self):
+        c = self.cover
+        if not all(math.isfinite(v) for v in (c.x, c.y, c.w, c.h)) or c.w > MAX_SIDE or c.h > MAX_SIDE:
+            raise ValueError("cover must be finite and at most 14400 pt wide and high")
+        return self
 
 
 class ImageAdd(_Rotatable):
@@ -318,10 +342,10 @@ class PagesLayout(Model):
         return self
 
 
-ContentOp = Union[TextAdd, TextEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd,
+ContentOp = Union[TextAdd, TextEdit, TextOcrEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd,
                   SignatureAdd, StampAdd, SymbolAdd, LinkAdd, AnnotAdd]
 Op = Annotated[
-    Union[TextAdd, TextEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd,
+    Union[TextAdd, TextEdit, TextOcrEdit, ImageAdd, ShapeAdd, InkAdd, WhiteoutAdd, RedactAdd,
           SignatureAdd, StampAdd, SymbolAdd, LinkAdd, AnnotAdd, FormSet, PagesLayout],
     Field(discriminator="type"),
 ]
@@ -336,6 +360,9 @@ def _check_ops(ops: list) -> None:
     edited = [(op.pageKey, op.paragraphId) for op in ops if op.type == "text.edit"]
     if len(edited) != len(set(edited)):
         raise ValueError("at most one text.edit per (pageKey, paragraphId)")
+    read = [(op.pageKey, op.paragraphId) for op in ops if op.type == "text.ocr_edit"]
+    if len(read) != len(set(read)):
+        raise ValueError("at most one text.ocr_edit per (pageKey, paragraphId)")
     fields = [(op.doc, op.fieldName) for op in ops if op.type == "form.set"]
     if len(fields) != len(set(fields)):
         raise ValueError("at most one form.set per (doc, fieldName)")

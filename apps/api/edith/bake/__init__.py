@@ -7,7 +7,7 @@ import pymupdf
 from edith.bake.context import BakeContext
 from edith.bake.formfonts import protect as form_font_programs, restore as restore_form_fonts
 from edith.bake.pages import build_pages
-from edith.bake.registry import HANDLERS, PHASE, TEXT_REDACTIONS
+from edith.bake.registry import COVERS, HANDLERS, PHASE, TEXT_REDACTIONS
 from edith.bake.scrub import scrub_outside, scrub_page, under_redaction
 from edith.bake.source import SourcePages
 from edith.bake.text import links_under_redactions, restore_links
@@ -19,7 +19,8 @@ from edith.forms import FieldValueError, drop_xfa, fill_forms
 from edith.ops import DocSrc, LayoutPage, PageTarget, PagesLayout
 
 # Handler modules register themselves on import (later tasks add more, e.g. text):
-from edith.bake import annots, draw, stamps, symbols, text  # noqa: F401,E402  (registers handlers)
+from edith.bake import annots, draw, ocr, stamps, symbols, text  # noqa: F401,E402  (registers handlers)
+from edith.bake.ocr import keep_redactions  # noqa: E402
 
 # text.edit removes only the glyphs of the edited lines; images and vector art stay.
 TEXT_ONLY = dict(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
@@ -191,6 +192,14 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             boxes = [to_rect(op.rect) for op in page_ops if op.type == "redact.add"]
             if boxes:
                 widgets_removed |= scrub_page(page, boxes) > 0
+            # Covers over the page's original content (text.ocr_edit), under every drawn object; a redaction box they
+            # went over keeps its look.
+            covers = [op for op in page_ops if op.type in COVERS]
+            for op in covers:
+                _run(COVERS[op.type], page, op, ctx)
+            if covers and boxes:
+                keep_redactions(page, [to_rect(op.cover) for op in covers],
+                                [(to_rect(op.rect), op.fill) for op in page_ops if op.type == "redact.add"])
             # Drawn content in stacking order (the ops' order is the web's z-order, lowest first: a later op is
             # drawn over an earlier one), then native annotations over it in that order, then links (none under
             # a redaction box: it would show — or carry — what the box hides). Order only counts within a stage:

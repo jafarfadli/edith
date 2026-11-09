@@ -71,8 +71,11 @@ export const t = {
       rotated: "Teks yang diputar belum bisa diedit.",
       imageText: "Bagian ini berupa gambar (mis. hasil pindai), bukan teks, jadi tidak bisa diedit langsung. Untuk menggantinya, tutup dengan Whiteout (menu Penghapus), lalu tambahkan Teks baru di atasnya.",
     },
+    /** Said instead of locked.imageText where OCR can read the picture (M5d). */
+    imageTextOcr: "Bagian ini berupa gambar (mis. hasil pindai), bukan teks. Klik Kenali teks (OCR) agar teksnya bisa diedit, atau tutup dengan Whiteout lalu tambahkan Teks baru.",
     lockedEditsDropped: "Suntingan pada teks yang ternyata gambar dihapus; pakai Whiteout lalu Teks baru.",
     pictureText: "Sebagian teks di dokumen ini berupa gambar (hasil pindai) dan tidak bisa diedit langsung. Klik bagian itu untuk melihat caranya.",
+    pictureTextOcr: "Sebagian teks di dokumen ini berupa gambar (hasil pindai). Kenali teksnya dengan OCR agar bisa diedit.",
     tools: "Alat",
     properties: "Properti",
     options: "pilihan",
@@ -161,6 +164,7 @@ export const t = {
   objectKinds: {
     text: "Teks", textEdit: "Teks diedit", image: "Gambar", signature: "Tanda tangan", ink: "Gambar bebas",
     whiteout: "Whiteout", redact: "Redaksi", stamp: "Stamp", check: "Centang", cross: "Silang", link: "Link", note: "Catatan",
+    textOcr: "Teks OCR diedit",
     shape: { rect: "Persegi", ellipse: "Elips", line: "Garis", arrow: "Panah", polygon: "Poligon", polyline: "Garis bersambung", cloud: "Awan" },
     markup: { highlight: "Stabilo", underline: "Garis bawah", strike: "Coret" },
   },
@@ -223,6 +227,37 @@ export const t = {
     loading: "Memuat…",
     count: (n: number, total: number) => `${n} dari ${total}`,
   },
+  /** OCR of text that is a picture (M5d). */
+  ocr: {
+    run: "Kenali teks (OCR)",
+    running: "Mengenali teks…",
+    hint: "Baca teks di gambar halaman ini agar bisa diedit. Hasilnya bisa keliru: periksa sebelum mengunduh.",
+    badge: "hasil OCR",
+    badgeLow: "hasil OCR · perlu dicek",
+    confidence: (pct: number) => `keyakinan ${pct}%`,
+    found: (n: number) => `Hasil OCR: ${n} paragraf`,
+    toCheck: (n: number) => `${n} perlu dicek`,
+    foundHint: "Teks bergaris putus-putus adalah hasil OCR: klik dua kali untuk mengedit. Yang berwarna kuning kurang yakin terbaca.",
+    edited: "Teks hasil OCR diganti: gambar lama di bawahnya ditutup warna latarnya.",
+    uneven: "Latar di bawah teks ini tidak polos, jadi tutupan warnanya bisa terlihat.",
+    /** The page's OCR pill after OCR found nothing to edit (the notice says why in full). */
+    short: { none: "OCR: tidak ada gambar teks", empty: "OCR: tidak ada teks", rotated: "OCR: halaman diputar", skewed: "OCR: pindaian miring", unreadable: "OCR: tidak terbaca", too_large: "OCR: gambar terlalu besar" },
+    quality: {
+      none: "Tidak ada teks bergambar di halaman ini.",
+      empty: "OCR tidak menemukan teks di halaman ini.",
+      rotated: "Halaman ini diputar di dalam PDF-nya; OCR belum mendukungnya.",
+      skewed: (deg: number) => `Hasil pindai miring ${deg.toFixed(1)}°, terlalu miring untuk dikenali dengan rapi. Pindai ulang dengan posisi lurus.`,
+      unreadable: "Teks di gambar ini terlalu buram atau kecil untuk dikenali.",
+      too_large: "Gambar di halaman ini terlalu besar untuk dikenali.",
+    },
+    errors: {
+      ocr_unavailable: "OCR belum terpasang di server ini.",
+      ocr_busy: "OCR sedang berjalan. Tunggu sebentar lalu coba lagi.",
+      ocr_timeout: "OCR terlalu lama (lebih dari 30 detik) dan dihentikan.",
+      timeout: "Server terlalu lama menjawab OCR.",
+      ocr_failed: "OCR gagal di server.",
+    },
+  },
   errors: {
     generic: "Terjadi kesalahan. Coba lagi.",
     pdf_corrupt: "File ini bukan PDF yang valid atau rusak.",
@@ -253,6 +288,12 @@ export const t = {
     refused: (status: number) => `Server menolak permintaan (${status}).`,
   },
 } as const;
+
+/** Why an OCR request failed, by API error code. */
+export function ocrErrorMessage(code: string): string {
+  const errors = t.ocr.errors as Record<string, string>;
+  return errors[code] ?? errorMessage(code);
+}
 
 export function errorMessage(code: string): string {
   const errors = t.errors as Record<string, string>;

@@ -1,4 +1,4 @@
-import type { AnnotAdd, ContentOp, Rect, ShapeAdd, SymbolAdd, TextAdd, TextBox, TextEdit } from "@edith/ops";
+import type { AnnotAdd, ContentOp, Rect, ShapeAdd, SymbolAdd, TextAdd, TextBox, TextEdit, TextOcrEdit } from "@edith/ops";
 import type { CropBox } from "@/lib/coords";
 import type { ToolStyle } from "@/store/editor";
 
@@ -35,8 +35,11 @@ function boundsOfPoints(pts: number[][]): Rect {
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }
 
-export function isTextOp(op: ContentOp | undefined): op is TextAdd | TextEdit {
-  return op?.type === "text.add" || op?.type === "text.edit";
+/** Objects that are a text box: added text, an original paragraph rewritten, a paragraph OCR read rewritten (M5d). */
+export type TextOp = TextAdd | TextEdit | TextOcrEdit;
+
+export function isTextOp(op: ContentOp | undefined): op is TextOp {
+  return op?.type === "text.add" || op?.type === "text.edit" || op?.type === "text.ocr_edit";
 }
 
 /** Size of a sticky note's icon (MuPDF draws the Note icon 16 x 16 pt from the point). */
@@ -57,7 +60,7 @@ export function isResizable(op: ContentOp | undefined): boolean {
 export function opBounds(op: ContentOp): Rect {
   const o = op as Any;
   switch (op.type) {
-    case "text.add": case "text.edit": return (o.box as { rect: Rect }).rect;
+    case "text.add": case "text.edit": case "text.ocr_edit": return (o.box as { rect: Rect }).rect;
     case "annot.add": {
       const [px, py] = op.point ?? [0, 0];
       if (op.kind === "note") return { x: px, y: py, w: NOTE_SIZE, h: NOTE_SIZE };
@@ -83,7 +86,7 @@ export function moveOp<T extends ContentOp>(op: T, dx: number, dy: number): T {
   const mv = (p: number[]) => [p[0] + dx, p[1] + dy];
   const mr = (r: Rect): Rect => ({ ...r, x: r.x + dx, y: r.y + dy });
   switch (op.type) {
-    case "text.add": case "text.edit": { const box = o.box as TextBox; return { ...op, box: { ...redrawAll(box), rect: mr(box.rect) } }; }
+    case "text.add": case "text.edit": case "text.ocr_edit": { const box = o.box as TextBox; return { ...op, box: { ...redrawAll(box), rect: mr(box.rect) } }; }
     case "ink.add": return { ...op, paths: (o.paths as number[][][]).map((path) => path.map(mv)) };
     case "shape.add": return o.points ? { ...op, points: (o.points as number[][]).map(mv) } : { ...op, rect: mr(o.rect as Rect) };
     case "annot.add": return o.point ? { ...op, point: mv(o.point as number[]) } : op; // markup stays on its text
@@ -97,7 +100,7 @@ export function resizeOp<T extends ContentOp>(op: T, to: Rect): T {
   const sx = b.w ? to.w / b.w : 1, sy = b.h ? to.h / b.h : 1;
   const sc = (p: number[]) => [to.x + (p[0] - b.x) * sx, to.y + (p[1] - b.y) * sy];
   switch (op.type) {
-    case "text.add": case "text.edit": { const box = o.box as TextBox; return { ...op, box: { ...redrawAll(box), rect: { ...box.rect, x: to.x, y: to.y, w: to.w } } }; }
+    case "text.add": case "text.edit": case "text.ocr_edit": { const box = o.box as TextBox; return { ...op, box: { ...redrawAll(box), rect: { ...box.rect, x: to.x, y: to.y, w: to.w } } }; }
     case "ink.add": return { ...op, paths: (o.paths as number[][][]).map((path) => path.map(sc)) };
     case "shape.add": return o.points ? { ...op, points: (o.points as number[][]).map(sc) } : { ...op, rect: to };
     case "annot.add": return op;
