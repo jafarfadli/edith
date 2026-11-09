@@ -20,7 +20,8 @@ import { ObjectShape } from "./ObjectShape";
 import { usePolyTool } from "./shapes/usePolyTool";
 import { textEditStore, updateTextOp } from "./text/textEdit";
 import { CANVAS } from "@/lib/theme";
-import { nextBelow, stacked } from "@/lib/zorder";
+import { isMac } from "@/lib/keys";
+import { boundsOf, nextBelow, stacked } from "@/lib/zorder";
 import { contextMenuStore, menuOpeners } from "./objects/layering";
 
 type TextOp = TextAdd | TextEdit;
@@ -79,6 +80,9 @@ export const overlayHooks: {
   renderOver?: (pageKey: string) => React.ReactNode;
 } = {};
 
+/** Page points around an object's box still tried by stackAt (half the widest stroke and the hit tolerance). */
+const HIT_PAD = 12;
+
 /** Below this size (px) a box side gets no middle anchor: on a small object (a check mark) eight anchors hid it. */
 const MIDDLE_ANCHOR_MIN = 40;
 
@@ -121,24 +125,27 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
 
   /** The objects under stage point `at` (default: the pointer), topmost first, as the canvas stacks them. */
   function stackAt(at?: { x: number; y: number } | null): string[] {
-    const stage = stageRef.current;
+    const stage = stageRef.current, page = pageRef.current;
     const p = at ?? stage?.getPointerPosition();
-    if (!stage || !p) return [];
-    const hit = new Set<string>();
-    for (const layer of stage.getLayers()) {
-      for (const shape of layer.getAllIntersections(p)) {
-        const g = shape.findAncestor(".object");
-        if (g) hit.add(g.id());
-      }
-    }
-    return [...objs, ...markups].map((op) => op.id).filter((id) => hit.has(id)).reverse();
+    if (!stage || !page || !p) return [];
+    // Hit-testing a shape draws it on a stage-sized canvas: only try the objects whose box (padded for strokes and
+    // Konva's hit tolerance) holds the point.
+    const q = page.getAbsoluteTransform().copy().invert().point(p);
+    const near = [...objs, ...markups].filter((op) => {
+      const b = boundsOf(op);
+      return q.x >= b.x - HIT_PAD && q.x <= b.x + b.w + HIT_PAD && q.y >= b.y - HIT_PAD && q.y <= b.y + b.h + HIT_PAD;
+    }).map((op) => op.id);
+    if (!near.length) return [];
+    const groups = new Map(stage.find(".object").map((g) => [g.id(), g as Konva.Group]));
+    return near.filter((id) => groups.get(id)?.find("Shape").some((s) => s.isVisible() && (s as Konva.Shape).intersects(p))).reverse();
   }
 
   /** A press on object `id` with the select tool: selects it; Alt selects the next object beneath the selection at
-   *  the pointer instead (cycling); other buttons leave the selection to the context menu. */
+   *  the pointer instead (cycling); other buttons leave the selection to the context menu, and so does Ctrl+click on
+   *  the Mac (its right-click: selecting the topmost here would lose a selection beneath it). */
   function pressObject(e: Konva.KonvaEventObject<PointerEvent>, id: string) {
     e.cancelBubble = true; // not a press on the empty page
-    if (e.evt.button !== 0) return;
+    if (e.evt.button !== 0 || (e.evt.ctrlKey && isMac())) return;
     textEditStore.getState().selectParagraph(null);
     const s = editorStore.getState();
     s.select(e.evt.altKey ? nextBelow(stackAt(), s.selection) ?? id : id);

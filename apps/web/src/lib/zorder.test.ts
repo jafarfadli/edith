@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
 import { compact } from "@/lib/compact";
 import { formatKeys } from "@/lib/keys";
-import { nextBelow, reorder, stacked, zKeys, zMoveForKey, zMoves, zStage } from "@/lib/zorder";
+import { boundsOf, nextBelow, reorder, stacked, zKeys, zMoveForKey, zMoves, zStage } from "@/lib/zorder";
 
 const R = { x: 0, y: 0, w: 10, h: 10 };
 const rect = (id: string, pageKey = "o0", r = R, extra: Record<string, unknown> = {}): ContentOp =>
@@ -130,6 +130,26 @@ describe("reorder: one step goes past the next object it overlaps", () => {
     const bb = rect("b", "o0", at(300, 300));
     expect(reorder(doc(a, bb, x), ["a", "b"], "forward")).toBeNull();
     expect(reorder(doc(a, x, bb), ["a", "b"], "forward")).toEqual(["x", "a", "b"]);
+  });
+});
+
+describe("boundsOf", () => {
+  it("normalizes and keeps the bounds per op (ops are immutable)", () => {
+    const op = rect("n", "o0", at(10, 10, -5, -5));
+    expect(boundsOf(op)).toEqual({ x: 5, y: 5, w: 5, h: 5 });
+    expect(boundsOf(op)).toBe(boundsOf(op));
+    expect(boundsOf({ ...op })).not.toBe(boundsOf(op)); // an edited op is a new object: measured again
+  });
+
+  it("keeps the menus' zMoves cheap with many large ink strokes", () => {
+    const path = Array.from({ length: 2000 }, (_, i) => [i % 500, Math.floor(i / 4)]);
+    const inks = Array.from({ length: 500 }, (_, i) =>
+      ({ id: `i${i}`, type: "ink.add", pageKey: "o0", paths: [path.map(([x, y]) => [x + i, y])], color: "#000000", width: 2 }) as unknown as ContentOp);
+    const d = doc(...inks);
+    zMoves(d, ["i250"]); // measures every stroke once
+    const t0 = performance.now();
+    for (let i = 0; i < 10; i++) zMoves(d, ["i250"]);
+    expect((performance.now() - t0) / 10).toBeLessThan(15);
   });
 });
 

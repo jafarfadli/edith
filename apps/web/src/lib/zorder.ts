@@ -35,8 +35,19 @@ const classOf = (op: ContentOp) => `${op.pageKey}\u0000${zStage(op)}`;
 /** Whether two objects' boxes (as shown: rotation included) meet; edges touching count, so a straight line (a box
  *  without height) still overlaps what it crosses. */
 export function overlaps(a: ContentOp, b: ContentOp): boolean {
-  const r = norm(visualBounds(a)), s = norm(visualBounds(b));
+  const r = boundsOf(a), s = boundsOf(b);
   return r.x <= s.x + s.w && s.x <= r.x + r.w && r.y <= s.y + s.h && s.y <= r.y + r.h;
+}
+
+// Ops are immutable (an edit replaces the object), so their bounds can be kept for as long as the op lives: the menus
+// ask zMoves on every render, and an ink stroke's bounds cost a pass over all its points.
+const BOUNDS = new WeakMap<ContentOp, Rect>();
+
+/** `op`'s box as shown (visualBounds), with a positive width and height; cached per op. */
+export function boundsOf(op: ContentOp): Rect {
+  let b = BOUNDS.get(op);
+  if (!b) BOUNDS.set(op, (b = norm(visualBounds(op))));
+  return b;
 }
 
 function norm(r: Rect): Rect {

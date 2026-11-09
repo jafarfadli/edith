@@ -53,6 +53,7 @@ function Menu({ menu }: { menu: ObjectMenu }) {
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const doc = useEditor((s) => s.doc);
   const selection = useEditor((s) => s.selection);
+  const tool = useEditor((s) => s.tool);
   const mac = useIsMac();
   const op = doc.objects[menu.target];
 
@@ -74,20 +75,21 @@ function Menu({ menu }: { menu: ObjectMenu }) {
   }, [menu.x, menu.y]);
 
   useEffect(() => {
-    const outside = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) close(); };
+    const outside = (e: Event) => { if (!ref.current?.contains(e.target as Node)) close(); };
     window.addEventListener("pointerdown", outside, true); // capture: Konva and dnd-kit stop propagation
-    window.addEventListener("scroll", close, true);
+    window.addEventListener("scroll", outside, true); // the canvas moved under it; not the menu's own list scrolling
     window.addEventListener("resize", close);
     window.addEventListener("blur", close);
     return () => {
       window.removeEventListener("pointerdown", outside, true);
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("scroll", outside, true);
       window.removeEventListener("resize", close);
       window.removeEventListener("blur", close);
     };
   }, []);
 
   useEffect(() => { if (!op) close(); }, [op]); // deleted or undone meanwhile
+  useEffect(() => { if (tool !== "select") close(); }, [tool]); // a tool key pressed while focus was elsewhere
 
   const onKey = usePopupFocus({ open: true, popup: ref, trigger: before, items: "[role^=menuitem]:not(:disabled)", orientation: "vertical", close });
   if (!op) return null;
@@ -117,7 +119,9 @@ function Menu({ menu }: { menu: ObjectMenu }) {
 
   return createPortal(
     <div ref={ref} role="menu" aria-label={t.layers.contextMenu} data-testid="object-menu"
-      onKeyDown={onKey}
+      // Every key stays in the menu: arrows, Enter, Escape, Tab are its own (usePopupFocus); letters must not switch
+      // the editor's tool, Delete not delete the object, behind it.
+      onKeyDown={(e) => { onKey(e); e.stopPropagation(); }}
       onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => e.stopPropagation()}
       // Placed before the first paint (layout effect), so it never shows at the unflipped spot; not hidden meanwhile:

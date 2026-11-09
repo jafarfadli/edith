@@ -181,6 +181,15 @@ test("Alt+click cycles through the objects under the pointer; the menu lists the
   await page.mouse.click(at.x, at.y);
   await page.keyboard.up("Alt");
   expect(await selected()).toEqual(["true", null]);
+  if (await page.evaluate(() => /Mac/.test(navigator.platform))) {
+    // Ctrl+click is the Mac's right-click: it must not first select the topmost object.
+    await page.keyboard.down("Control");
+    await page.mouse.click(at.x, at.y);
+    await page.keyboard.up("Control");
+    expect(await selected()).toEqual(["true", null]);
+    if (await menu(page).count()) await page.keyboard.press("Escape"); // the menu, if Chromium sent contextmenu too
+    await expect(menu(page)).toHaveCount(0);
+  }
 
   // Right-click keeps A (selected, under the pointer though beneath B): Bawa ke depan moves A, not B.
   await page.mouse.click(at.x, at.y, { button: "right" });
@@ -208,6 +217,15 @@ test("the object menu works from the keyboard and stays inside the window", asyn
   await page.keyboard.press("Shift+F10");
   await expect(menu(page)).toBeVisible();
   await expect(item(page, "Mundur satu lapis")).toBeFocused(); // B is on top: the first two are disabled
+  // Keys stay in the menu: a tool letter does not switch tools, Delete does not delete the object behind it.
+  await page.keyboard.press("r");
+  await page.keyboard.press("Delete");
+  await expect(menu(page)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pilih", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(item(page, "Mundur satu lapis")).toBeFocused();
+  // A scroll inside the menu (a long list) does not close it.
+  await menu(page).evaluate((el) => el.dispatchEvent(new Event("scroll")));
+  await expect(menu(page)).toBeVisible();
   await page.keyboard.press("ArrowDown");
   await expect(item(page, "Kirim ke belakang")).toBeFocused();
   await page.keyboard.press("Escape");
