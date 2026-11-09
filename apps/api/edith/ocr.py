@@ -738,6 +738,29 @@ def _cover(words: list[tuple[Word, _Region]], lines: list[dict], size: float) ->
     return cover, region
 
 
+def _ink_box(words: list[Word]) -> tuple[float, float, float, float]:
+    return (min(w.box[0] for w in words), min(w.box[1] for w in words),
+            max(w.box[2] for w in words), max(w.box[3] for w in words))
+
+
+def _clear_of(cover: pymupdf.Rect, ink: pymupdf.Rect, others: list[pymupdf.Rect], px: float) -> pymupdf.Rect:
+    """`cover` pulled back from other text's ink that its padding reaches (a line set tight above or below, a word
+    close beside): the padding only ever takes paper, never another paragraph's letters. `ink`: the paragraph's own."""
+    c = pymupdf.Rect(cover)
+    for o in others:
+        if not o.intersects(c):
+            continue
+        if o.y1 <= ink.y0 + px:            # above the paragraph's ink
+            c.y0 = max(c.y0, o.y1 + px)
+        elif o.y0 >= ink.y1 - px:          # below it
+            c.y1 = min(c.y1, o.y0 - px)
+        elif o.x1 <= ink.x0 + px:          # left of it
+            c.x0 = max(c.x0, o.x1 + px)
+        elif o.x0 >= ink.x1 - px:          # right of it
+            c.x1 = min(c.x1, o.x0 - px)
+    return c
+
+
 def _background(cover: pymupdf.Rect, region: _Region) -> tuple[str, bool]:
     """The picture's background inside `cover`: the median colour of its pixels away from ink (2 px), and whether it
     is plain (luminance p90 − p10 ≤ UNIFORM)."""
@@ -927,6 +950,9 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
         if not any(c.isalnum() for c in text) and confidence < 0.6:
             continue
         cover, region = _cover(ws, p["lines"], max(r["size"] for r in p["runs"]))
+        mine = {id(w) for w, _ in ws}
+        others = [regions[i].to_page(w.box) for w, i in words if id(w) not in mine and regions[i] is region]
+        cover = _clear_of(cover, region.to_page(_ink_box([w for w, _ in ws])), others, region.scale)
         colour, uniform = _background(cover, region)
         p = dict(p, id=f"ocr{len(out)}", ocr=True, confidence=round(confidence, 2),
                  cover={"x": _num(cover.x0), "y": _num(cover.y0), "w": _num(cover.width), "h": _num(cover.height)},

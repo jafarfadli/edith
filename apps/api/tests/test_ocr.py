@@ -115,6 +115,15 @@ def test_finding_lines_stays_linear_on_a_picture_full_of_long_runs():
     assert time.monotonic() - start < 2
 
 
+def test_a_cover_never_takes_another_paragraphs_letters():
+    ink = pymupdf.Rect(72, 300, 300, 310)
+    cover = pymupdf.Rect(70, 298, 302, 312)
+    above = pymupdf.Rect(72, 290, 200, 299)   # descenders of a line set tight above
+    beside = pymupdf.Rect(301, 300, 340, 310)  # a word close to its right
+    far = pymupdf.Rect(72, 400, 200, 410)
+    assert ocr._clear_of(cover, ink, [above, beside, far], 0.24) == pymupdf.Rect(70, 299.24, 300.76, 312)
+
+
 def _region(grey: np.ndarray, rgb: np.ndarray | None = None) -> ocr._Region:
     rgb = rgb if rgb is not None else np.repeat(grey[:, :, None], 3, axis=2)
     region = ocr._Region(rect=pymupdf.Rect(0, 0, grey.shape[1] * 72 / 300, grey.shape[0] * 72 / 300), dpi=300,
