@@ -113,6 +113,10 @@ class FontRegistry:
     def families(self) -> list[str]:
         return list(self._manifest["families"].keys())
 
+    def fallback(self, design: str) -> str:
+        """The family standing in for an unknown font of `design` ("sans", "serif" or "mono")."""
+        return self._manifest["fallback"][design]
+
     def _family(self, family: str) -> dict:
         fam = self._manifest["families"].get(family) or self._cjk.get(family)
         if fam is None:
