@@ -23,11 +23,16 @@ export interface ParagraphLine { rect: Rect; baseline: number; size: number; sta
  *  symmetric width) or leftwards from the right edge (right). Rects are the ink since M5b (no leading/trailing spaces).
  *  Left-aligned multi-line paragraphs get it too (M5b F2): the room beside all their lines, the most the web may
  *  widen their wrap width (lib/paragraphs.ts wrapWidth). Runs of original text carry the PDF's measured hScale /
- *  charSpacing / wordSpacing (and the true size of horizontally scaled text). */
+ *  charSpacing / wordSpacing (and the true size of horizontally scaled text). A paragraph that is not editable says
+ *  why in `lock` (M5c). */
 export interface Paragraph {
   id: string; rect: Rect; lines: ParagraphLine[]; runs: Run[];
   align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean; maxWidth?: number;
+  lock?: ParagraphLock;
 }
+/** Why an original paragraph can't be edited: "hidden", its text is invisible (an OCR layer over a picture of the text,
+ *  which is what shows); "font", a symbol font nothing else can draw; "rotated", text that isn't horizontal. */
+export type ParagraphLock = "hidden" | "font" | "rotated";
 /** `doc`: set by the client on fonts of an imported PDF (see `fontId`). */
 export interface DocFont {
   doc?: string;
@@ -35,7 +40,9 @@ export interface DocFont {
   family: string; bold: boolean; italic: boolean; substitute: BundledFont;
 }
 export interface TextData {
-  doc_id: string; pages: { index: number; paragraphs: Paragraph[] }[]; fonts: DocFont[];
+  /** `imageText` (M5c): rects of images that look like print with no text over them (a scanned form): nothing there can
+   *  be edited as text. */
+  doc_id: string; pages: { index: number; paragraphs: Paragraph[]; imageText?: Rect[] }[]; fonts: DocFont[];
   /** Segmentation version (2 since M5, 3 since M5b); absent in fixtures built from extract_text directly. */
   paragraphsVersion?: number;
 }

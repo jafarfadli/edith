@@ -64,6 +64,14 @@ export const t = {
     nextPage: "Halaman berikutnya",
     restored: "Perubahan sebelumnya dipulihkan",
     textEditsDropped: "Perubahan sebelumnya dipulihkan, kecuali suntingan teks asli: pembagian paragraf dokumen ini sudah diperbarui. Ulangi suntingan teks tersebut.",
+    /** Why an original paragraph (Paragraph.lock) or an image of print can't be edited, shown when it is clicked. */
+    locked: {
+      hidden: "Teks ini sebenarnya gambar, jadi tidak bisa diedit langsung. Untuk menggantinya, tutup dengan Whiteout (menu Penghapus), lalu tambahkan Teks baru di atasnya.",
+      font: "Teks ini memakai font simbol yang tidak bisa digantikan font lain, jadi tidak bisa diedit.",
+      rotated: "Teks yang diputar belum bisa diedit.",
+      imageText: "Bagian ini gambar teks (hasil pindai), bukan teks, jadi tidak bisa diedit langsung. Untuk menggantinya, tutup dengan Whiteout (menu Penghapus), lalu tambahkan Teks baru di atasnya.",
+    },
+    pictureText: "Sebagian teks di dokumen ini berupa gambar (hasil pindai) dan tidak bisa diedit langsung. Klik bagian itu untuk melihat caranya.",
     tools: "Alat",
     properties: "Properti",
     options: "pilihan",

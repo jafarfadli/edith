@@ -1,6 +1,6 @@
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { FontRef, Run } from "@edith/ops";
+import type { FontRef, Rect, Run } from "@edith/ops";
 import { fontFileUrl, getText, type DocFont, type Paragraph, type TextData } from "@/lib/api";
 import { documentScript } from "@/lib/fallback";
 import { fontId, fontStore, isOriginal } from "@/lib/fonts";
@@ -15,6 +15,8 @@ export interface TextState {
   status: "idle" | "loading" | "ready" | "error";
   docId: string | null;
   pages: ParagraphPages;
+  /** Rects of images that look like print with no text over them (M5c), keyed like `pages`. */
+  imageText: Record<string, Rect[]>;
   fonts: FontTable;
   /** Load status of imported PDFs' text. */
   imports: Record<string, "loading" | "ready" | "error">;
@@ -22,24 +24,36 @@ export interface TextState {
   loadImport(docId: string): Promise<void>;
 }
 
+type Tagged = { pages: ParagraphPages; imageText: Record<string, Rect[]>; fonts: FontTable };
+
 /** `data` with every original font naming document `doc` (the imported PDF it was extracted from). */
-function tagged(data: TextData, doc: string | null): { pages: ParagraphPages; fonts: FontTable } {
+function tagged(data: TextData, doc: string | null): Tagged {
   const tag = (f: FontRef): FontRef => (doc && isOriginal(f) ? { ...f, doc } : f);
   const run = (r: Run): Run => ({ ...r, font: tag(r.font) });
   const pages: ParagraphPages = {};
-  for (const p of data.pages) pages[srcKey(doc ?? data.doc_id, p.index)] = p.paragraphs.map((g) => ({ ...g, runs: g.runs.map(run) }));
+  const imageText: Record<string, Rect[]> = {};
+  for (const p of data.pages) {
+    const key = srcKey(doc ?? data.doc_id, p.index);
+    pages[key] = p.paragraphs.map((g) => ({ ...g, runs: g.runs.map(run) }));
+    if (p.imageText?.length) imageText[key] = p.imageText;
+  }
   const fonts: FontTable = {};
   for (const f of data.fonts) {
     const font: DocFont = doc ? { ...f, doc } : f;
     fonts[fontId({ kind: "original", ref: f.ref, doc })] = font;
   }
-  return { pages, fonts };
+  return { pages, imageText, fonts };
+}
+
+/** `t` added to what the store holds. */
+function merged(s: TextState, t: Tagged): Tagged {
+  return { pages: { ...s.pages, ...t.pages }, imageText: { ...s.imageText, ...t.imageText }, fonts: { ...s.fonts, ...t.fonts } };
 }
 
 export const textStore = createStore<TextState>()((set, get) => ({
-  status: "idle", docId: null, pages: {}, fonts: {}, imports: {},
+  status: "idle", docId: null, pages: {}, imageText: {}, fonts: {}, imports: {},
   async load(docId) {
-    set({ status: "loading", docId, pages: {}, fonts: {}, imports: {} });
+    set({ status: "loading", docId, pages: {}, imageText: {}, fonts: {}, imports: {} });
     fontStore.setOriginalSource((f) => fontFileUrl(f.doc ?? docId, f.ref));
     try {
       const data = await getText(docId);
@@ -47,7 +61,7 @@ export const textStore = createStore<TextState>()((set, get) => ({
       const t = tagged({ ...data, doc_id: docId }, null);
       // Han characters typed into this document fall back to the CJK font of its own script (Korean, Japanese …).
       fontStore.setHanScript(documentScript(data.pages.flatMap((p) => p.paragraphs.flatMap((g) => g.runs.map((r) => r.text)))));
-      set({ status: "ready", pages: { ...get().pages, ...t.pages }, fonts: { ...get().fonts, ...t.fonts } });
+      set({ status: "ready", ...merged(get(), t) });
     } catch (e) {
       console.warn("text extraction failed; original text cannot be edited", e);
       if (get().docId === docId) set({ status: "error" });
@@ -61,7 +75,7 @@ export const textStore = createStore<TextState>()((set, get) => ({
     try {
       const t = tagged(await getText(docId), docId);
       if (get().docId !== main) return;
-      set({ pages: { ...get().pages, ...t.pages }, fonts: { ...get().fonts, ...t.fonts }, imports: { ...get().imports, [docId]: "ready" } });
+      set({ ...merged(get(), t), imports: { ...get().imports, [docId]: "ready" } });
     } catch (e) {
       console.warn("text extraction of an imported PDF failed", docId, e);
       if (get().docId === main) set({ imports: { ...get().imports, [docId]: "error" } });
@@ -78,4 +92,17 @@ const NONE: Paragraph[] = [];
 /** Original paragraphs of a page source (none for blank pages or before loading). */
 export function paragraphsOf(src: PageSrc, pages: ParagraphPages = textStore.getState().pages): Paragraph[] {
   return "doc" in src ? pages[srcKey(src.doc, src.index)] ?? NONE : NONE;
+}
+
+const NO_RECTS: Rect[] = [];
+
+/** Images of print on a page source that hold no text (see TextState.imageText). */
+export function imageTextOf(src: PageSrc, imageText: Record<string, Rect[]> = textStore.getState().imageText): Rect[] {
+  return "doc" in src ? imageText[srcKey(src.doc, src.index)] ?? NO_RECTS : NO_RECTS;
+}
+
+/** Whether some text of the loaded documents is a picture: an image of print, or invisible text over its picture. */
+export function hasPictureText(s: Pick<TextState, "pages" | "imageText"> = textStore.getState()): boolean {
+  return Object.values(s.imageText).some((r) => r.length > 0)
+    || Object.values(s.pages).some((ps) => ps.some((p) => p.lock === "hidden"));
 }

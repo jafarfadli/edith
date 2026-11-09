@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import type Konva from "konva";
 import { Rect, Transformer } from "react-konva";
 import { useStore } from "zustand";
-import type { TextBox, TextEdit } from "@edith/ops";
+import type { Rect as Box, TextBox, TextEdit } from "@edith/ops";
 import type { Paragraph } from "@/lib/api";
+import { noticeStore } from "@/lib/notices";
 import { maskRects } from "@/lib/paragraphs";
+import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
-import { paragraphsOf, useText } from "@/store/text";
+import { imageTextOf, paragraphsOf, useText } from "@/store/text";
 import { materializeParagraph, startParagraphEdit, textEditStore } from "./textEdit";
 import { CANVAS } from "@/lib/theme";
 
@@ -21,14 +23,23 @@ function setCursor(e: Konva.KonvaEventObject<unknown>, cursor: string) {
   if (c) c.style.cursor = cursor;
 }
 
+/** Text that can't be edited (a locked paragraph, an image of print): its key and the notice that says why. */
+interface Locked { key: string; rect: Box; why: string }
+
+/** Keys of the locked targets explained under the text tool once already: there a click still adds a text box (the
+ *  way to replace such text is a whiteout and new text over it), so the notice is not repeated on every click. */
+const explained = new Set<string>();
+
 /** Under the page's objects: white covers over the lines edited paragraphs replace (the bake redacts them) and, for
- *  the select and text tools, hover/select/drag/resize targets over the paragraphs not edited yet. */
+ *  the select and text tools, hover/select/drag/resize targets over the paragraphs not edited yet. Text that can't be
+ *  edited (a locked paragraph, an image of print: M5c) gets a target too, which says why when clicked. */
 export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   const entry = useEditor((s) => s.doc.pages.find((p) => p.pageKey === pageKey));
   const order = useEditor((s) => s.doc.order);
   const objects = useEditor((s) => s.doc.objects);
   const tool = useEditor((s) => s.tool);
   const pages = useText((s) => s.pages);
+  const imageText = useText((s) => s.imageText);
   const editing = useStore(textEditStore, (s) => s.editing);
   const selected = useStore(textEditStore, (s) => (s.paragraph?.pageKey === pageKey ? s.paragraph.id : null));
   const [hover, setHover] = useState<string | null>(null);
@@ -52,11 +63,25 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
     trRef.current?.getLayer()?.batchDraw();
   }, [active, pages]);
 
-  if (!paragraphs.length) return null;
+  // Images of print first, so a locked paragraph over one (invisible text over its picture) is the target hit.
+  const locked: Locked[] = [
+    ...(entry ? imageTextOf(entry.src, imageText) : []).map((r, i) => ({ key: `image-${i}`, rect: r, why: t.editor.locked.imageText })),
+    ...paragraphs.filter((p) => !p.editable && p.lock && !edited.has(p.id))
+      .map((p) => ({ key: `lock-${p.id}`, rect: p.rect, why: t.editor.locked[p.lock!] })),
+  ];
+  if (!paragraphs.length && !locked.length) return null;
 
   const select = (p: Paragraph) => {
     editorStore.getState().select(null);
     textEditStore.getState().selectParagraph({ pageKey, id: p.id });
+  };
+  // Under the select tool every click explains; under the text tool the click still adds a text box (no cancelBubble)
+  // and the notice shows once per target.
+  const explain = (l: Locked) => {
+    const once = `${pageKey}/${l.key}`;
+    if (tool === "text" && explained.has(once)) return;
+    explained.add(once);
+    noticeStore.getState().show({ kind: "info", text: l.why });
   };
 
   return (
@@ -64,6 +89,20 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
       {paragraphs.filter((p) => edited.has(p.id)).flatMap((p) => maskRects(p, edits.get(p.id)).map((r, i) => (
         <Rect key={`mask-${p.id}-${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="#ffffff" listening={false} />
       )))}
+      {locked.map((l) => (
+        <Rect
+          key={l.key}
+          name="locked-text"
+          x={l.rect.x} y={l.rect.y} width={l.rect.w} height={l.rect.h}
+          fill="transparent"
+          stroke={interactive && hover === l.key ? CANVAS.locked : undefined}
+          strokeWidth={1} strokeScaleEnabled={false} dash={[2, 3]}
+          listening={interactive}
+          onMouseEnter={(e) => { setHover(l.key); if (tool === "select") setCursor(e, "help"); }}
+          onMouseLeave={(e) => { setHover((h) => (h === l.key ? null : h)); if (tool === "select") setCursor(e, ""); }}
+          onPointerDown={() => explain(l)}
+        />
+      ))}
       {paragraphs.filter((p) => p.editable && !edited.has(p.id)).map((p) => (
         <Rect
           key={p.id}
