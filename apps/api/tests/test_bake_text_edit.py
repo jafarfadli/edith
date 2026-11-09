@@ -326,3 +326,95 @@ def test_a_single_centred_or_right_line_is_anchored_like_the_client_anchors_it()
         assert kept(paragraph, box) == {0: 0}, align
         box["rect"]["x"] = 50
         assert kept(paragraph, box) == {}, align
+
+
+# --- Kept prefix of an edited line (LayoutLine.prefix, M5d): the words before the edit keep their glyphs ----------
+
+DIEDIT_X = 150.71  # make_edit_pdf() g0 line 1: wordX of "diedit" (Helvetica 12 from x 72)
+
+
+def prefix_edit(head="Paragraf yang ", rest="diubah baris satu", rest_x=DIEDIT_X - 72, prefix=(0, 1), source=None):
+    """g0 with line 1 edited after its first two words: the kept prefix `head` as segment 0, `rest` drawn from `rest_x`."""
+    run = {"text": f"{head}{rest} {HELV_LINES[1]}", "font": ARIMO, "size": 12, "color": "#000000"}
+    segs = [{"x": 0, "text": head, "runIndex": 0}] + ([{"x": rest_x, "text": rest, "runIndex": 0}] if rest else [])
+    first = {"baseline": 12.0, "segments": segs,
+             **({"prefix": {"source": prefix[0], "segments": prefix[1]}} if prefix else {}),
+             **({"source": source} if source is not None else {})}
+    second = {"baseline": 24.0, "segments": [{"x": 0, "text": HELV_LINES[1], "runIndex": 0}], "source": 1}
+    return {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+            "box": {"rect": {"x": 72, "y": 88, "w": 300, "h": 28}, "align": "left", "lineHeight": 12,
+                    "paragraphs": [[run]], "layout": [first, second]}}
+
+
+def raw_chars(page, baseline):
+    return [c for b in page.get_text("rawdict")["blocks"] for ln in b.get("lines", []) for s in ln["spans"]
+            for c in s["chars"] if abs(c["origin"][1] - baseline) < 1 and c["c"].strip()]
+
+
+def test_get_text_gives_the_x_of_every_word_of_a_line():
+    page = pymupdf.open(stream=make_edit_pdf(), filetype="pdf")[0]
+    line = extract_paragraphs(page)[0]["lines"][0]
+    starts = [c["origin"][0] for i, c in enumerate(raw_chars(page, 100)) if i == 0 or c["origin"][0] - raw_chars(page, 100)[i - 1]["bbox"][2] > 1]
+    assert line["wordX"] == pytest.approx(starts, abs=0.01)
+    assert len(line["wordX"]) == len(HELV_LINES[0].split()) and line["wordX"][2] == pytest.approx(DIEDIT_X, abs=0.01)
+
+
+def test_a_kept_prefix_keeps_its_glyphs_and_the_rest_of_the_line_is_redrawn_from_the_first_other_word(ctx):
+    data = make_edit_pdf()
+    src = pymupdf.open(stream=data, filetype="pdf")[0]
+    out = reload(bake(data, ops(prefix_edit()), ctx))
+    spans_ = line_spans(out[0], 100)
+    assert spans_[0]["font"] == "Helvetica" and spans_[0]["text"].strip() == "Paragraf yang"
+    kept_chars = [c for c in raw_chars(out[0], 100) if c["origin"][0] < DIEDIT_X - 0.1]
+    assert [(c["c"], c["origin"]) for c in kept_chars] == [(c["c"], c["origin"]) for c in raw_chars(src, 100)[:12]]
+    redrawn = [s for s in spans_ if "Arimo" in s["font"]]
+    assert "".join(s["text"] for s in redrawn).strip() == "diubah baris satu"
+    assert redrawn[0]["origin"][0] == pytest.approx(DIEDIT_X, abs=0.01)  # where "diedit" started
+    t = text(out[0])
+    assert t.count("Paragraf yang") == 1 and "diedit" not in t and t.count("baris satu") == 1
+
+
+@pytest.mark.parametrize("change", [
+    dict(head="Paragraf yung "),                 # the prefix is not the original's
+    dict(head="Paragraf ya", rest="ng diubah"),  # it ends inside a word
+    dict(rest_x=DIEDIT_X - 72 - 5),              # the rest would start on the kept glyphs
+    dict(prefix=(1, 1)),                         # it names another line (kept as a whole already)
+    dict(prefix=(0, 2)),                         # its segments are the whole changed line
+])
+def test_a_prefix_that_does_not_match_redraws_the_whole_line(ctx, change):
+    out = reload(bake(make_edit_pdf(), ops(prefix_edit(**change)), ctx))
+    spans_ = line_spans(out[0], 100)
+    assert spans_ and all("Arimo" in s["font"] for s in spans_), change
+    t = text(out[0])
+    assert "diedit" not in t and t.count("Paragraf y") == 1  # redacted once, drawn once
+
+
+def test_a_prefix_of_the_whole_line_keeps_it_and_adds_the_words_after_it(ctx):
+    """Words appended to a line: the original line stays (no band) and the new words are drawn after its end."""
+    end = 72 + 162.74
+    out = reload(bake(make_edit_pdf(), ops(prefix_edit(head=HELV_LINES[0] + " ", rest="lagi", rest_x=end - 72 + 3.3)), ctx))
+    spans_ = line_spans(out[0], 100)
+    assert spans_[0]["font"] == "Helvetica" and spans_[0]["text"].strip() == HELV_LINES[0]
+    assert [s["text"].strip() for s in spans_[1:]] == ["lagi"] and "Arimo" in spans_[1]["font"]
+    assert text(out[0]).count(HELV_LINES[0]) == 1
+
+
+def test_kept_prefix_of_a_condensed_line_keeps_its_glyph_boxes(ctx):
+    """Tz 94.7 Dotum (keep-lines.pdf): line 2's first words stay exactly where they were and the band cuts at the next
+    word, although condensed glyph boxes overlap their neighbours."""
+    from edith.extract import extract_text
+    data, src, texts, op = _condensed_edit({})
+    p = next(p for p in extract_text(src, ctx.fonts)["pages"][0]["paragraphs"] if len(p["lines"]) == 3)
+    run, line = p["runs"][0], p["lines"][1]
+    words = texts[1].split(" ")
+    head, cut = " ".join(words[:3]) + " ", line["wordX"][3]
+    op["box"]["paragraphs"][0][0].update(size=run["size"], hScale=run["hScale"])
+    op["box"]["layout"][1]["segments"] = [{"x": 0, "text": head, "runIndex": 0},
+                                          {"x": cut - op["box"]["rect"]["x"], "text": " ".join(words[3:]), "runIndex": 0}]
+    op["box"]["layout"][1]["prefix"] = {"source": 1, "segments": 1}
+    out = reload(bake(data, ops(op), ctx))
+    kept_chars = [c for c in raw_chars(out[0], 134) if c["origin"][0] < cut - 0.1]
+    orig_chars = [c for c in raw_chars(src[0], 134) if c["origin"][0] < cut - 0.1]
+    assert kept_chars and [(c["c"], c["bbox"]) for c in kept_chars] == [(c["c"], c["bbox"]) for c in orig_chars]
+    assert "".join(c["c"] for c in raw_chars(out[0], 134)).count(head.replace(" ", "")) == 1
+    assert "".join(c["c"] for c in raw_chars(out[0], 134)) == texts[1].replace(" ", "")

@@ -67,13 +67,24 @@ class Segment(Model):
     runIndex: int = Field(ge=0)
 
 
+class LinePrefix(Model):
+    """The first `segments` segments of a layout line repeat the first words of original line `source` unchanged,
+    in place (see LayoutLine.prefix)."""
+    source: int = Field(ge=0)
+    segments: int = Field(ge=1)
+
+
 class LayoutLine(Model):
     """`source` (text.edit only): the index of the original paragraph line this line repeats unchanged (same
     text, styles and line break, in place). The bake then keeps that line's original glyphs: it neither redacts
-    nor redraws it. If the line no longer matches the original, the bake redraws it from `segments`."""
+    nor redraws it. If the line no longer matches the original, the bake redraws it from `segments`.
+    `prefix` (text.edit only, M5d): the line is an edited original line whose first words stay as they were. The
+    bake keeps their original glyphs and redraws the rest of the line, from the original x of its first other
+    word on; if the prefix no longer matches the original, it redraws the whole line from `segments`."""
     baseline: float
     segments: list[Segment]
     source: int | None = Field(default=None, ge=0)
+    prefix: LinePrefix | None = None
 
 
 class TextBox(Model):

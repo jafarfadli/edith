@@ -43,6 +43,12 @@ TAB_EM = 0.6         # a tab gap is at least this wide (ink to ink) …
 TAB_WORD = 2.0       # … and this many times the line's usual word gap (under WIDE_EM); WIDE_EM wide without one
 WIDE_EM = 0.8
 
+# Whitespace between words: exactly what JavaScript's \s matches (ECMAScript WhiteSpace and LineTerminator), which the
+# client splits words and drops line-end spaces by. Shared contract with SPACE_CHARS in apps/web/src/lib/keepLines.ts.
+# Not str.isspace(): that also takes U+001C–U+001F and U+0085, and not U+FEFF.
+SPACE_CHARS = frozenset("\t\n\x0b\x0c\r \xa0 " + "".join(map(chr, range(0x2000, 0x200B)))
+                        + "    　﻿")
+
 FontResolver = Callable[[dict], dict]  # pymupdf span → FontRef JSON
 SpanCheck = Callable[[dict], bool]     # pymupdf span → True when the paragraph holding it can't be edited
 Program = Callable[[dict], "pymupdf.Font | None"]  # run FontRef JSON → the font program clients measure it with
@@ -632,6 +638,7 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
         out_lines.append({
             "rect": _rect(x0, line.y0, x1, line.y1),
             "baseline": _num(line.baseline), "size": _num(line.size), "start": start, "end": offset,
+            **({"wordX": xs} if line.horizontal and (xs := _word_xs(line.spans)) is not None else {}),
         })
     for run, run_fits in zip(runs, fits):
         _finish(run, run_fits)
@@ -711,6 +718,28 @@ def _trimmed(spans: list[dict]) -> list[tuple[str, dict]]:
     return out
 
 
+def _word_xs(spans: list[dict]) -> list[float] | None:
+    """Origin x of the first glyph of every word of the line's text (as _trimmed gives it; a word: characters between
+    SPACE_CHARS), left to right: where an edit keeps the words it leaves alone (M5d). None when a word starts on a
+    character with no position (never expected: synthetic characters are spaces) or the words do not run left to
+    right (right-to-left text)."""
+    # A synthetic space (_join) has no character: it only separates words, which the next real character shows.
+    seq: list[tuple[str, float | None]] = []
+    for s in spans:
+        seq += [(c["c"], c["origin"][0]) for c in s["chars"]] if s["chars"] else [(ch, None) for ch in s["text"]]
+    full = "".join(c for c, _ in seq)
+    lo, hi = len(full) - len(full.lstrip()), len(full.rstrip())  # as _trimmed cuts the line's text
+    out, prev = [], True
+    for c, x in seq[lo:hi]:
+        space = c in SPACE_CHARS
+        if not space and prev:
+            if x is None:
+                return None
+            out.append(_num(x))
+        prev = space
+    return out if all(b > a for a, b in zip(out, out[1:])) else None
+
+
 def _rect(x0: float, y0: float, x1: float, y1: float) -> dict:
     return {"x": _num(x0), "y": _num(y0), "w": _num(x1 - x0), "h": _num(y1 - y0)}
 
@@ -724,7 +753,10 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
     across a drawn rule (table borders, separators). Rects and line rects are the ink (no leading or trailing
     spaces). A single-line paragraph gets its alignment from where it sits (see _single) and `maxWidth`: how
     wide it may grow when edited, from its left edge (left), around its centre (center) or from its right
-    edge (right). A left-aligned multi-line paragraph gets `maxWidth` too: the room beside all its lines. With `program` (see _paragraph), runs carry the original's measured scale and spacing."""
+    edge (right). A left-aligned, centred or right-aligned multi-line paragraph gets `maxWidth` too: the room beside
+    all its lines, with the same meaning (justified text never grows: its lines compress their spaces). Each
+    horizontal line gives `wordX`: the x of every word of its text (see _word_xs). With `program` (see _paragraph),
+    runs carry the original's measured scale and spacing."""
     rules = page_rules(page)
     blocks: list[list[_Line]] = []
     for block in page.get_text("rawdict", flags=FLAGS)["blocks"]:
@@ -761,12 +793,21 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
             if len(group) == 1 and group[0].horizontal:
                 paragraph["align"], paragraph["maxWidth"] = _single(group[0], every, rules, left_margin, right_margin,
                                                                     page.cropbox.width)
-            elif paragraph["align"] == "left" and all(line.horizontal for line in group):
-                # The room beside every line (M5b F2): the web wraps a little wider than the widest line, so a small
-                # edit does not re-wrap a paragraph that fit its column by a hair.
+            elif paragraph["align"] in ("left", "center", "right") and all(line.horizontal for line in group):
+                # The room beside every line (M5b F2; centred and right-aligned: M5d): an edited line may grow into it
+                # before it wraps, so a small edit does not re-wrap a paragraph that fit its column by a hair.
                 left = min(line.ink_x0 for line in group)
+                right = max(line.ink_x1 for line in group)
                 end = min(_room_end(line, every, rules, right_margin) for line in group)
-                paragraph["maxWidth"] = _num(max(end - left, max(line.ink_x1 for line in group) - left))
+                start = max(_room_start(line, every, rules, left_margin) for line in group)
+                if paragraph["align"] == "left":
+                    room = end - left
+                elif paragraph["align"] == "right":
+                    room = right - start
+                else:  # around the paragraph's centre, as far as the nearer side allows
+                    centre = (left + right) / 2
+                    room = 2 * min(centre - start, end - centre)
+                paragraph["maxWidth"] = _num(max(room, right - left))
             paragraphs.append(paragraph)
     return paragraphs
 
@@ -828,3 +869,14 @@ def _room_end(line: _Line, every: list[_Line], rules: Rules, right_margin: float
     ends += [o.ink_x0 for o in every if o is not line and o.ink_x0 > line.ink_x1 - 0.5
              and min(o.y1, line.y1) - max(o.y0, line.y0) > 0.5 * min(o.y1 - o.y0, line.y1 - line.y0)]
     return min(ends) - ROOM_PAD
+
+
+def _room_start(line: _Line, every: list[_Line], rules: Rules, left_margin: float) -> float:
+    """Where the room left of `line` ends (mirrors _room_end): the first vertical rule or other text on its height, or
+    the left margin, plus ROOM_PAD."""
+    mid = (line.y0 + line.y1) / 2
+    starts = [left_margin]
+    starts += [s.at for s in rules.vertical if s.at < line.ink_x0 + 0.5 and s.lo <= mid <= s.hi]
+    starts += [o.ink_x1 for o in every if o is not line and o.ink_x1 < line.ink_x0 + 0.5
+               and min(o.y1, line.y1) - max(o.y0, line.y0) > 0.5 * min(o.y1 - o.y0, line.y1 - line.y0)]
+    return max(starts) + ROOM_PAD
