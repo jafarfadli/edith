@@ -21,6 +21,7 @@ export function objectLabel(op: ContentOp): { icon: ObjectIcon; label: string; d
   switch (op.type) {
     case "text.add": return { icon: "text", label: L.text, detail: snippet(plainText(op.box)) };
     case "text.edit": return { icon: "textEdit", label: L.textEdit, detail: snippet(plainText(op.box)) };
+    case "text.ocr_edit": return { icon: "textEdit", label: L.textOcr, detail: snippet(plainText(op.box)) };
     case "image.add": return { icon: "image", label: L.image };
     case "signature.add": return { icon: "signature", label: L.signature };
     case "shape.add": return { icon: op.kind, label: L.shape[op.kind] };

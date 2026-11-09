@@ -16,13 +16,16 @@ export class ApiError extends Error {
   }
 }
 
-/** One original line of a paragraph; `start`/`end` index the paragraph's joined run text (end excludes trailing spaces). */
-export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number }
+/** One original line of a paragraph; `start`/`end` index the paragraph's joined run text (end excludes trailing spaces).
+ *  `wordX` (M5d, horizontal left-to-right lines): the x of the first glyph of each word of the line's text (words split
+ *  at SPACE_CHARS, lib/keepLines.ts), where an edit keeps the words it leaves alone (lib/editLine.ts). */
+export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number; wordX?: number[] }
 /** `maxWidth` (single-line paragraphs, M5): how wide the paragraph may grow when edited — up to the next cell border
  *  or text on its line. Measured per `align` (M5b): from the left edge (left), around the centre (center: the whole
  *  symmetric width) or leftwards from the right edge (right). Rects are the ink since M5b (no leading/trailing spaces).
  *  Left-aligned multi-line paragraphs get it too (M5b F2): the room beside all their lines, the most the web may
- *  widen their wrap width (lib/paragraphs.ts wrapWidth). Runs of original text carry the PDF's measured hScale /
+ *  widen their wrap width (lib/paragraphs.ts wrapWidth); centred and right-aligned ones since M5d, with the same
+ *  meaning (an edited line may grow that far before it wraps). Runs of original text carry the PDF's measured hScale /
  *  charSpacing / wordSpacing (and the true size of horizontally scaled text). A paragraph that is not editable says
  *  why in `lock` (M5c). */
 export interface Paragraph {
@@ -30,6 +33,18 @@ export interface Paragraph {
   align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean; maxWidth?: number;
   lock?: ParagraphLock;
 }
+/** A paragraph OCR read in a picture of text (POST /documents/{id}/pages/{n}/ocr, M5d): ids `ocr0`, `ocr1`, … (never an
+ *  original paragraph's `gN`), runs in a bundled font. `confidence`: 0–1, the mean of its words. An edit paints `covers`
+ *  (one rect per line: its words' ink, padded, clear of other text; `cover` is their bounding box) with `coverColor`
+ *  (the picture's own background there; `coverUniform` false: not plain, the cover may show) and draws the new text: a
+ *  text.ocr_edit op, which carries them. */
+export interface OcrParagraph extends Paragraph {
+  ocr: true; confidence: number; cover: Rect; covers: Rect[]; coverColor: string; coverUniform: boolean;
+}
+/** "ok" (paragraphs found), "none" (no picture of print on the page), "empty" (nothing read), "rotated" (the page is
+ *  turned in the PDF), "skewed" (`angle` degrees, too much to read into straight lines), "unreadable", "too_large". */
+export type OcrQuality = "ok" | "none" | "empty" | "rotated" | "skewed" | "unreadable" | "too_large";
+export interface OcrResult { doc_id: string; index: number; quality: OcrQuality; angle: number; dpi: number; regions: Rect[]; paragraphs: OcrParagraph[] }
 /** Why an original paragraph can't be edited: "hidden", its text is invisible (an OCR layer over a picture of the text,
  *  which is what shows); "font", a symbol font nothing else can draw; "rotated", text that isn't horizontal. */
 export type ParagraphLock = "hidden" | "font" | "rotated";
@@ -92,6 +107,14 @@ export async function getStructure(docId: string): Promise<Structure> {
 
 export async function getText(docId: string): Promise<TextData> {
   return (await request(`/documents/${docId}/text`)).json();
+}
+
+/** One page's OCR takes up to 30 s on the server (its own timeout), plus the upload of nothing and the answer. */
+export const OCR_TIMEOUT_MS = 60_000;
+
+export async function ocrPage(docId: string, index: number): Promise<OcrResult> {
+  const res = await request(`/documents/${docId}/pages/${index}/ocr`, { method: "POST", signal: AbortSignal.timeout(OCR_TIMEOUT_MS) });
+  return res.json();
 }
 
 export async function getChars(docId: string, index: number): Promise<CharLine[]> {

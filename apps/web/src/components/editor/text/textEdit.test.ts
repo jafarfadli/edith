@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContentOp, FontRef, Run, TextAdd, TextEdit } from "@edith/ops";
-import type { Paragraph } from "@/lib/api";
+import type { OcrParagraph, Paragraph } from "@/lib/api";
 import { fontStore, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
 import { noticeStore } from "@/lib/notices";
 import { t } from "@/lib/strings";
@@ -10,7 +10,7 @@ import { boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
 import { moveOp, resizeOp } from "@/lib/objects";
-import { afterTextCommitted, commitEditing, materializeParagraph, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, updateTextOp, whenTextCommitted } from "./textEdit";
+import { afterTextCommitted, commitEditing, materializeParagraph, startOcrEdit, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, updateTextOp, whenTextCommitted } from "./textEdit";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
@@ -442,5 +442,51 @@ describe("markup over an edited paragraph", () => {
     openSession("t9");
     await commitEditing(runs("Halo"));
     expect(noticeStore.getState().notice).toBeNull(); // a new text box removes nothing
+  });
+});
+
+describe("paragraphs OCR read (M5d)", () => {
+  beforeEach(() => { gate.resolve(); fontsLoaded = true; });
+  const ocrPara: OcrParagraph = {
+    id: "ocr4", rect: { x: 72, y: 290, w: 300, h: 12 }, align: "left", lineHeight: 15, editable: true,
+    runs: [{ text: "Halo dunia", font, size: 11, color: "#000000" }],
+    lines: [{ rect: { x: 72, y: 290, w: 300, h: 12 }, baseline: 300, size: 11, start: 0, end: 10 }],
+    ocr: true, confidence: 0.9, cover: { x: 70.5, y: 288.5, w: 303, h: 15 }, covers: [{ x: 70.5, y: 288.5, w: 303, h: 15 }], coverColor: "#f7f5eb", coverUniform: true,
+  };
+
+  it("an edit becomes a text.ocr_edit with its cover, first baseline in place, one undo step; undo brings the picture back", async () => {
+    await startOcrEdit("o0", ocrPara);
+    const e = textEditStore.getState().editing!;
+    expect(e).toMatchObject({ kind: "text.ocr_edit", paragraphId: "ocr4", isNew: true, ocr: { cover: ocrPara.cover, coverColor: "#f7f5eb" } });
+    expect(e.box.rect.y + e.box.layout[0].baseline).toBeCloseTo(300);
+    await commitEditing(runs("Halo dunia baru"));
+    const ops = Object.values(editorStore.getState().doc.objects);
+    expect(ops).toHaveLength(1);
+    const op = ops[0] as Extract<ContentOp, { type: "text.ocr_edit" }>;
+    expect(op).toMatchObject({ type: "text.ocr_edit", pageKey: "o0", paragraphId: "ocr4", cover: ocrPara.cover, covers: ocrPara.covers, coverColor: "#f7f5eb" });
+    expect(op.box.rect.y + op.box.layout[0].baseline).toBeCloseTo(300);
+    expect(editorStore.getState().selection).toBe(op.id);
+    editorStore.getState().undo();
+    expect(editorStore.getState().doc.objects).toEqual({});
+    editorStore.getState().redo();
+    expect(Object.keys(editorStore.getState().doc.objects)).toEqual([op.id]);
+  });
+
+  it("opening an edited OCR paragraph again edits its op; opened and left unchanged adds nothing", async () => {
+    await startOcrEdit("o0", ocrPara);
+    await commitEditing(textEditStore.getState().editing!.box.paragraphs);
+    expect(editorStore.getState().doc.objects).toEqual({});
+    await startOcrEdit("o0", ocrPara);
+    await commitEditing(runs("Lain"));
+    const [id] = Object.keys(editorStore.getState().doc.objects);
+    await startOcrEdit("o0", ocrPara);
+    expect(textEditStore.getState().editing).toMatchObject({ id, isNew: false, kind: "text.ocr_edit" });
+    await commitEditing(runs("Lain lagi"));
+    expect(Object.keys(editorStore.getState().doc.objects)).toEqual([id]);
+  });
+
+  it("rejects an OCR session without its cover", () => {
+    expect(() => textEditStore.getState().start({ id: "x", pageKey: "o0", box: newBox([0, 0], style), isNew: true, kind: "text.ocr_edit", paragraphId: "ocr1" }))
+      .toThrow(/cover/);
   });
 });

@@ -1,7 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
 import type { FontRef, Rect, Run } from "@edith/ops";
-import { fontFileUrl, getText, type DocFont, type Paragraph, type TextData } from "@/lib/api";
+import { ApiError, fontFileUrl, getText, ocrPage, type DocFont, type OcrParagraph, type OcrQuality, type Paragraph, type TextData } from "@/lib/api";
 import { documentScript } from "@/lib/fallback";
 import { fontId, fontStore, isOriginal } from "@/lib/fonts";
 import type { FontTable } from "@/lib/richtext";
@@ -20,8 +20,20 @@ export interface TextState {
   fonts: FontTable;
   /** Load status of imported PDFs' text. */
   imports: Record<string, "loading" | "ready" | "error">;
+  /** OCR results (M5d), keyed like `pages`: asked for page by page, kept for the session (not in drafts: an edit of an
+   *  OCR paragraph is a self-contained text.ocr_edit op). */
+  ocr: Record<string, OcrPageState>;
   load(docId: string): Promise<void>;
   loadImport(docId: string): Promise<void>;
+  /** Reads the pictures of print on page `index` of document `doc` (one page of a document at a time: a request while
+   *  another of that document runs, or for a page already read, returns its state as it is). */
+  runOcr(doc: string, index: number): Promise<OcrPageState>;
+}
+
+/** One page's OCR: running, done (`quality`, `paragraphs`: none unless "ok") or failed (`error`: an API error code). */
+export interface OcrPageState {
+  status: "loading" | "ready" | "error";
+  quality?: OcrQuality; angle?: number; paragraphs: OcrParagraph[]; error?: string;
 }
 
 type Tagged = { pages: ParagraphPages; imageText: Record<string, Rect[]>; fonts: FontTable };
@@ -51,9 +63,9 @@ function merged(s: TextState, t: Tagged): Tagged {
 }
 
 export const textStore = createStore<TextState>()((set, get) => ({
-  status: "idle", docId: null, pages: {}, imageText: {}, fonts: {}, imports: {},
+  status: "idle", docId: null, pages: {}, imageText: {}, fonts: {}, imports: {}, ocr: {},
   async load(docId) {
-    set({ status: "loading", docId, pages: {}, imageText: {}, fonts: {}, imports: {} });
+    set({ status: "loading", docId, pages: {}, imageText: {}, fonts: {}, imports: {}, ocr: {} });
     fontStore.setOriginalSource((f) => fontFileUrl(f.doc ?? docId, f.ref));
     try {
       const data = await getText(docId);
@@ -81,6 +93,23 @@ export const textStore = createStore<TextState>()((set, get) => ({
       if (get().docId === main) set({ imports: { ...get().imports, [docId]: "error" } });
     }
   },
+  async runOcr(doc, index) {
+    const key = srcKey(doc, index);
+    const cur = get().ocr[key];
+    if (cur && cur.status !== "error") return cur;
+    const busy = Object.entries(get().ocr).find(([k, v]) => v.status === "loading" && k.startsWith(doc + ":"));
+    if (busy) return busy[1];
+    const main = get().docId;
+    const put = (v: OcrPageState) => { if (get().docId === main) set({ ocr: { ...get().ocr, [key]: v } }); return v; };
+    put({ status: "loading", paragraphs: [] });
+    try {
+      const r = await ocrPage(doc, index);
+      return put({ status: "ready", quality: r.quality, angle: r.angle, paragraphs: r.quality === "ok" ? r.paragraphs : [] });
+    } catch (e) {
+      console.warn("OCR failed", doc, index, e);
+      return put({ status: "error", paragraphs: [], error: e instanceof ApiError ? e.code : "generic" });
+    }
+  },
 }));
 
 export function useText<T>(selector: (s: TextState) => T): T {
@@ -105,4 +134,16 @@ export function imageTextOf(src: PageSrc, imageText: Record<string, Rect[]> = te
 export function hasPictureText(s: Pick<TextState, "pages" | "imageText"> = textStore.getState()): boolean {
   return Object.values(s.imageText).some((r) => r.length > 0)
     || Object.values(s.pages).some((ps) => ps.some((p) => p.lock === "hidden"));
+}
+
+const NO_OCR: OcrParagraph[] = [];
+
+/** The OCR state of a page source (undefined: never asked; blank pages have none). */
+export function ocrStateOf(src: PageSrc, ocr: Record<string, OcrPageState> = textStore.getState().ocr): OcrPageState | undefined {
+  return "doc" in src ? ocr[srcKey(src.doc, src.index)] : undefined;
+}
+
+/** Paragraphs OCR read on a page source (none before it ran). */
+export function ocrParagraphsOf(src: PageSrc, ocr: Record<string, OcrPageState> = textStore.getState().ocr): OcrParagraph[] {
+  return ocrStateOf(src, ocr)?.paragraphs ?? NO_OCR;
 }

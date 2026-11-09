@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { ContentOp, TextEdit } from "@edith/ops";
+import type { ContentOp, TextEdit, TextOcrEdit } from "@edith/ops";
 import type { FormField } from "@/lib/api";
 import { normRotation, type CropBox, type PageGeom, type Rotation } from "@/lib/coords";
 import type { Dash } from "@/lib/geometry";
@@ -118,6 +118,15 @@ export function textEditFor(doc: EditorDoc, pageKey: string, paragraphId: string
   for (const id of doc.order) {
     const op = doc.objects[id];
     if (op?.type === "text.edit" && op.pageKey === pageKey && (op as TextEdit).paragraphId === paragraphId) return op as TextEdit;
+  }
+  return undefined;
+}
+
+/** The text.ocr_edit op replacing paragraph `paragraphId` that OCR read on `pageKey`, if any (M5d). */
+export function ocrEditFor(doc: EditorDoc, pageKey: string, paragraphId: string): TextOcrEdit | undefined {
+  for (const id of doc.order) {
+    const op = doc.objects[id];
+    if (op?.type === "text.ocr_edit" && op.pageKey === pageKey && op.paragraphId === paragraphId) return op;
   }
   return undefined;
 }

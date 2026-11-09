@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from edith.errors import UnhandledErrors, install_error_handlers
 from edith.fonts import FontRegistry
-from edith.routes import assets, documents, export, text
+from edith.routes import assets, documents, export, ocr, text
 from edith.settings import Settings
 from edith.storage import Storage
 
@@ -40,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.storage = storage
     app.state.fonts = FontRegistry(settings.fonts_dir)
+    app.state.ocr_gate = ocr.OcrGate(settings.ocr_slots)
     # Added first = inside CORSMiddleware (the last added is outermost): its 500s carry the CORS headers.
     app.add_middleware(UnhandledErrors)
     app.add_middleware(
@@ -54,6 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(assets.router)
     app.include_router(export.router)
     app.include_router(text.router)
+    app.include_router(ocr.router)
 
     @app.get("/health")
     def health() -> dict:

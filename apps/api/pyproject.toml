@@ -10,6 +10,7 @@ dependencies = [
   "pydantic>=2.8",
   "pydantic-settings>=2.4",
   "fonttools>=4.50",
+  "numpy>=1.26",
 ]
 
 [dependency-groups]

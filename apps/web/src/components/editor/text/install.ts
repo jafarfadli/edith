@@ -28,7 +28,9 @@ export function installTextTool(): void {
     editorStore.getState().select(null); // hide the transformer while the rich editor is on top
     textEditStore.getState().start(op.type === "text.edit"
       ? { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.edit", paragraphId: op.paragraphId }
-      : { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.add" });
+      : op.type === "text.ocr_edit"
+        ? { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.ocr_edit", paragraphId: op.paragraphId, ocr: { cover: op.cover, covers: op.covers, coverColor: op.coverColor } }
+        : { id: op.id, pageKey: op.pageKey, box: op.box, isNew: false, kind: "text.add" });
   };
 
   // A markup sits above its text: double-clicking it edits what is under it, like double-clicking the text.

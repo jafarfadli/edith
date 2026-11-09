@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Rect, Shape } from "react-konva";
-import type { TextAdd, TextEdit } from "@edith/ops";
 import { charOffsets, cssFamily, fontKey, fontStore, textWidth } from "@/lib/fonts";
 import { decorBands } from "@/lib/textDecor";
 import { boxFonts } from "@/lib/textbox";
+import type { TextOp } from "@/lib/objects";
 import { fontsReady } from "./textEdit";
 import { useOverflow } from "./useOverflow";
 import { CANVAS } from "@/lib/theme";
@@ -14,7 +14,7 @@ const OVERFLOW = CANVAS.overflow;
 
 /** Draws a text box glyph-by-glyph at the PDF-quantized offsets — the same positions the API bakes —
  *  with backgrounds under and underline/strike over the glyphs, as the bake does. */
-export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boolean }) {
+export function TextNode({ op, hidden }: { op: TextOp; hidden: boolean }) {
   const { box } = op;
   const keys = boxFonts(box).map(fontKey).join("|");
   const [, setLoaded] = useState(0);
@@ -32,8 +32,12 @@ export function TextNode({ op, hidden }: { op: TextAdd | TextEdit; hidden: boole
 
   const overflow = useOverflow(op);
   const runs = box.paragraphs.flat();
-  // A text.edit's kept lines (`source`) are the page's own glyphs: not drawn again (ParagraphLayer leaves them uncovered).
-  const drawn = op.type === "text.edit" ? box.layout.filter((l) => l.source === undefined || l.source === null) : box.layout;
+  // A text.edit's kept lines (`source`) and kept line prefixes (`prefix`, M5d) are the page's own glyphs: not drawn again
+  // (ParagraphLayer leaves them uncovered).
+  const drawn = op.type === "text.edit"
+    ? box.layout.filter((l) => l.source === undefined || l.source === null)
+      .map((l) => (l.prefix ? { ...l, segments: l.segments.slice(l.prefix.segments) } : l))
+    : box.layout;
   const { x, y, w, h } = box.rect;
   return (
     <>

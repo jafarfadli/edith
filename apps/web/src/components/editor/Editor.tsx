@@ -18,7 +18,7 @@ import { boxFonts } from "@/lib/textbox";
 import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
 import { pdfStore } from "@/store/pdfs";
 import { charsStore } from "@/store/chars";
-import { hasPictureText, textStore } from "@/store/text";
+import { hasPictureText, imageTextOf, textStore } from "@/store/text";
 import { BTN_PRIMARY } from "../ui/styles";
 import { FormLayer } from "./forms/FormLayer";
 import { Header } from "./Header";
@@ -32,6 +32,7 @@ import { Toolbar } from "./Toolbar";
 import { ZoomPill } from "./ZoomPill";
 import { useShortcuts } from "./useShortcuts";
 import { updateTextOp } from "./text/textEdit";
+import { runPageOcr } from "./text/ocrRun";
 
 // The text tool's hooks live in the Konva overlay chunk (Konva must stay out of SSR), so install them when it loads.
 const PageOverlay = dynamic(async () => {
@@ -41,6 +42,7 @@ const PageOverlay = dynamic(async () => {
 const TextEditor = dynamic(() => import("./text/TextEditor").then((m) => m.TextEditor), { ssr: false });
 const CropOverlay = dynamic(() => import("./pages/CropOverlay"), { ssr: false });
 const FindBar = dynamic(() => import("./find/FindBar").then((m) => m.FindBar), { ssr: false });
+const OcrButton = dynamic(() => import("./text/OcrButton").then((m) => m.OcrButton), { ssr: false });
 
 
 export function Editor({ docId, initialName }: { docId: string; initialName: string }) {
@@ -97,7 +99,12 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
           editorStore.setState((s) => ({ doc: drop(s.doc), past: s.past.map(drop), future: s.future.map(drop), selection: null }));
           setNotice({ kind: "error", text: t.editor.lockedEditsDropped });
         } else if (hasPictureText()) {
-          setNotice((n) => (n?.kind === "error" ? n : { kind: "info", text: t.editor.pictureText }));
+          // A page with a picture of print: offer to read the first one (OCR, M5d); invisible text over its picture only: say why.
+          const first = editorStore.getState().doc.pages.map((p) => p.src).find((src) => imageTextOf(src).length > 0);
+          const msg: NoticeMsg = first && "doc" in first
+            ? { kind: "info", text: t.editor.pictureTextOcr, action: { label: t.ocr.run, run: () => { void runPageOcr(first.doc, first.index); } } }
+            : { kind: "info", text: t.editor.pictureText };
+          setNotice((n) => (n?.kind === "error" ? n : msg));
         }
       });
       for (const id of Object.keys(resolved?.imports ?? {})) void textStore.getState().loadImport(id);
@@ -199,7 +206,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
             }}
             onPointerUp={() => { drag.current = null; }}
           >
-            {info && pdf ? <PageList overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><SelectionMiniBar {...a} /><CropOverlay {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
+            {info && pdf ? <PageList overlay={(a) => <><PageOverlay {...a} /><FormLayer {...a} /><TextEditor {...a} /><SelectionMiniBar {...a} /><OcrButton {...a} /><CropOverlay {...a} /></>} /> : <p className="p-8 text-muted" role="status">{t.upload.processing}</p>}
           </main>
           <ZoomPill />
           {/* Over the canvas (centred on it, above the zoom pill), not on the window. */}

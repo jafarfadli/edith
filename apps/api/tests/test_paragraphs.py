@@ -313,8 +313,33 @@ def test_single_lines_get_room_up_to_the_next_rule_or_text():
     wrapped = paragraphs(make_paragraphs_pdf())[0]
     # Wrapped left-aligned text (M5b F2): the room beside all its lines, here up to its frame (x 300) less ROOM_PAD.
     assert len(wrapped["lines"]) == 3 and wrapped["maxWidth"] == pytest.approx(300 - 2 - 72, abs=0.01)
-    assert all("maxWidth" not in p for p in paragraphs(make_paragraphs_pdf()) if p["align"] in ("justify", "center")
-               and len(p["lines"]) > 1)
+    multi = [p for p in paragraphs(make_paragraphs_pdf()) if len(p["lines"]) > 1]
+    assert all("maxWidth" not in p for p in multi if p["align"] == "justify")  # justified lines compress instead
+    # Centred text (M5d): around its centre (297.5), as far as the nearer margin allows (72 + ROOM_PAD).
+    centred = next(p for p in multi if p["align"] == "center")
+    assert centred["maxWidth"] == pytest.approx(2 * (297.5 - 72 - 2), abs=0.05)
+
+
+def test_the_wrap_fixture_has_a_justified_a_centred_and_a_right_aligned_paragraph_with_word_positions():
+    """apps/web/e2e/wrap.spec.ts relies on it (M5d)."""
+    from tests.pdfs import WRAP_CENTRED, WRAP_JUSTIFIED, WRAP_RIGHT, make_wrap_pdf
+    ps = paragraphs(make_wrap_pdf())[1:]
+    assert [(p["align"], len(p["lines"])) for p in ps] == [("justify", 3), ("center", 3), ("right", 3)]
+    for p, lines in zip(ps, (WRAP_JUSTIFIED, WRAP_CENTRED, WRAP_RIGHT)):
+        assert [text(p)[ln["start"]:ln["end"]] for ln in p["lines"]] == list(lines)
+        assert all(len(ln["wordX"]) == len(t.split()) for ln, t in zip(p["lines"], lines))
+    assert "maxWidth" not in ps[0] and ps[1]["maxWidth"] > ps[1]["rect"]["w"] + 6 and ps[2]["maxWidth"] > ps[2]["rect"]["w"] + 6
+
+
+def test_right_aligned_text_gets_room_up_to_the_text_on_its_left():
+    """M5d: a right-aligned paragraph may grow leftwards to the first text beside it (less ROOM_PAD)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_textbox(pymupdf.Rect(250, 100, 500, 190), LOREM, fontname="tiro", fontsize=10.5, align=pymupdf.TEXT_ALIGN_RIGHT)
+    page.insert_text((72, 120), "Label", fontname="helv", fontsize=12)  # beside the second line
+    p = next(p for p in extract_paragraphs(pymupdf.open(stream=doc.tobytes(), filetype="pdf")[0]) if len(p["lines"]) == 3)
+    label_end = 72 + pymupdf.get_text_length("Label", fontname="helv", fontsize=12)
+    assert p["align"] == "right" and p["maxWidth"] == pytest.approx(500 - label_end - 2, abs=0.05)
 
 
 @pytest.mark.parametrize("crop,width", [(None, 595), ((50, 60, 500, 700), 450)])

@@ -119,6 +119,21 @@ def order(ws: list[dict]) -> list[dict]:
     return [w for r in rows for w in sorted(r, key=lambda w: w["x"])]
 
 
+def typo_spacing(op: dict, first: str) -> float:
+    """charSpacing of the run holding the "x" EDIT_MODE=typo appended to the word `first` (0 when not found)."""
+    runs = [r for p in op["box"]["paragraphs"] for r in p]
+    text = "".join(r["text"] for r in runs)
+    at = text.find(first + "x")
+    if at < 0:
+        return 0.0
+    at += len(first)
+    for r in runs:
+        if at < len(r["text"]):
+            return r.get("charSpacing", 0.0)
+        at -= len(r["text"])
+    return 0.0
+
+
 def compare_one(orig_page, out_page, para, op, null_page=None) -> dict:
     ow = words_of(orig_page)
     nw = words_of(out_page)
@@ -174,7 +189,8 @@ def compare_one(orig_page, out_page, para, op, null_page=None) -> dict:
     word_disp_c = [list(w) for w in word_disp]
     typo = next((w for w in p_new if p_orig and w["text"] == p_orig[0]["text"] + "x"), None)
     if typo is not None and len(typo["chars"]) >= 1:
-        s = typo["x1"] - typo["chars"][-1][1]
+        # The pen advance of the "x": its glyph box plus the character spacing of its run (M5d; a box alone misses Tc).
+        s = typo["x1"] - typo["chars"][-1][1] + typo_spacing(op, p_orig[0]["text"])
         align = op["box"].get("align", "left")
         line0 = [i for i in range(len(p_orig)) if la[i] == 0]
         last_line = la[-1] == 0

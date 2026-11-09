@@ -1,9 +1,9 @@
 "use client";
 
-import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
+import type { ContentOp, TextEdit } from "@edith/ops";
 import { fontStore } from "@/lib/fonts";
 import { newId } from "@/lib/id";
-import { isTextOp } from "@/lib/objects";
+import { isTextOp, type TextOp } from "@/lib/objects";
 import { paragraphBox, prepareRuns } from "@/lib/paragraphs";
 import { replaceMatches, type Match } from "@/lib/search";
 import { opKey } from "@/lib/targets";
@@ -48,7 +48,7 @@ export async function applyReplacements(matches: Match[], text: string): Promise
       const p = op.type === "text.edit" ? originalParagraph(doc, op.pageKey, op.paragraphId) : undefined;
       const original = p ? await prepareRuns([p.runs], fonts).catch(() => null) : null;
       const box = p && original ? editedBox(op.box, paragraphs, { ...p, runs: original[0] }, metrics) : relayout({ ...op.box, paragraphs }, metrics);
-      out.push({ op: { ...op, box } as TextAdd | TextEdit, base: op, ends: endsAfter(ms, text) });
+      out.push({ op: { ...op, box } as TextOp, base: op, ends: endsAfter(ms, text) });
     } else {
       const [, pageKey, id] = key.split(":");
       const entry = doc.pages.find((p) => p.pageKey === pageKey);

@@ -80,10 +80,19 @@ describe("editedBox keeps the lines an edit leaves alone", () => {
   });
 
   it("redraws every line an insertion re-wraps, down to the end when the reflow never settles", () => {
-    const { box } = edit(MONO, (t) => swap(t, "Teks mengalir", "Teks baru mengalir"));
-    expect(laidOut(box)).toEqual(["Edith menyunting paragraf asli dengan", "rapi. Teks baru mengalir ulang di", "dalam kotak selebar tetap, dan gaya",
-      "bisa diatur per kata tanpa merusak", "baris lain di halaman yang sama."]);
+    // "baru sekali " makes line 2 wider than any line the original's soft breaks allow: it no longer fits (M5d).
+    const { box } = edit(MONO, (t) => swap(t, "Teks mengalir", "Teks baru sekali mengalir"));
+    expect(laidOut(box)).toEqual(["Edith menyunting paragraf asli dengan", "rapi. Teks baru sekali mengalir ulang",
+      "di dalam kotak selebar tetap, dan gaya", "bisa diatur per kata tanpa merusak", "baris lain di halaman yang sama."]);
     expect(sources(box)).toEqual([0, null, null, null, null]);
+  });
+
+  it("lets an edited line grow into the room beside it while the original's soft breaks allow it (M5d)", () => {
+    // Line 2 (34 characters) + "baru " = 39: wider than the widest line (37), narrower than any line + next word (40).
+    const { box } = edit(MONO, (t) => swap(t, "Teks mengalir", "Teks baru mengalir"));
+    expect(laidOut(box)).toEqual(["Edith menyunting paragraf asli dengan", "rapi. Teks baru mengalir ulang di dalam",
+      "kotak selebar tetap, dan gaya bisa", "diatur per kata tanpa merusak baris", "lain di halaman yang sama."]);
+    expect(sources(box)).toEqual([0, null, 2, 3, 4]);
   });
 
   it("keeps the lines after an insertion once the re-wrap settled on an original line start", () => {
@@ -193,11 +202,18 @@ describe("whitespace", () => {
 });
 
 describe("kept lines on screen", () => {
-  it("covers only the original lines the box replaces", () => {
+  it("covers only the original lines the box replaces, an edited line only from its first edited word on", () => {
     const { box } = edit(LEFT, (t) => swap(t, "selebar", "selebat"));
     expect([...keptLines(box)]).toEqual([0, 2, 3]);
-    expect(replacedLines(LEFT, box)).toEqual([LEFT.lines[1]]);
-    expect(maskRects(LEFT, box)).toEqual(maskRects({ ...LEFT, lines: [LEFT.lines[1]] }));
+    // Line 2 "mengalir ulang di dalam kotak selebar tetap, dan": its first five words keep their glyphs (M5d).
+    const line = LEFT.lines[1], cut = line.wordX![5];
+    expect(box.layout[1].prefix).toEqual({ source: 1, segments: 5 }); // one segment per word
+    expect(box.layout[1].segments.slice(0, 5).map((s) => s.text).join("")).toBe("mengalir ulang di dalam kotak ");
+    const rest = { ...line, rect: { ...line.rect, x: cut, w: line.rect.x + line.rect.w - cut } };
+    expect(replacedLines(LEFT, box)).toEqual([rest]);
+    const [cover] = maskRects(LEFT, box);
+    expect(cover.x).toBe(cut);
+    expect(cover.x + cover.w).toBeCloseTo(line.rect.x + line.rect.w + 0.5);
     expect(maskRects(LEFT)).toHaveLength(4); // no box (the editor is open): every line
   });
 
