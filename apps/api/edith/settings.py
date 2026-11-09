@@ -18,3 +18,9 @@ class Settings(BaseSettings):
     max_asset_bytes: int = 10 * 1024 * 1024
     max_asset_pixels: int = 50_000_000
     cors_origins: list[str] = ["http://localhost:3000"]
+    # OCR (POST /documents/{id}/pages/{n}/ocr): the tesseract command (none: found on PATH), how many pages the server
+    # reads at once (one more request gets 429 ocr_busy, as does a second one for a document being read) and how long
+    # one page may take.
+    tesseract_cmd: str | None = None
+    ocr_slots: int = 2
+    ocr_timeout_seconds: float = 30.0

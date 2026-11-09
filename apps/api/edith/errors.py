@@ -74,6 +74,24 @@ class BakeFailed(EdithError):
     status, code = 500, "bake_failed"
 
 
+class OcrUnavailable(EdithError):
+    """Tesseract (or its ind/eng language data) is not installed on this server (M5d)."""
+    status, code = 503, "ocr_unavailable"
+
+
+class OcrBusy(EdithError):
+    """OCR already runs for this document, or every OCR slot of the server is taken: try again shortly."""
+    status, code = 429, "ocr_busy"
+
+
+class OcrTimeout(EdithError):
+    status, code = 504, "ocr_timeout"
+
+
+class OcrFailed(EdithError):
+    status, code = 500, "ocr_failed"
+
+
 def _body(code: str, message: str, **extra) -> dict:
     return {"error": {"code": code, "message": message, **extra}}
 

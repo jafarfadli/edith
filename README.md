@@ -16,6 +16,14 @@ Batasnya mengikuti tahap bake API, dan layar menumpuk objek dengan aturan yang s
 
 Urutan hanya bertukar dengan objek di halaman dan tahap yang sama; tombol yang tidak berpengaruh dinonaktifkan, dan menu menjelaskan batas ini bila relevan. "Bertumpuk" diukur dengan kotak pembatas objek (bounding box, termasuk rotasi), bukan bentuk persisnya: garis diagonal atau coretan bebas yang kotaknya beririsan dengan objek lain tanpa benar-benar menyentuhnya dihitung bertumpuk, jadi kadang perlu satu tekan tambahan sebelum perubahannya terlihat.
 
+## OCR: teks yang berupa gambar
+
+Halaman yang teksnya berupa gambar (hasil pindai, tangkapan layar surat) tidak punya teks yang bisa diedit. Di atas gambar itu muncul tombol **Kenali teks (OCR)** (juga di pemberitahuan saat dokumen dibuka dan saat bagian gambar diklik dua kali). OCR berjalan per halaman, atas permintaan, dengan Tesseract (bahasa Indonesia + Inggris, 300 dpi, maksimal 30 detik, satu halaman per dokumen dan dua halaman per server sekaligus). Hasilnya paragraf bergaris putus-putus berlabel "hasil OCR" (kuning: kurang yakin terbaca, keyakinan < 75 %); klik dua kali untuk mengedit. Hasil OCR hanya disimpan di tab browser (tidak di server, tidak di draf) dan tidak pernah ditulis ke PDF.
+
+Mengedit paragraf hasil OCR membuat objek `text.ocr_edit`: area tulisan lama (tinta kata-katanya ditambah sedikit, tidak pernah melewati garis tabel/garis isian di gambar) ditutup persegi warna latar gambar di situ, di bawah semua objek lain, lalu teks baru digambar. Gambar aslinya tidak diubah (seperti Whiteout, piksel lama masih ada di dalam gambar di bawah tutupan; untuk menghapusnya pakai Redaksi). Objek itu memuat tutupan dan teksnya sendiri, jadi draf yang dipulihkan tetap bisa diunduh tanpa OCR ulang. Cari & Ganti hanya mencari teks OCR yang sudah diedit.
+
+Batasnya: halaman yang diputar di dalam PDF-nya, hasil pindai yang miring lebih dari 1,5°, dan gambar yang terlalu buram dilaporkan, bukan dibaca. Font hasil OCR ditebak (Arimo untuk sans, Tinos untuk serif, tebal dari ketebalan garis huruf), ukuran dari tinggi huruf, warna dari tinta. Kualitas pada formulir sintetis (`scripts/ocr_accuracy.py`): 93–95 % kata tepat, tepi kotak kata meleset 0,3–0,7 pt, ukuran huruf tepat.
+
 ## Struktur
 
 - `apps/api` — FastAPI + PyMuPDF. Menyimpan unggahan selama 1 jam dan menerapkan ("bake") operasi edit saat ekspor.
@@ -30,7 +38,7 @@ Urutan hanya bertukar dengan objek di halaman dan tahap yang sama; tombol yang t
 
 ## Menjalankan untuk pengembangan
 
-Prasyarat: Node 22+, uv.
+Prasyarat: Node 22+, uv. Untuk OCR: Tesseract dengan data bahasa `ind` dan `eng` (macOS: `brew install tesseract tesseract-lang`; Debian/Ubuntu: `apt-get install tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng`). Tanpa Tesseract Edith tetap jalan; tombol OCR menjawab "OCR belum terpasang di server ini" dan tes OCR dilewati (di CI `EDITH_REQUIRE_TESSERACT=1` membuatnya gagal).
 
     npm install
     npm run dev:api      # http://localhost:8000
@@ -53,10 +61,16 @@ Fixture yang dihasilkan dari kode API (jalankan ulang setelah mengubah ekstraksi
     cd apps/api && uv run python -m scripts.e2e_annots_pdf # apps/web/e2e/fixtures/annots.pdf
     cd apps/api && uv run python -m scripts.e2e_pages_pdf  # apps/web/e2e/fixtures/pages.pdf + import.pdf
     cd apps/api && uv run python -m scripts.e2e_form_pdf   # apps/web/e2e/fixtures/form-ko.pdf
+    cd apps/api && uv run python -m scripts.e2e_scan_pdf   # apps/web/e2e/fixtures/scan.pdf (formulir pindaian sintetis)
 
 Melihat pembagian paragraf sebuah PDF (kotak + id per paragraf, PNG per halaman):
 
     cd apps/api && uv run python -m scripts.paragraph_overlay file.pdf /tmp/overlay
+
+Kualitas OCR (tabel varian formulir pindaian sintetis, atau overlay hasil OCR sebuah PDF):
+
+    cd apps/api && uv run python -m scripts.ocr_accuracy [/tmp/ocr]
+    cd apps/api && uv run python -m scripts.ocr_accuracy --pdf file.pdf /tmp/ocr
 
 Setelah mengubah `apps/api/edith/ops.py`:
 
@@ -73,6 +87,8 @@ API dan web dirilis terpisah; rilis API lebih dulu, baru web. Web sejak M5 mengi
 M5b menegaskan urutan itu: web M5b mengirim `Run.hScale`/`charSpacing`/`wordSpacing` dan `LayoutLine.source`, yang ditolak API M5 dengan 422, dan `PARAGRAPHS_VERSION` naik dari 2 ke 3, sehingga ekspor dengan id paragraf versi 2 mendapat 409. Draf dari M5 kehilangan edit teksnya (paragraf asli yang diedit) setelah rilis ini; itu disengaja, dan pengguna melihat pemberitahuannya.
 
 Sejak M5c web wajib dibangun ulang dengan `npm run build -w apps/web`: `prebuild` membuat `apps/web/public/pdfjs/` (dekoder wasm, cmaps, font standar, ICC pdf.js; 4,2 MB), tanpanya gambar hasil pindai 1-bit (JBIG2/CCITT, mis. kop surat) tidak tampil di editor; restart pm2 saja tidak cukup.
+
+Sejak M5d (OCR) server API memerlukan Tesseract (`ind` + `eng`) agar OCR jalan; image Docker API sudah memasangnya. Web baru di atas API lama: tombol OCR mendapat 404 dan menampilkan galat, sisanya jalan. Pengaturan: `EDITH_TESSERACT_CMD` (bawaan: `tesseract` di PATH), `EDITH_OCR_SLOTS` (2), `EDITH_OCR_TIMEOUT_SECONDS` (30).
 
 ## Lisensi
 

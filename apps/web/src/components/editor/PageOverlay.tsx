@@ -4,11 +4,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type Konva from "konva";
 import { Group, Layer, Stage, Transformer } from "react-konva";
 import { useStore } from "zustand";
-import type { ContentOp, TextAdd, TextEdit } from "@edith/ops";
+import type { ContentOp } from "@edith/ops";
 import { groupTransform, pageBounds, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
 import {
-  clampToBounds, createFromDrag, DRAG_TOOLS, hasRotation, inkWidth, isMarkup, isPointOp, isResizable, isRotatable, isTextOp, keepRotatedTopLeft, mapPoints, MARKUP_TOOLS,
+  type TextOp, clampToBounds, createFromDrag, DRAG_TOOLS, hasRotation, inkWidth, isMarkup, isPointOp, isResizable, isRotatable, isTextOp, keepRotatedTopLeft, mapPoints, MARKUP_TOOLS,
   MIN_DRAG, moveOp, normalizeRect, normalizeRotation, noteAt, opacityOf, opBounds, POLY_TOOLS, resizeOp, rotateAnchorOffset, rotationOf, symbolAt, type DragTool, type PolyTool, type Pt,
 } from "@/lib/objects";
 import { charsStore } from "@/store/chars";
@@ -24,7 +24,6 @@ import { isMac } from "@/lib/keys";
 import { boundsOf, nextBelow, stacked } from "@/lib/zorder";
 import { contextMenuStore, menuOpeners } from "./objects/layering";
 
-type TextOp = TextAdd | TextEdit;
 
 /** Konva attributes of an object's group: objects with a `rotation` turn around their rect's centre (the group's
  *  origin sits there), and every drawn object has its opacity. */

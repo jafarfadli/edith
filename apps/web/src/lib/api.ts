@@ -33,6 +33,17 @@ export interface Paragraph {
   align: "left" | "center" | "right" | "justify"; lineHeight: number; editable: boolean; maxWidth?: number;
   lock?: ParagraphLock;
 }
+/** A paragraph OCR read in a picture of text (POST /documents/{id}/pages/{n}/ocr, M5d): ids `ocr0`, `ocr1`, … (never an
+ *  original paragraph's `gN`), runs in a bundled font. `confidence`: 0–1, the mean of its words. An edit paints `cover`
+ *  with `coverColor` (the picture's own background there; `coverUniform` false: not plain, the cover may show) and
+ *  draws the new text: a text.ocr_edit op, which carries both. */
+export interface OcrParagraph extends Paragraph {
+  ocr: true; confidence: number; cover: Rect; coverColor: string; coverUniform: boolean;
+}
+/** "ok" (paragraphs found), "none" (no picture of print on the page), "empty" (nothing read), "rotated" (the page is
+ *  turned in the PDF), "skewed" (`angle` degrees, too much to read into straight lines), "unreadable", "too_large". */
+export type OcrQuality = "ok" | "none" | "empty" | "rotated" | "skewed" | "unreadable" | "too_large";
+export interface OcrResult { doc_id: string; index: number; quality: OcrQuality; angle: number; dpi: number; regions: Rect[]; paragraphs: OcrParagraph[] }
 /** Why an original paragraph can't be edited: "hidden", its text is invisible (an OCR layer over a picture of the text,
  *  which is what shows); "font", a symbol font nothing else can draw; "rotated", text that isn't horizontal. */
 export type ParagraphLock = "hidden" | "font" | "rotated";
@@ -95,6 +106,14 @@ export async function getStructure(docId: string): Promise<Structure> {
 
 export async function getText(docId: string): Promise<TextData> {
   return (await request(`/documents/${docId}/text`)).json();
+}
+
+/** One page's OCR takes up to 30 s on the server (its own timeout), plus the upload of nothing and the answer. */
+export const OCR_TIMEOUT_MS = 60_000;
+
+export async function ocrPage(docId: string, index: number): Promise<OcrResult> {
+  const res = await request(`/documents/${docId}/pages/${index}/ocr`, { method: "POST", signal: AbortSignal.timeout(OCR_TIMEOUT_MS) });
+  return res.json();
 }
 
 export async function getChars(docId: string, index: number): Promise<CharLine[]> {

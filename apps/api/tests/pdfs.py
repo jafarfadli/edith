@@ -868,3 +868,94 @@ def make_raster_text_pdf(rotation: int = 0) -> bytes:
     if rotation:
         page.set_rotation(rotation)
     return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+# M5d: OCR. A synthetic scanned form (invented content, no personal data): known Indonesian/English text printed with the
+# bundled fonts, rasterised as a scanner would (optionally turned, blurred, noisy, JPEG) and embedded as the page's only
+# content. scan_form_words() gives the ground truth: every word and its box (pt).
+SCAN_TITLE = "FORMULIR PERMOHONAN SURAT PENGANTAR"
+SCAN_ROWS = (("Nama Lengkap", "Budi Santoso"), ("NIK", "3273012345670001"), ("Tempat/Tgl Lahir", "Bandung, 12 Maret 1985"),
+             ("Pekerjaan", "Karyawan Swasta"), ("Alamat", "Jl. Merdeka No. 45, RT 03/RW 07"))
+SCAN_BODY = ("Dengan ini mengajukan permohonan surat pengantar untuk keperluan pembuatan",
+             "Kartu Tanda Penduduk. Demikian permohonan ini saya buat dengan sebenarnya dan",
+             "dapat dipergunakan sebagaimana mestinya.")
+SCAN_NOTE = "Please submit this form to the village office before Friday, 14 November 2026."
+SCAN_TABLE = (("No", "Dokumen", "Keterangan"), ("1", "Fotokopi KTP", "Ada"), ("2", "Kartu Keluarga", "Ada"))
+SCAN_SIGN = ("Bandung, 9 November 2026", "Pemohon,", "(Budi Santoso)")
+SCAN_SIZE = 11          # pt: rows, body and table; the title is 14 pt bold, the note 10 pt
+SCAN_TABLE_RECT = (72, 430, 452, 496)  # the table's outer border (pt)
+SCAN_BODY_TOP = 300     # baseline of the body's first line
+
+
+def _scan_form(doc: pymupdf.Document, family: str, ink: tuple, paper: tuple, angle: float) -> pymupdf.Page:
+    page = doc.new_page(width=595, height=842)
+    morph = (pymupdf.Point(297.5, 421), pymupdf.Matrix(-angle)) if angle else None  # Matrix(θ) turns counter-clockwise
+    page.draw_rect(page.rect, color=None, fill=paper, width=0)
+    reg = pymupdf.Font(fontfile=str(FONT_FILES / f"{family}-Regular.ttf"))
+    page.insert_font(fontname="R", fontfile=str(FONT_FILES / f"{family}-Regular.ttf"))
+    page.insert_font(fontname="B", fontfile=str(FONT_FILES / f"{family}-Bold.ttf"))
+    bold = pymupdf.Font(fontfile=str(FONT_FILES / f"{family}-Bold.ttf"))
+
+    def text(x: float, y: float, s: str, name: str = "R", size: float = SCAN_SIZE) -> None:
+        page.insert_text((x, y), s, fontname=name, fontsize=size, color=ink, morph=morph)
+
+    def line(a: tuple, b: tuple, width: float = 0.8) -> None:
+        page.draw_line(a, b, color=ink, width=width, morph=morph)
+
+    text((595 - bold.text_length(SCAN_TITLE, 14)) / 2, 90, SCAN_TITLE, "B", 14)
+    line((72, 104), (523, 104), 1.2)
+    text(72, 140, "Yang bertanda tangan di bawah ini:")
+    for i, (label, value) in enumerate(SCAN_ROWS):
+        y = 166 + 22 * i
+        text(90, y, label)
+        text(200, y, ":")
+        text(212, y, value)
+    for i, s in enumerate(SCAN_BODY):
+        text(72, SCAN_BODY_TOP + 15 * i, s)
+    text(72, 370, SCAN_NOTE, size=10)
+    x0, y0, x1, y1 = SCAN_TABLE_RECT
+    cols, row_h = (x0, 112, 312, x1), (y1 - y0) / len(SCAN_TABLE)
+    for k in range(len(SCAN_TABLE) + 1):
+        line((x0, y0 + k * row_h), (x1, y0 + k * row_h))
+    for c in cols:
+        line((c, y0), (c, y1))
+    for r, row in enumerate(SCAN_TABLE):
+        for c, cell in enumerate(row):
+            text(cols[c] + 6, y0 + r * row_h + 15, cell, "B" if r == 0 else "R")
+    for i, s in enumerate(SCAN_SIGN):
+        text(523 - reg.text_length(s, SCAN_SIZE), 560 + 18 * i + (40 if i == 2 else 0), s)
+    return page
+
+
+def scan_form_words(family: str = "Tinos", angle: float = 0.0) -> list[tuple[str, pymupdf.Rect]]:
+    """The words of the synthetic scanned form and their boxes (pt; turned by `angle` as make_scan_form_pdf does:
+    the box around each turned word)."""
+    doc = pymupdf.open()
+    page = _scan_form(doc, family, (0, 0, 0), (1, 1, 1), angle)
+    return [(w[4], pymupdf.Rect(w[:4])) for w in page.get_text("words")]
+
+
+def make_scan_form_pdf(family: str = "Tinos", angle: float = 0.0, noise: float = 0.0, blur: bool = False,
+                       dpi: int = 300, jpeg: int | None = None, paper: tuple = (1, 1, 1), ink: tuple = (0, 0, 0),
+                       seed: int = 1) -> bytes:
+    """The synthetic scanned form as an image-only A4 page: printed in `family` with `ink` on `paper` (RGB 0–1), turned
+    `angle` degrees clockwise around the page centre, rasterised at `dpi`, blurred (3×3 box), with Gaussian noise of
+    σ = `noise` grey levels, stored as PNG or as JPEG of quality `jpeg`."""
+    import numpy as np
+    doc = pymupdf.open()
+    page = _scan_form(doc, family, ink, paper, angle)
+    pix = page.get_pixmap(dpi=dpi, alpha=False)
+    img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.stride)[:, :pix.width * 3]
+    img = img.reshape(pix.height, pix.width, 3).astype(np.float32)
+    if blur:
+        padded = np.pad(img, ((1, 1), (1, 1), (0, 0)), mode="edge")
+        img = sum(padded[dy:dy + pix.height, dx:dx + pix.width] for dy in range(3) for dx in range(3)) / 9
+    if noise:
+        img = img + np.random.default_rng(seed).normal(0, noise, img.shape)
+    out = pymupdf.Pixmap(pymupdf.csRGB, pix.width, pix.height, np.clip(img, 0, 255).astype(np.uint8).tobytes(), False)
+    out.set_dpi(dpi, dpi)
+    data = out.tobytes("jpeg", jpg_quality=jpeg) if jpeg else out.tobytes("png")
+    scan = pymupdf.open()
+    target = scan.new_page(width=595, height=842)
+    target.insert_image(target.rect, stream=data)
+    return scan.tobytes(garbage=3, deflate=True, no_new_id=True)

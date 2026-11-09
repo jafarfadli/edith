@@ -7,6 +7,9 @@ COPY packages/fonts packages/fonts
 RUN if [ "$CJK_FONTS" = "1" ]; then node packages/fonts/scripts/fetch-cjk.mjs; fi
 
 FROM python:3.12-slim
+# OCR of text that is a picture (POST /documents/{id}/pages/{n}/ocr): Tesseract with Indonesian and English.
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app/apps/api
 COPY apps/api/pyproject.toml apps/api/uv.lock ./

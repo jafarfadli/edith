@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DocFont, Paragraph } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
-import { hasPictureText, imageTextOf, paragraphsOf, textStore } from "@/store/text";
+import { hasPictureText, imageTextOf, ocrParagraphsOf, ocrStateOf, paragraphsOf, textStore } from "@/store/text";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  textStore.setState({ status: "idle", docId: null, pages: {}, imageText: {}, fonts: {}, imports: {} });
+  textStore.setState({ status: "idle", docId: null, pages: {}, imageText: {}, fonts: {}, imports: {}, ocr: {} });
 });
 
 const para: Paragraph = { id: "g0", rect: { x: 0, y: 0, w: 10, h: 10 }, lines: [], runs: [], align: "left", lineHeight: 12, editable: true };
@@ -73,5 +73,33 @@ describe("textStore", () => {
     expect(hasPictureText({ imageText: {}, pages: { "D:0": [para] } })).toBe(false);
     expect(hasPictureText({ imageText: {}, pages: { "D:0": [{ ...para, editable: false, lock: "hidden" }] } })).toBe(true);
     expect(hasPictureText({ imageText: {}, pages: { "D:0": [{ ...para, editable: false, lock: "rotated" }] } })).toBe(false);
+  });
+
+  it("reads a page with OCR once, one page of a document at a time, and keeps a failure retryable (M5d)", async () => {
+    const ocrPara = { ...para, id: "ocr0", ocr: true, confidence: 0.9, cover: para.rect, coverColor: "#ffffff", coverUniform: true };
+    let release!: () => void;
+    const answered = new Promise<void>((r) => { release = r; });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/text")) return new Response(JSON.stringify({ doc_id: "D", pages: [{ index: 0, paragraphs: [] }, { index: 1, paragraphs: [] }], fonts: [] }), { status: 200 });
+      if (url.endsWith("/pages/1/ocr")) return new Response(JSON.stringify({ error: { code: "ocr_busy" } }), { status: 429 });
+      await answered;
+      return new Response(JSON.stringify({ doc_id: "D", index: 0, quality: "ok", angle: 0, dpi: 300, regions: [], paragraphs: [ocrPara] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await textStore.getState().load("D");
+    const first = textStore.getState().runOcr("D", 0);
+    expect(ocrStateOf({ doc: "D", index: 0 })?.status).toBe("loading");
+    expect((await textStore.getState().runOcr("D", 1)).status).toBe("loading"); // page 0 still runs: not asked
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8000/documents/D/pages/0/ocr", expect.objectContaining({ method: "POST" }));
+    release();
+    expect((await first).status).toBe("ready");
+    expect(ocrParagraphsOf({ doc: "D", index: 0 })).toEqual([ocrPara]);
+    await textStore.getState().runOcr("D", 0); // read already: kept
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith("/pages/0/ocr"))).toHaveLength(1);
+    expect(await textStore.getState().runOcr("D", 1)).toEqual({ status: "error", paragraphs: [], error: "ocr_busy" });
+    expect(textStore.getState().runOcr("D", 1)).toBeInstanceOf(Promise); // a failure can be retried
+    await textStore.getState().load("D"); // another load forgets the results
+    expect(ocrParagraphsOf({ doc: "D", index: 0 })).toEqual([]);
   });
 });

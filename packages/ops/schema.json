@@ -234,6 +234,7 @@
                 "symbol.add": "#/$defs/SymbolAdd",
                 "text.add": "#/$defs/TextAdd",
                 "text.edit": "#/$defs/TextEdit",
+                "text.ocr_edit": "#/$defs/TextOcrEdit",
                 "whiteout.add": "#/$defs/WhiteoutAdd"
               },
               "propertyName": "type"
@@ -244,6 +245,9 @@
               },
               {
                 "$ref": "#/$defs/TextEdit"
+              },
+              {
+                "$ref": "#/$defs/TextOcrEdit"
               },
               {
                 "$ref": "#/$defs/ImageAdd"
@@ -832,6 +836,7 @@
                 "symbol.add": "#/$defs/SymbolAdd",
                 "text.add": "#/$defs/TextAdd",
                 "text.edit": "#/$defs/TextEdit",
+                "text.ocr_edit": "#/$defs/TextOcrEdit",
                 "whiteout.add": "#/$defs/WhiteoutAdd"
               },
               "propertyName": "type"
@@ -842,6 +847,9 @@
               },
               {
                 "$ref": "#/$defs/TextEdit"
+              },
+              {
+                "$ref": "#/$defs/TextOcrEdit"
               },
               {
                 "$ref": "#/$defs/ImageAdd"
@@ -1538,6 +1546,55 @@
         "box"
       ],
       "title": "TextEdit",
+      "type": "object"
+    },
+    "TextOcrEdit": {
+      "additionalProperties": false,
+      "description": "Replaces a paragraph OCR read in a picture of text (POST /documents/{id}/pages/{n}/ocr, M5d). `cover` is painted\nwith `coverColor` (the picture's own background there) over the page's original content, under every drawn object\n\u2014 as a text.edit's original glyphs go \u2014 and `box` is drawn in the op's stacking order. Self-contained: the bake\nreads neither the OCR result nor the source page, so a draft restores and exports without OCR running again.\n`paragraphId` names the OCR paragraph (ocr0, ocr1, \u2026) for the client: one op per page and id.",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "pageKey": {
+          "pattern": "^(o\\d+|u[0-9A-Za-z-]+)$",
+          "title": "Pagekey",
+          "type": "string"
+        },
+        "type": {
+          "const": "text.ocr_edit",
+          "title": "Type",
+          "type": "string"
+        },
+        "paragraphId": {
+          "pattern": "^ocr\\d+$",
+          "title": "Paragraphid",
+          "type": "string"
+        },
+        "cover": {
+          "$ref": "#/$defs/Rect"
+        },
+        "coverColor": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Covercolor",
+          "type": "string"
+        },
+        "box": {
+          "$ref": "#/$defs/TextBox"
+        }
+      },
+      "required": [
+        "id",
+        "pageKey",
+        "type",
+        "paragraphId",
+        "cover",
+        "coverColor",
+        "box"
+      ],
+      "title": "TextOcrEdit",
       "type": "object"
     },
     "UrlTarget": {
