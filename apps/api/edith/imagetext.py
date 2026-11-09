@@ -2,6 +2,9 @@
 can say why nothing there is editable (M5c). No OCR: this only looks at how the image's pixels are laid out — a light
 background with several separate rows of dark marks — which a paragraph of print shows and a photo, a logo or a
 signature does not."""
+import time
+from dataclasses import dataclass, field
+
 import pymupdf
 
 from edith.paragraphs import FLAGS, invisible_check
@@ -17,6 +20,7 @@ BACKGROUND = 24       # grey levels from the background that still count as back
 MIN_BACKGROUND = 0.6  # share of background pixels: paper, not a photo
 INK_RANGE = (0.01, 0.35)  # share of ink pixels: print, not an empty box or a dark picture
 MAX_PIXELS = 20_000_000   # pixels one document's analysis may render (≈ 40 full A4 pages at 72 dpi)
+MAX_SECONDS = 1.0         # wall-clock time one document's analysis may take (GET /text waits for it)
 
 
 def _visible_words(page: pymupdf.Page) -> list[pymupdf.Rect]:
@@ -61,13 +65,23 @@ def _text_like(pix: pymupdf.Pixmap) -> bool:
     return rows >= MIN_ROWS
 
 
-def image_text_regions(page: pymupdf.Page, budget: list[int] | None = None) -> list[dict]:
+@dataclass
+class Budget:
+    """What one document's analysis may still spend: `pixels` to render (decremented) and wall-clock time (`deadline`,
+    time.monotonic()). An image that would exceed either is not analysed (nor the page's text read for it)."""
+    pixels: int = MAX_PIXELS
+    deadline: float = field(default_factory=lambda: time.monotonic() + MAX_SECONDS)
+
+
+def image_text_regions(page: pymupdf.Page, budget: Budget | None = None,
+                       visible: list[pymupdf.Rect] | None = None) -> list[dict]:
     """Rects (unrotated-CropBox points) of the images on `page` that look like print with no visible text over them.
-    `budget`: pixels left for the document's analysis (decremented; none left: no more images are analysed)."""
+    `budget`: what the document's analysis may still spend (see Budget; none: no limit). `visible`: rects of the page's
+    visible text when the caller has them (extract_text: its visible paragraphs' lines); else the page's text is read."""
     # Image and text boxes are unrotated-CropBox points (as paragraphs are); page.rect is rotated at 90/270.
     bounds = pymupdf.Rect(0, 0, page.cropbox.width, page.cropbox.height)
     area = bounds.width * bounds.height
-    words: list[pymupdf.Rect] | None = None
+    words = visible
     out: list[dict] = []
     seen: list[pymupdf.Rect] = []
     for info in page.get_image_info():
@@ -78,15 +92,15 @@ def image_text_regions(page: pymupdf.Page, budget: list[int] | None = None) -> l
                for s in seen):
             continue
         seen.append(r)
+        pixels = int(r.width * r.height * (DPI / 72) ** 2)
+        if budget is not None and (budget.pixels < pixels or time.monotonic() > budget.deadline):
+            continue
         if words is None:
             words = _visible_words(page)
         if any(r.contains((w.tl + w.br) / 2) for w in words):
             continue  # real text on it (a form printed over a scanned background): the text is what gets edited
-        pixels = int(r.width * r.height * (DPI / 72) ** 2)
         if budget is not None:
-            if budget[0] < pixels:
-                continue
-            budget[0] -= pixels
+            budget.pixels -= pixels
         # The page as shown inside the image's rect: what a reader sees there, masks and overlapping images included.
         pix = page.get_pixmap(dpi=DPI, clip=r * page.rotation_matrix, colorspace=pymupdf.csGRAY, annots=False)
         if _text_like(pix):

@@ -7,7 +7,7 @@ from edith.doc_fonts import (collect_fonts, fill_substitutes, font_candidates, i
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
 from edith.fonts import FontRegistry
 from edith.forms import extract_fields
-from edith.imagetext import MAX_PIXELS, image_text_regions
+from edith.imagetext import Budget, image_text_regions
 from edith.paragraphs import extract_paragraphs
 
 
@@ -108,11 +108,15 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
     is not editable). `imageText`: the rects of images that look like print with no text over them (see imagetext)."""
     text_fonts = TextFonts(doc, registry)
     pages = []
-    budget = [MAX_PIXELS]
+    budget = Budget()
     for page in doc:
         resolve, locked = text_fonts.page(page)
-        pages.append({"index": page.number,
-                      "paragraphs": extract_paragraphs(page, resolve, locked, text_fonts.program),
-                      "imageText": image_text_regions(page, budget)})
+        paragraphs = extract_paragraphs(page, resolve, locked, text_fonts.program)
+        # The page's visible text, from its paragraphs (the page's text is not read again): every line of a paragraph
+        # that is not invisible text.
+        visible = [pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"])
+                   for p in paragraphs if p.get("lock") != "hidden" for r in (ln["rect"] for ln in p["lines"])]
+        pages.append({"index": page.number, "paragraphs": paragraphs,
+                      "imageText": image_text_regions(page, budget, visible)})
     fill_substitutes(text_fonts.fonts, registry)
     return {"pages": pages, "fonts": [f.to_json() for f in text_fonts.fonts.values()]}

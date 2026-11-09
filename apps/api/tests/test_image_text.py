@@ -1,5 +1,7 @@
 """M5c: text that is a picture. Invisible text laid over an image of it is locked ("hidden"), and images that look
 like print with no text over them are reported (`imageText`) so the client can say why nothing there is editable."""
+import time
+
 import pymupdf
 import pytest
 
@@ -7,13 +9,12 @@ from edith.bake import bake
 from edith.bake.context import BakeContext
 from edith.errors import TextLocked
 from edith.fonts import FontRegistry
-from edith.imagetext import image_text_regions
+from edith.imagetext import MAX_PIXELS, Budget, image_text_regions
 from edith.ops import ExportRequest
 from edith.paragraphs import extract_paragraphs
 from edith.settings import Settings
-from tests.pdfs import (RASTER_RECT, SCAN_RECT, make_clip_text_pdf, make_hidden_text_pdf, make_paragraphs_pdf, make_picture_text_pdf,
-                        make_raster_text_pdf,
-                        make_type3_pdf)
+from tests.pdfs import (PRINTED_RECT, RASTER_RECT, SCAN_RECT, make_clip_text_pdf, make_hidden_text_pdf,
+                        make_paragraphs_pdf, make_picture_text_pdf, make_raster_text_pdf, make_type3_pdf)
 from tests.test_documents import upload
 
 DOC = "D" * 22
@@ -80,10 +81,30 @@ def test_image_text_rects_are_unrotated_page_points():
     assert image_text_regions(page_of(make_raster_text_pdf(rotation=90))) == [rect(RASTER_RECT)]
 
 
-def test_image_text_analysis_stops_when_the_budget_is_spent():
-    budget = [100]
+def test_image_text_analysis_stops_when_the_budget_is_spent(monkeypatch):
+    import edith.imagetext as imagetext
+    read = []
+    monkeypatch.setattr(imagetext, "_visible_words", lambda page: read.append(page) or [])
+    budget = Budget(pixels=100)
     assert image_text_regions(page_of(make_raster_text_pdf()), budget) == []
-    assert budget == [100]
+    assert budget.pixels == 100 and read == []  # nothing rendered, and the text not even read
+
+
+def test_image_text_analysis_stops_at_its_deadline():
+    assert image_text_regions(page_of(make_raster_text_pdf()), Budget(deadline=time.monotonic() - 1)) == []
+    budget = Budget()
+    assert image_text_regions(page_of(make_raster_text_pdf()), budget) == [rect(RASTER_RECT)]
+    # Rendered: the print, the photo and the logo (whole pixels each), not the picture with text typed over it.
+    assert MAX_PIXELS - budget.pixels == pytest.approx(440 * 180 + 120 * 90 + 80 * 80, abs=3)
+
+
+def test_image_text_uses_the_visible_text_it_is_given():
+    """extract_text passes the lines of its visible paragraphs: the page's text is not read again."""
+    page = page_of(make_raster_text_pdf())
+    x0, y0, x1, y1 = RASTER_RECT
+    assert image_text_regions(page, visible=[pymupdf.Rect(x0 + 10, y0 + 10, x0 + 100, y0 + 20)]) == [rect(PRINTED_RECT)]
+    # Told there is no visible text, the picture with text typed over it counts too.
+    assert image_text_regions(page, visible=[]) == [rect(RASTER_RECT), rect(PRINTED_RECT)]
 
 
 def test_get_text_reports_locks_and_image_text(client):
