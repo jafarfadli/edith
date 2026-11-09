@@ -1,7 +1,9 @@
 """Counts Tc / Tw / Tz operators and TJ/Tj/Td in each reference's page content streams. python probe_ops.py [REFS]"""
 import re, sys, collections, pymupdf
 from pathlib import Path
-for f in sorted(Path(sys.argv[1] if len(sys.argv) > 1 else "/Users/jafarfadli/Koding/edith/references").glob("*.pdf")):
+
+import paths  # noqa: E402 - harness/paths.py: default OUT, REFS, REPO
+for f in sorted((Path(sys.argv[1]) if len(sys.argv) > 1 else paths.REFS).glob("*.pdf")):
     doc = pymupdf.open(f)
     c = collections.Counter()
     for page in doc:

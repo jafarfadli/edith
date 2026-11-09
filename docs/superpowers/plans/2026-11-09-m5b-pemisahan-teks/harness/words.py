@@ -3,14 +3,16 @@ import json
 import sys
 from pathlib import Path
 
+import paths  # noqa: E402 - harness/paths.py: default OUT, REFS, REPO
+
 import pymupdf
 
 sys.path.insert(0, str(Path(__file__).parent))
 from compare import FLAGS, in_lines, order, words_of  # noqa: E402
 
 slug, page, gid = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-OUT = Path(sys.argv[4] if len(sys.argv) > 4 else "/private/tmp/claude-501/audit3/out")
-REFS = Path(sys.argv[5] if len(sys.argv) > 5 else "/Users/jafarfadli/Koding/edith/references")
+OUT = Path(sys.argv[4]) if len(sys.argv) > 4 else paths.OUT
+REFS = Path(sys.argv[5]) if len(sys.argv) > 5 else paths.REFS
 d = OUT / slug
 idx = json.loads((d / "index.json").read_text())
 src = pymupdf.open(REFS / idx[0]["pdf"])

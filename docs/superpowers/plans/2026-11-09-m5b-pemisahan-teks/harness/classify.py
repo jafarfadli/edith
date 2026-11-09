@@ -25,7 +25,9 @@ import json
 import sys
 from pathlib import Path
 
-OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "/private/tmp/claude-501/audit3/out")
+import paths  # noqa: E402 - harness/paths.py: default OUT, REFS, REPO
+
+OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else paths.OUT
 BUNDLED = ("arimo", "tinos", "cousine", "carlito", "caladea", "noto", "inter", "lato", "lora", "merriweather")
 
 

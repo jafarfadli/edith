@@ -12,6 +12,7 @@
  */
 import { test } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { Run, TextBox } from "@edith/ops";
 import type { Paragraph, TextData } from "@/lib/api";
@@ -24,7 +25,7 @@ import { relayout } from "@/lib/textbox";
 
 const API = (process.env.EDITH_API || "http://127.0.0.1:19400").replace(/\/+$/, "");
 const REFS = process.env.REFS || path.resolve(process.cwd(), "../../references");
-const OUT = process.env.OUT || "/private/tmp/claude-501/audit3/out";
+const OUT = process.env.OUT || path.join(os.tmpdir(), "edith-harness", "out"); // as harness/paths.py
 const ONLY = process.env.ONLY || "";
 const PARA = process.env.PARA || "";
 /** identity (default): commit unchanged, as the UI does (it sends nothing: recorded as `skipped`). identity-force: send

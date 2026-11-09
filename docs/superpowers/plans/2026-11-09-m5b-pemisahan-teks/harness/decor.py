@@ -2,9 +2,11 @@
 python decor.py [OUT] [REFS]  -> prints counts; adds OUT/decor.json"""
 import json, sys, collections
 from pathlib import Path
+
+import paths  # noqa: E402 - harness/paths.py: default OUT, REFS, REPO
 import pymupdf
-OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "/private/tmp/claude-501/audit3/out")
-REFS = Path(sys.argv[2] if len(sys.argv) > 2 else "/Users/jafarfadli/Koding/edith/references")
+OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else paths.OUT
+REFS = Path(sys.argv[2]) if len(sys.argv) > 2 else paths.REFS
 R = json.loads((OUT / "classified.json").read_text())
 docs, segs = {}, {}
 out = []

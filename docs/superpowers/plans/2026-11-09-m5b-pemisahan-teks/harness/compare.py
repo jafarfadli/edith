@@ -14,11 +14,13 @@ import statistics
 import sys
 from pathlib import Path
 
+import paths  # noqa: E402 - harness/paths.py: default OUT, REFS, REPO
+
 import numpy as np
 import pymupdf
 
-OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "/private/tmp/claude-501/audit3/out")
-REFS = Path(sys.argv[2] if len(sys.argv) > 2 else "/Users/jafarfadli/Koding/edith/references")
+OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else paths.OUT
+REFS = Path(sys.argv[2]) if len(sys.argv) > 2 else paths.REFS
 FLAGS = pymupdf.TEXT_PRESERVE_WHITESPACE | pymupdf.TEXT_MEDIABOX_CLIP
 GAP_EM = 0.15      # a jump this wide (× size) between two glyphs of a line ends a word (no space glyph: Hancom)
 ZOOM = 2

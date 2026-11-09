@@ -3,10 +3,12 @@ web layout uses (served by GET /documents/{id}/fonts/{ref}). extra/em = Tc, Tz, 
 import json, os, statistics, sys, collections, urllib.request, re
 import pymupdf
 from pathlib import Path
+
+import paths  # noqa: E402 - harness/paths.py: default OUT, REFS, REPO
 # Usage: python probe_widths.py [OUT]  (after identity.harness.ts; the API on 19400 must still hold the uploads)
 API = os.environ.get("EDITH_API", "http://127.0.0.1:19400")
-OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "/private/tmp/claude-501/audit3/out")
-REPO = Path(os.environ.get("EDITH_REPO") or "/Users/jafarfadli/Koding/edith")
+OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else paths.OUT
+REPO = paths.REPO
 sys.path.insert(0, str(REPO / "apps/api"))
 from edith.doc_fonts import name_key
 for d in sorted(OUT.iterdir()):
