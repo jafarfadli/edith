@@ -8,7 +8,7 @@ import { isMac } from "@/lib/keys";
 import { zMoveForKey } from "@/lib/zorder";
 import { copySelection, duplicateSelection, pasteClipboard } from "./objects/clipboard";
 import { moveSelection, openMenuForSelection } from "./objects/layering";
-import { afterTextCommitted, textEditStore, textSessionBusy } from "./text/textEdit";
+import { afterTextCommitted, deleteObjectOrText, deleteSelectedParagraph, textEditStore, textSessionBusy } from "./text/textEdit";
 
 export function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -50,7 +50,9 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       // Only with an object selected: otherwise Ctrl/Cmd+[ ] stay the browser's Back/Forward.
       else if (s.selection && zMoveForKey(e, isMac())) { e.preventDefault(); moveSelection(zMoveForKey(e, isMac())!); }
       else if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && s.selection) { if (openMenuForSelection()) e.preventDefault(); }
-      else if ((e.key === "Delete" || e.key === "Backspace") && s.selection) { e.preventDefault(); s.deleteObject(s.selection); }
+      // An edit of original text loses its text rather than its op (which would bring the original back).
+      else if ((e.key === "Delete" || e.key === "Backspace") && s.selection) { e.preventDefault(); deleteObjectOrText(s.selection); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && deleteSelectedParagraph()) e.preventDefault();
       else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); }
       else if (!e.repeat && !textSessionBusy() && toolForKey(e)) { e.preventDefault(); s.setTool(toolForKey(e)!); } // V, T, R …: see TOOL_KEYS
     }

@@ -99,6 +99,12 @@ export const t = {
     alignJustify: "Rata kiri-kanan",
     originalFont: (name: string) => `${name} (asli)`,
     revert: "Kembalikan teks asli",
+    /** Deleting the text of an original (or OCR) paragraph: its menu, the bar over it, the Anotasi panel. */
+    edit: "Edit teks",
+    delete: "Hapus teks",
+    deleted: "teks dihapus",
+    menu: "Menu teks",
+    selectedHint: "Tekan Delete untuk menghapus, klik dua kali untuk mengedit.",
     scanned: "Halaman ini berupa gambar; OCR belum tersedia",
     overflow: "Teks lebih panjang dari paragraf asli dan bisa menimpa teks di bawahnya",
     unsupported: "beberapa karakter tidak didukung font ini",

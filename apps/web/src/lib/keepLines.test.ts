@@ -5,7 +5,7 @@ import type { FontRef, Run, TextBox, TextEdit } from "@edith/ops";
 import { moveOp, resizeOp } from "@/lib/objects";
 import type { Paragraph, TextData } from "@/lib/api";
 import { fontKey, isOriginal, metricsFromBuffer, type FontMetrics } from "@/lib/fonts";
-import { editedBox, KEEP_Y_EM, KEEP_Y_TOL, SPACE_CHARS } from "@/lib/keepLines";
+import { blankBox, editedBox, isBlankBox, KEEP_Y_EM, KEEP_Y_TOL, SPACE_CHARS } from "@/lib/keepLines";
 import { layoutText } from "@/lib/layout";
 import { keptLines, maskRects, paragraphBox, replacedLines } from "@/lib/paragraphs";
 import { runsText } from "@/lib/runs";
@@ -234,6 +234,21 @@ describe("kept lines on screen", () => {
     // Wide leading: nothing to share, the usual covers.
     const loose = { ...LEFT, lines: [line(100), line(120)] };
     expect(maskRects(loose, layout([0, null]))[0]).toEqual({ x: 9.5, y: 120 - 9.5, w: 101, h: 12 });
+  });
+
+  it.each(["", "  \n "])("text left blank (%j) deletes the paragraph: no line kept, every line covered, the box over it", (blank) => {
+    const { start, box } = edit(LEFT, () => blank);
+    expect(isBlankBox(box)).toBe(true);
+    expect(box.paragraphs).toEqual([[{ ...start.paragraphs[0][0], text: "" }]]);
+    expect(box.layout).toEqual([{ baseline: expect.any(Number), segments: [] }]);
+    expect(box.rect.y + box.layout[0].baseline).toBeCloseTo(start.rect.y + start.layout[0].baseline);
+    expect(box.rect.y).toBeLessThanOrEqual(LEFT.rect.y);
+    expect(box.rect.y + box.rect.h).toBeGreaterThanOrEqual(LEFT.rect.y + LEFT.rect.h);
+    expect([box.rect.x, box.rect.w]).toEqual([start.rect.x, start.rect.w]);
+    expect(keptLines(box).size).toBe(0);
+    expect(replacedLines(LEFT, box)).toEqual(LEFT.lines);
+    expect(maskRects(LEFT, box)).toHaveLength(LEFT.lines.length);
+    expect(blankBox(box, LEFT.rect)).toEqual(box); // deleting it again changes nothing
   });
 
   it("treats an op from an older draft (no `source`) as redrawing every line, as before", () => {

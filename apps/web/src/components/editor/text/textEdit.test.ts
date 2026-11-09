@@ -10,7 +10,7 @@ import { boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
 import { moveOp, resizeOp } from "@/lib/objects";
-import { afterTextCommitted, commitEditing, materializeParagraph, startOcrEdit, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, updateTextOp, whenTextCommitted } from "./textEdit";
+import { afterTextCommitted, commitEditing, deleteObjectOrText, deleteSelectedParagraph, isDeletedText, materializeParagraph, startOcrEdit, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, updateTextOp, whenTextCommitted } from "./textEdit";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
@@ -442,6 +442,115 @@ describe("markup over an edited paragraph", () => {
     openSession("t9");
     await commitEditing(runs("Halo"));
     expect(noticeStore.getState().notice).toBeNull(); // a new text box removes nothing
+  });
+});
+
+describe("deleting text", () => {
+  const g3: Paragraph = {
+    id: "g3", rect: { x: 72, y: 88, w: 200, h: 30 }, align: "left", lineHeight: 14, editable: true,
+    runs: [{ text: "Halo lama", font, size: 12, color: "#000000" }],
+    lines: [{ rect: { x: 72, y: 89, w: 200, h: 14 }, baseline: 100, size: 12, start: 0, end: 4 },
+      { rect: { x: 72, y: 103, w: 120, h: 14 }, baseline: 114, size: 12, start: 5, end: 9 }],
+  };
+  const g4: Paragraph = { ...g3, id: "g4", rect: { x: 72, y: 200, w: 200, h: 14 }, runs: [{ text: "Tetangga", font, size: 12, color: "#000000" }],
+    lines: [{ rect: { x: 72, y: 200, w: 200, h: 14 }, baseline: 211, size: 12, start: 0, end: 8 }] };
+  const ocrPara: OcrParagraph = {
+    id: "ocr4", rect: { x: 72, y: 290, w: 300, h: 26 }, align: "left", lineHeight: 15, editable: true,
+    runs: [{ text: "Halo dunia dua", font, size: 11, color: "#000000" }],
+    lines: [{ rect: { x: 72, y: 290, w: 300, h: 12 }, baseline: 300, size: 11, start: 0, end: 10 },
+      { rect: { x: 72, y: 305, w: 40, h: 12 }, baseline: 315, size: 11, start: 11, end: 14 }],
+    ocr: true, confidence: 0.9, cover: { x: 70.5, y: 288.5, w: 303, h: 30 },
+    covers: [{ x: 70.5, y: 288.5, w: 303, h: 15 }, { x: 70.5, y: 303.5, w: 43, h: 15 }], coverColor: "#f7f5eb", coverUniform: true,
+  };
+  const mark = (id: string, y: number) => ({ id, type: "annot.add", pageKey: "o0", kind: "highlight", quads: [{ x: 80, y, w: 40, h: 13.8 }], color: "#ffeb3b" }) as ContentOp;
+  const edits = () => Object.values(editorStore.getState().doc.objects).filter((o) => o.type === "text.edit") as TextEdit[];
+  const text = (op: { box: { paragraphs: Run[][] } }) => op.box.paragraphs.map((p) => p.map((r) => r.text).join("")).join("\n");
+
+  beforeEach(() => {
+    gate.resolve();
+    fontsLoaded = true;
+    textStore.setState({ docId: info.docId, pages: { [`${info.docId}:0`]: [g3, g4] }, ocr: { [`${info.docId}:0`]: { status: "ready", quality: "ok", paragraphs: [ocrPara] } } });
+    editorStore.getState().addObject(mark("h1", 89.2));
+    editorStore.getState().addObject(mark("h2", 199.2)); // on the neighbour
+    noticeStore.setState({ notice: null });
+  });
+
+  it("Delete on a selected original paragraph: a blank text.edit over the whole paragraph, selected, one undo step; its marks go", async () => {
+    const before = editorStore.getState().past.length;
+    textEditStore.getState().selectParagraph({ pageKey: "o0", id: "g3" });
+    expect(deleteSelectedParagraph()).toBe(true);
+    await vi.waitFor(() => expect(edits()).toHaveLength(1));
+    const [op] = edits();
+    expect(op).toMatchObject({ paragraphId: "g3", pageKey: "o0" });
+    expect(text(op)).toBe("");
+    expect(op.box.paragraphs[0]).toHaveLength(1); // the style kept for typing into it again
+    expect(op.box.layout).toEqual([{ baseline: expect.any(Number), segments: [] }]);
+    expect(op.box.rect.y + op.box.layout[0].baseline).toBeCloseTo(100); // on the first original baseline
+    expect(op.box.rect.y).toBeLessThanOrEqual(g3.rect.y);
+    expect(op.box.rect.y + op.box.rect.h).toBeGreaterThanOrEqual(g3.rect.y + g3.rect.h); // its place stays a target
+    const st = editorStore.getState();
+    expect(st.selection).toBe(op.id);
+    expect(textEditStore.getState().paragraph).toBeNull();
+    expect(Object.keys(st.doc.objects).sort()).toEqual([op.id, "h2"].sort()); // the neighbour's mark stays
+    expect(noticeStore.getState().notice).toEqual({ kind: "info", text: t.text.markupRemoved });
+    expect(st.past.length).toBe(before + 1);
+    st.undo();
+    expect(Object.keys(editorStore.getState().doc.objects).sort()).toEqual(["h1", "h2"]);
+  });
+
+  it("nothing to delete without a selected paragraph, or with another tool", () => {
+    expect(deleteSelectedParagraph()).toBe(false);
+    textEditStore.getState().selectParagraph({ pageKey: "o0", id: "g3" });
+    editorStore.getState().setTool("text");
+    expect(deleteSelectedParagraph()).toBe(false);
+  });
+
+  it("every character removed in the editor deletes the text: the op stays, blank, not reverted", async () => {
+    await startParagraphEdit("o0", g3);
+    await commitEditing(runs(""));
+    const [op] = edits();
+    expect(text(op)).toBe("");
+    expect(op.box.rect.y + op.box.rect.h).toBeGreaterThanOrEqual(g3.rect.y + g3.rect.h);
+    // Spaces only is no text either.
+    await startParagraphEdit("o0", g3);
+    await commitEditing(runs("   "));
+    expect(text(edits()[0])).toBe("");
+  });
+
+  it("Delete on a text.edit takes its text (one undo step, the op stays); on a deleted one it does nothing", async () => {
+    await startParagraphEdit("o0", g3);
+    await commitEditing(runs("Halo baru"));
+    const [op] = edits();
+    const before = editorStore.getState().past.length;
+    deleteObjectOrText(op.id);
+    const blank = editorStore.getState().doc.objects[op.id] as TextEdit;
+    expect(text(blank)).toBe("");
+    expect(isDeletedText(blank)).toBe(true);
+    expect(editorStore.getState().past.length).toBe(before + 1);
+    deleteObjectOrText(op.id); // already deleted: not the op (which would bring the original back)
+    expect(editorStore.getState().doc.objects[op.id]).toEqual(blank);
+    expect(editorStore.getState().past.length).toBe(before + 1);
+    editorStore.getState().undo();
+    expect(text(editorStore.getState().doc.objects[op.id] as TextEdit)).toBe("Halo baru");
+    deleteObjectOrText("h2"); // any other object goes
+    expect(editorStore.getState().doc.objects.h2).toBeUndefined();
+  });
+
+  it("an OCR paragraph: a blank text.ocr_edit that keeps its covers; Delete on an OCR edit takes its text", async () => {
+    textEditStore.getState().selectParagraph({ pageKey: "o0", id: "ocr4" });
+    expect(deleteSelectedParagraph()).toBe(true);
+    await vi.waitFor(() => expect(Object.values(editorStore.getState().doc.objects).some((o) => o.type === "text.ocr_edit")).toBe(true));
+    const op = Object.values(editorStore.getState().doc.objects).find((o) => o.type === "text.ocr_edit") as Extract<ContentOp, { type: "text.ocr_edit" }>;
+    expect(op).toMatchObject({ paragraphId: "ocr4", cover: ocrPara.cover, covers: ocrPara.covers, coverColor: "#f7f5eb" });
+    expect(text(op)).toBe("");
+    expect(op.box.rect.y + op.box.rect.h).toBeGreaterThanOrEqual(ocrPara.cover.y + ocrPara.cover.h);
+    expect(editorStore.getState().selection).toBe(op.id);
+    editorStore.getState().undo();
+    await startOcrEdit("o0", ocrPara);
+    await commitEditing(runs("Baru"));
+    const edited = Object.values(editorStore.getState().doc.objects).find((o) => o.type === "text.ocr_edit")!;
+    deleteObjectOrText(edited.id);
+    expect(isDeletedText(editorStore.getState().doc.objects[edited.id])).toBe(true);
   });
 });
 

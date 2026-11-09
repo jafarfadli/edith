@@ -28,6 +28,36 @@ export function keepFirstBaseline(prev: TextBox, box: TextBox): TextBox {
   return { ...box, rect: { ...box.rect, y: prev.rect.y + before - after } };
 }
 
+/** True when `paragraphs` hold no character but spaces: an edit of original (or OCR) text that leaves this deletes it. */
+export function isBlank(paragraphs: Run[][]): boolean {
+  return paragraphs.every((p) => !/\S/.test(p.map((r) => r.text).join("")));
+}
+
+/** True when text.edit / text.ocr_edit `box` deletes its text (blankBox, or a box typed empty). */
+export function isBlankBox(box: TextBox): boolean {
+  return isBlank(box.paragraphs);
+}
+
+/**
+ * The box of an edit that deletes its paragraph's text (Delete on it, or every character removed): no text, one empty
+ * line on `prev`'s first baseline (the style of its first run kept, for typing into it again), and the rect grown down
+ * and up over `area` (the original paragraph, or what an OCR edit covers), so the place of the text stays a target that
+ * selects the edit (to restore or retype it). The bake redacts every original line (no line is kept) and draws nothing;
+ * on screen the covers hide every line.
+ */
+export function blankBox(prev: TextBox, area: { y: number; h: number }): TextBox {
+  const run = prev.paragraphs.flat()[0];
+  const baseline = prev.layout[0]?.baseline ?? prev.lineHeight;
+  const y = Math.min(prev.rect.y, area.y);
+  const bottom = Math.max(prev.rect.y + prev.rect.h, area.y + area.h);
+  return {
+    ...prev,
+    rect: { ...prev.rect, y, h: bottom - y },
+    paragraphs: [run ? [{ ...run, text: "" }] : []],
+    layout: [{ baseline: prev.rect.y + baseline - y, segments: [] }],
+  };
+}
+
 /** A character's style, as the bake's kept-line check (bake/text.py _same_char) compares it: with the original's
  *  measured scale and spacing (Run.hScale / charSpacing / wordSpacing). */
 function styleKey(r: Run): string {
@@ -91,8 +121,10 @@ export function inPlace(box: TextBox, p: Paragraph, x: number, width: number): b
  *   original had its words (anchorLine): the words before the edit keep their glyphs (LayoutLine.prefix).
  *
  * The box must be in place (inPlace), else every line is redrawn. The first baseline stays where `prev` had it.
+ * Text left blank deletes the paragraph (blankBox).
  */
 export function editedBox(prev: TextBox, paragraphs: Run[][], p: Paragraph, metricsFor: MetricsFor): TextBox {
+  if (isBlank(paragraphs)) return blankBox(prev, p.rect);
   const frame = paragraphFrame(p, metricsFor);
   const align = prev.align ?? "left";
   const done = (r: ReturnType<typeof layoutText>, layout: LayoutLine[]) =>

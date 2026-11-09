@@ -54,6 +54,18 @@ describe("applyReplacements", () => {
     expect((editorStore.getState().doc.objects.t as TextAdd).box.paragraphs[0][0].text).toBe("lama dan lama");
   });
 
+  it("replacing a paragraph's whole text with nothing deletes it, as Delete does", async () => {
+    const st = editorStore.getState();
+    const matches = findMatches(buildTargets(st.doc, textStore.getState().pages), "kata lama di sini", true);
+    await applyReplacements(matches, "");
+    const edit = Object.values(editorStore.getState().doc.objects)[0] as TextEdit;
+    expect(edit).toMatchObject({ type: "text.edit", paragraphId: "g0" });
+    expect(edit.box.paragraphs).toEqual([[expect.objectContaining({ text: "" })]]);
+    expect(edit.box.layout).toEqual([{ baseline: expect.any(Number), segments: [] }]);
+    expect(edit.box.rect.y + edit.box.layout[0].baseline).toBeCloseTo(100);
+    expect(edit.box.rect.y + edit.box.rect.h).toBeGreaterThanOrEqual(para.rect.y + para.rect.h);
+  });
+
   it("replaces only the given match", async () => {
     const st = editorStore.getState();
     const [m] = findMatches(buildTargets(st.doc, textStore.getState().pages), "di", true);

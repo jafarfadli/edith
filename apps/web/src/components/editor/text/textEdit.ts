@@ -2,14 +2,14 @@
 
 import { createStore } from "zustand/vanilla";
 import type { Editor } from "@tiptap/core";
-import type { ContentOp, Run, TextBox, TextEdit } from "@edith/ops";
+import type { ContentOp, Run, TextBox, TextEdit, TextOcrEdit } from "@edith/ops";
 import type { OcrParagraph, Paragraph, ParagraphLine } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
 import { markupOverLines } from "@/lib/markup";
 import { noticeStore } from "@/lib/notices";
 import { newId } from "@/lib/id";
 import { ocrEditOp, type OcrCover } from "@/lib/ocr";
-import { editedBox, keepFirstBaseline } from "@/lib/keepLines";
+import { blankBox, editedBox, isBlank, isBlankBox, keepFirstBaseline } from "@/lib/keepLines";
 import { keptLines, keptPrefixes, paragraphBox, preloadFallback, prepareRuns, replacedLines, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
@@ -17,7 +17,7 @@ import { t } from "@/lib/strings";
 import { keepRotatedTopLeft, rotationOf } from "@/lib/objects";
 import { boxFonts, boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, ocrEditFor, textEditFor, type EditorDoc } from "@/store/editor";
-import { paragraphsOf, textStore } from "@/store/text";
+import { ocrParagraphsOf, paragraphsOf, textStore } from "@/store/text";
 
 type Pt = [number, number];
 
@@ -226,24 +226,106 @@ export async function startOcrEdit(pageKey: string, p: OcrParagraph): Promise<vo
 }
 
 /** Turns original paragraph `p` into a text.edit op changed by `change` (moved, resized), selected. */
-export async function materializeParagraph(pageKey: string, p: Paragraph, change: (box: TextBox) => TextBox): Promise<void> {
+export function materializeParagraph(pageKey: string, p: Paragraph, change: (box: TextBox) => TextBox): Promise<void> {
+  return putParagraphEdit(pageKey, p, (box) => relayout(change(box), (f) => fontStore.get(f)));
+}
+
+/** Deletes the text of original paragraph `p` (Delete on the selected paragraph, "Hapus teks"): a text.edit op with a
+ *  blank box (blankBox), landing like any edit (one undo step, the marks on its lines go), selected: "Kembalikan teks
+ *  asli" or Undo bring the text back. */
+export function deleteParagraphText(pageKey: string, p: Paragraph): Promise<void> {
+  return putParagraphEdit(pageKey, p, (box) => blankBox(box, p.rect));
+}
+
+/** Lands the text.edit op of original paragraph `p` whose box `make` builds from the box that redraws it, selected. */
+async function putParagraphEdit(pageKey: string, p: Paragraph, make: (box: TextBox) => TextBox): Promise<void> {
   let box: TextBox;
   try {
     box = await paragraphStartBox(p);
   } catch (err) {
-    console.warn("paragraph move: font load failed", err);
+    console.warn("paragraph edit: font load failed", err);
     return;
   }
   const st = editorStore.getState();
   if (textEditFor(st.doc, pageKey, p.id) || !st.doc.pages.some((pg) => pg.pageKey === pageKey)) return;
   const id = newId();
-  const op = { id, type: "text.edit", pageKey, paragraphId: p.id, box: relayout(change(box), (f) => fontStore.get(f)) } as TextEdit;
-  // Moving the paragraph also removes its original glyphs: their marks go in the same undo step.
+  const op = { id, type: "text.edit", pageKey, paragraphId: p.id, box: make(box) } as TextEdit;
+  // The edit removes the paragraph's original glyphs: their marks go in the same undo step.
   const removed = markupUnderEdits(st.doc, [op]);
   st.putObjects([op], removed);
   noteMarkupRemoved(removed);
   textEditStore.getState().selectParagraph(null);
   if (!textEditStore.getState().editing) st.select(id);
+}
+
+/** Deletes the text of paragraph `p` OCR read on `pageKey`: a text.ocr_edit op that paints its covers and draws
+ *  nothing, selected. */
+export async function deleteOcrText(pageKey: string, p: OcrParagraph): Promise<void> {
+  let box: TextBox;
+  try {
+    box = await paragraphStartBox(p);
+  } catch (err) {
+    console.warn("OCR paragraph delete: font load failed", err);
+    return;
+  }
+  const st = editorStore.getState();
+  if (ocrEditFor(st.doc, pageKey, p.id) || !st.doc.pages.some((pg) => pg.pageKey === pageKey)) return;
+  const op = ocrEditOp(newId(), pageKey, p, blankBox(box, p.cover));
+  st.putObjects([op]);
+  textEditStore.getState().selectParagraph(null);
+  if (!textEditStore.getState().editing) st.select(op.id);
+  // A photo or a gradient behind the text: one flat colour covers it, and may show.
+  if (!p.coverUniform) noticeStore.getState().show({ kind: "info", text: t.ocr.uneven });
+}
+
+/** The paragraph (original, or one OCR read) selected with the select tool, if it can still be edited. */
+export function selectedParagraph(): { pageKey: string; original?: Paragraph; ocr?: OcrParagraph } | null {
+  const sel = textEditStore.getState().paragraph;
+  const st = editorStore.getState();
+  const entry = sel && st.tool === "select" ? st.doc.pages.find((pg) => pg.pageKey === sel.pageKey) : undefined;
+  if (!sel || !entry) return null;
+  const ocr = ocrParagraphsOf(entry.src).find((x) => x.id === sel.id);
+  if (ocr) return ocrEditFor(st.doc, sel.pageKey, ocr.id) ? null : { pageKey: sel.pageKey, ocr };
+  const original = paragraphsOf(entry.src).find((x) => x.id === sel.id);
+  return original?.editable && !textEditFor(st.doc, sel.pageKey, original.id) ? { pageKey: sel.pageKey, original } : null;
+}
+
+/** Deletes the text of the selected paragraph (Delete, Backspace): false when none is selected. */
+export function deleteSelectedParagraph(): boolean {
+  const sel = selectedParagraph();
+  if (!sel || textSessionBusy()) return false;
+  if (sel.ocr) void deleteOcrText(sel.pageKey, sel.ocr);
+  else if (sel.original) void deleteParagraphText(sel.pageKey, sel.original);
+  return true;
+}
+
+/** Opens the selected paragraph for typing ("Edit teks"). */
+export function editSelectedParagraph(): void {
+  const sel = selectedParagraph();
+  if (sel?.ocr) void startOcrEdit(sel.pageKey, sel.ocr);
+  else if (sel?.original) void startParagraphEdit(sel.pageKey, sel.original);
+}
+
+/** True when `op` edits original or OCR text (deleting the op brings that text back). */
+export function isTextEdit(op: ContentOp | undefined): op is TextEdit | TextOcrEdit {
+  return op?.type === "text.edit" || op?.type === "text.ocr_edit";
+}
+
+/** True when `op` is an edit of original or OCR text that deleted it. */
+export function isDeletedText(op: ContentOp | undefined): boolean {
+  return isTextEdit(op) && isBlankBox(op.box);
+}
+
+/** Delete on object `id` (the key, "Hapus" in its menus): an edit of original or OCR text keeps its op and loses its
+ *  text (blankBox), as deleting the paragraph would; once deleted nothing more happens (Undo or "Kembalikan teks asli"
+ *  bring the text back). Any other object goes. */
+export function deleteObjectOrText(id: string): void {
+  const st = editorStore.getState();
+  const op = st.doc.objects[id];
+  if (!isTextEdit(op)) { st.deleteObject(id); return; }
+  if (isBlankBox(op.box)) return;
+  const area = op.type === "text.ocr_edit" ? op.cover : originalParagraph(st.doc, op.pageKey, op.paragraphId)?.rect ?? op.box.rect;
+  updateTextOp(id, { box: blankBox(op.box, area) });
 }
 
 /** Commits the open session with the rich editor's current content. */
@@ -300,6 +382,8 @@ export function commitEditing(paragraphs: Run[][]): Promise<void> {
 function committedBox(e: Editing, draft: TextBox, runs: Run[][], original: Paragraph | undefined): TextBox {
   const metrics = (f: Parameters<typeof fontStore.get>[0]) => fontStore.get(f);
   if (e.kind === "text.add") return relayout({ ...draft, paragraphs: runs }, metrics);
+  // Every character removed: the text is deleted (not the edit dropped, which would bring it back).
+  if (isBlank(runs)) return blankBox(e.box, original?.rect ?? e.ocr?.cover ?? e.box.rect);
   if (original) return editedBox(e.box, runs, original, metrics);
   return keepFirstBaseline(e.box, relayout({ ...draft, paragraphs: runs }, metrics));
 }

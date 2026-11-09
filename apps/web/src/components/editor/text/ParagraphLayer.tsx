@@ -13,6 +13,7 @@ import { srcKey } from "@/lib/sources";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
 import { imageTextOf, ocrParagraphsOf, paragraphsOf, textStore, useText } from "@/store/text";
+import { contextMenuStore } from "../objects/layering";
 import { runPageOcr } from "./ocrRun";
 import { materializeParagraph, startOcrEdit, startParagraphEdit, textEditStore } from "./textEdit";
 import { CANVAS } from "@/lib/theme";
@@ -102,6 +103,14 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
     editorStore.getState().select(null);
     textEditStore.getState().selectParagraph({ pageKey, id: p.id });
   };
+  // Right-click (select tool): the paragraph selected, its menu (Edit teks, Hapus teks) instead of the browser's.
+  const openMenu = (e: Konva.KonvaEventObject<PointerEvent | MouseEvent>, p: Paragraph) => {
+    if (tool !== "select" || textEditStore.getState().editing) return;
+    e.cancelBubble = true;
+    e.evt.preventDefault();
+    select(p);
+    contextMenuStore.getState().open({ x: e.evt.clientX, y: e.evt.clientY, paragraph: { pageKey, id: p.id } });
+  };
   // Select tool: a press is a press on the empty page (it clears the selection: Delete must not remove an object the
   // user sees as deselected); a double-click explains. Text tool: the press still adds a text box (the way to replace
   // such text is a whiteout and new text over it) and explains once per target of a source page.
@@ -162,6 +171,7 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
           }}
           onDblClick={(e) => { setCursor(e, ""); void startParagraphEdit(pageKey, p); }}
           onDblTap={(e) => { setCursor(e, ""); void startParagraphEdit(pageKey, p); }}
+          onContextMenu={(e) => openMenu(e, p)}
           onDragEnd={(e) => {
             const node = e.target;
             const dx = node.x() - p.rect.x, dy = node.y() - p.rect.y;
@@ -196,6 +206,7 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
             }}
             onDblClick={(e) => { setCursor(e, ""); void startOcrEdit(pageKey, p); }}
             onDblTap={(e) => { setCursor(e, ""); void startOcrEdit(pageKey, p); }}
+            onContextMenu={(e) => openMenu(e, p)}
           />
         );
       })}
