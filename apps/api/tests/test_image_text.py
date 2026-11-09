@@ -5,7 +5,7 @@ import pytest
 
 from edith.bake import bake
 from edith.bake.context import BakeContext
-from edith.errors import InvalidOp
+from edith.errors import TextLocked
 from edith.fonts import FontRegistry
 from edith.imagetext import image_text_regions
 from edith.ops import ExportRequest
@@ -125,7 +125,7 @@ def edit(paragraph_id: str, x: float, y: float) -> dict:
 
 def test_bake_refuses_to_draw_over_the_picture_of_a_hidden_paragraph(ctx):
     ops = ExportRequest.model_validate({"ops": [edit("g1", 76, 62)]}).ops
-    with pytest.raises(InvalidOp, match="invisible text"):
+    with pytest.raises(TextLocked, match="invisible text"):
         bake(make_hidden_text_pdf(), ops, ctx)
 
 
@@ -138,8 +138,8 @@ def test_editing_visible_text_leaves_the_picture_alone(ctx):
     assert page.get_pixmap(clip=pymupdf.Rect(*SCAN_RECT)).samples == before
 
 
-def test_export_of_a_hidden_paragraph_edit_is_an_invalid_op(client):
+def test_export_of_a_hidden_paragraph_edit_is_refused_as_text_locked(client):
     doc_id = upload(client, make_hidden_text_pdf()).json()["doc_id"]
     version = client.get(f"/documents/{doc_id}/text").json()["paragraphsVersion"]
     r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit("g1", 76, 62)], "paragraphs_version": version})
-    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_op"
+    assert r.status_code == 422 and r.json()["error"] | {"message": ""} == {"code": "text_locked", "message": "", "op_index": 0}

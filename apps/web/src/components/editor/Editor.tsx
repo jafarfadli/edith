@@ -11,7 +11,7 @@ import { loadDraft, saveDraft } from "@/lib/draft";
 import { noticeLifetime, noticeStore, type NoticeMsg } from "@/lib/notices";
 import { isTextOp, moveOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
-import { dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
+import { dropLockedTextEdits, dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
@@ -86,7 +86,16 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       // Original paragraphs + fonts, in the background. Text that is a picture (a scanned form, a letterhead image under
       // invisible text) is said once it is known, unless a notice that matters more is showing.
       void textStore.getState().load(docId).then(() => {
-        if (!cancelled && textStore.getState().docId === docId && hasPictureText()) {
+        if (cancelled || textStore.getState().docId !== docId) return;
+        // A draft's edits of text that turned out to be a picture (M5c): the export refuses them. Dropped from the
+        // document and its history alike (no undo step brings them back); the autosave then stores the draft without.
+        const pages = textStore.getState().pages;
+        const drop = (d: EditorDoc) => dropLockedTextEdits(d, pages).doc;
+        const { dropped } = dropLockedTextEdits(editorStore.getState().doc, pages);
+        if (dropped) {
+          editorStore.setState((s) => ({ doc: drop(s.doc), past: s.past.map(drop), future: s.future.map(drop), selection: null }));
+          setNotice({ kind: "error", text: t.editor.lockedEditsDropped });
+        } else if (hasPictureText()) {
           setNotice((n) => (n?.kind === "error" ? n : { kind: "info", text: t.editor.pictureText }));
         }
       });
