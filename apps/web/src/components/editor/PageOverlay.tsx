@@ -20,6 +20,7 @@ import { ObjectShape } from "./ObjectShape";
 import { usePolyTool } from "./shapes/usePolyTool";
 import { textEditStore, updateTextOp } from "./text/textEdit";
 import { CANVAS } from "@/lib/theme";
+import { stacked } from "@/lib/zorder";
 
 type TextOp = TextAdd | TextEdit;
 
@@ -111,7 +112,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   // The draw in progress. Move/up are tracked on window so a drag released outside the stage still commits.
   const drawing = useRef<{ start: Pt; draft: ContentOp | null; stop: () => void } | null>(null);
 
-  const mine = order.map((id) => objects[id]).filter((op): op is ContentOp => !!op && op.pageKey === pageKey);
+  // Stacked as the export draws them (lib/zorder.ts): redactions, drawn objects in z-order, notes, links.
+  const mine = stacked(order.map((id) => objects[id]).filter((op): op is ContentOp => !!op && op.pageKey === pageKey));
   // Text markup is drawn in its own (multiplying) layer, over the objects: in the PDF it is an annotation.
   const objs = mine.filter((op) => !isMarkup(op));
   const markups = mine.filter(isMarkup);

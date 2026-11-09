@@ -185,8 +185,10 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
             boxes = [to_rect(op.rect) for op in page_ops if op.type == "redact.add"]
             if boxes:
                 widgets_removed |= scrub_page(page, boxes) > 0
-            # Drawn content in stacking order, then native annotations over it, then links (none under
-            # a redaction box: it would show — or carry — what the box hides).
+            # Drawn content in stacking order (the ops' order is the web's z-order, lowest first: a later op is
+            # drawn over an earlier one), then native annotations over it in that order, then links (none under
+            # a redaction box: it would show — or carry — what the box hides). Order only counts within a stage:
+            # the web reorders an object among the objects of its page and stage (apps/web/src/lib/zorder.ts).
             for phase in ("draw", "annot", "link"):
                 for op in page_ops:
                     if PHASE[op.type] == phase and not (phase != "draw" and under_redaction(op, boxes)):
