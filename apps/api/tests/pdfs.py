@@ -600,6 +600,50 @@ def make_keep_lines_pdf() -> bytes:
     return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
 
 
+# M5d: three multi-line paragraphs (Helvetica 11, leading 14) whose widest line has no room for one more letter in its
+# box: justified (word spacing Tw spreads every line but the last to the column 72…523), centred on the page, and
+# right-aligned at the margin 523. A one-letter edit of that line must not re-wrap it.
+WRAP_JUSTIFIED = ("Kerja praktek bertujuan memberikan wawasan kepada mahasiswa tentang dunia kantor unit",
+                  "industri yang sesungguhnya sehingga mahasiswa mampu menerapkan ilmu yang telah",
+                  "dipelajari selama perkuliahan.")
+WRAP_CENTRED = ("Fakultas dan Program Studi Teknik Informatika Angkatan 2026",
+                "Sekolah Teknik Elektro dan Informatika Institut Teknologi Bandung",
+                "Jalan Ganesa Nomor 10 Bandung")
+WRAP_RIGHT = ("Bandung, 9 November 2026",
+              "Kepala Program Studi Sarjana Teknik Informatika",
+              "Dr. Budi Santoso, M.T.")
+WRAP_Y = (120, 300, 480)  # first baselines
+WRAP_COLUMN = (72, 523)
+
+
+def make_wrap_pdf() -> bytes:
+    """apps/web/e2e/fixtures/wrap.pdf (M5d): WRAP_JUSTIFIED / WRAP_CENTRED / WRAP_RIGHT from the WRAP_Y baselines, below a
+    heading at the left margin (72)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 70), "Contoh paragraf rata kiri kanan, tengah dan kanan", fontname="helv", fontsize=11)
+    page.clean_contents()
+    xref = page.get_contents()[0]
+    stream = doc.xref_stream(xref).decode("latin-1")
+    font = stream[stream.index("/"):stream.index(" Tf")].split()[0]  # the resource name insert_text gave Helvetica
+    width = lambda t: pymupdf.get_text_length(t, fontname="helv", fontsize=11)  # noqa: E731
+    left, right = WRAP_COLUMN
+    blocks = []
+    for lines, y0, align in ((WRAP_JUSTIFIED, WRAP_Y[0], "justify"), (WRAP_CENTRED, WRAP_Y[1], "center"),
+                             (WRAP_RIGHT, WRAP_Y[2], "right")):
+        for k, text in enumerate(lines):
+            w, tw = width(text), 0.0
+            if align == "justify":
+                x = left
+                if k < len(lines) - 1:
+                    tw = (right - left - w) / text.count(" ")
+            else:
+                x = (595 - w) / 2 if align == "center" else right - w
+            blocks.append(f"BT {font} 11 Tf {tw:.4f} Tw 1 0 0 1 {x:.3f} {842 - y0 - 14 * k:.3f} Tm ({text}) Tj ET")
+    doc.update_stream(xref, (stream + "\n" + "\n".join(blocks)).encode("latin-1"))
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
 # M5b F2: one paragraph per kind of original spacing, in an embedded Tinos (reusable: clients lay out with its program).
 SPACING_LINES = (
     ("Condensed text with horizontal scaling Tz", 12, "90 Tz"),  # hScale 0.9 (MuPDF reports size 12·√0.9)

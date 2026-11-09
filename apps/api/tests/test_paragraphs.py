@@ -320,6 +320,17 @@ def test_single_lines_get_room_up_to_the_next_rule_or_text():
     assert centred["maxWidth"] == pytest.approx(2 * (297.5 - 72 - 2), abs=0.05)
 
 
+def test_the_wrap_fixture_has_a_justified_a_centred_and_a_right_aligned_paragraph_with_word_positions():
+    """apps/web/e2e/wrap.spec.ts relies on it (M5d)."""
+    from tests.pdfs import WRAP_CENTRED, WRAP_JUSTIFIED, WRAP_RIGHT, make_wrap_pdf
+    ps = paragraphs(make_wrap_pdf())[1:]
+    assert [(p["align"], len(p["lines"])) for p in ps] == [("justify", 3), ("center", 3), ("right", 3)]
+    for p, lines in zip(ps, (WRAP_JUSTIFIED, WRAP_CENTRED, WRAP_RIGHT)):
+        assert [text(p)[ln["start"]:ln["end"]] for ln in p["lines"]] == list(lines)
+        assert all(len(ln["wordX"]) == len(t.split()) for ln, t in zip(p["lines"], lines))
+    assert "maxWidth" not in ps[0] and ps[1]["maxWidth"] > ps[1]["rect"]["w"] + 6 and ps[2]["maxWidth"] > ps[2]["rect"]["w"] + 6
+
+
 def test_right_aligned_text_gets_room_up_to_the_text_on_its_left():
     """M5d: a right-aligned paragraph may grow leftwards to the first text beside it (less ROOM_PAD)."""
     doc = pymupdf.open()
