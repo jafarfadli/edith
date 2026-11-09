@@ -11,7 +11,7 @@ from edith.imagetext import image_text_regions
 from edith.ops import ExportRequest
 from edith.paragraphs import extract_paragraphs
 from edith.settings import Settings
-from tests.pdfs import (RASTER_RECT, SCAN_RECT, make_hidden_text_pdf, make_paragraphs_pdf, make_picture_text_pdf,
+from tests.pdfs import (RASTER_RECT, SCAN_RECT, make_clip_text_pdf, make_hidden_text_pdf, make_paragraphs_pdf, make_picture_text_pdf,
                         make_raster_text_pdf,
                         make_type3_pdf)
 from tests.test_documents import upload
@@ -40,6 +40,25 @@ def test_invisible_text_over_its_picture_is_locked(hide):
         ("KEMENTERIAN CONTOH REPUBLIK SEKRETARIAT JENDERAL", False, "hidden"),
         ("BIRO UMUM DAN ORGANISASI", False, "hidden"),
     ]
+
+
+def test_text_used_as_a_clip_is_not_hidden():
+    """Gradient text (render mode 7, a shading painted through it): MuPDF reports the clip with alpha 0, yet it shows."""
+    ps = extract_paragraphs(page_of(make_clip_text_pdf(7)))
+    assert [(text(p), p["editable"], p.get("lock")) for p in ps] == [
+        ("Teks biasa di bawahnya.", True, None), ("Gradient heading", True, None)]
+
+
+@pytest.mark.parametrize("mode", [4, 5, 6])
+def test_painted_and_clipping_text_gives_no_locked_copy(mode):
+    """Modes 4–6 paint the text and clip with it: MuPDF reports it twice, the clip copy with alpha 0."""
+    ps = extract_paragraphs(page_of(make_clip_text_pdf(mode)))
+    assert all(p["editable"] and "lock" not in p for p in ps)
+
+
+def test_invisible_text_inside_a_clip_stays_hidden():
+    ps = extract_paragraphs(page_of(make_clip_text_pdf(3, clip_first=True)))
+    assert [(text(p), p.get("lock")) for p in ps] == [("Teks biasa di bawahnya.", None), ("Gradient heading", "hidden")]
 
 
 def test_type3_text_mupdf_reports_unpainted_is_not_hidden():

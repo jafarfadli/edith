@@ -752,6 +752,28 @@ def make_hidden_text_pdf(hide: str = "mode3") -> bytes:
     return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
 
 
+def make_clip_text_pdf(mode: int = 7, clip_first: bool = False) -> bytes:
+    """"Gradient heading" in Helvetica 24 at (72, 142) shown with render mode `mode`, then a horizontal red-to-blue
+    shading painted through it: mode 7 is text used only as a clip (a gradient fill), modes 4–6 fill and/or stroke it
+    too. MuPDF reports the clip as a span with alpha 0. `clip_first`: the text sits inside a plain `re W n` clip
+    instead (mode 3 or opacity 0 text stays invisible there)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 300), "Teks biasa di bawahnya.", fontname="helv", fontsize=12)
+    sh = doc.get_new_xref()
+    doc.update_object(sh, "<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [72 0 400 0] /Function << /FunctionType 2"
+                          " /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> /Extend [true true] >>")
+    res, prefix = _resources(doc, page)
+    doc.xref_set_key(res, f"{prefix}Shading/Sh1", f"{sh} 0 R")
+    font = next(name for _x, _e, _t, base, name, *_ in page.get_fonts(full=True) if base == "Helvetica")
+    clip = b"0 0 595 842 re W n " if clip_first else b""
+    paint = b"" if clip_first else b" /Sh1 sh"
+    xref = page.get_contents()[-1]
+    doc.update_stream(xref, doc.xref_stream(xref) + b"\nq " + clip + f"BT /{font} 24 Tf {mode} Tr 72 700 Td".encode()
+                      + b" (Gradient heading) Tj ET" + paint + b" Q\n")
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
 def make_type3_pdf() -> bytes:
     """A heading in a Type 3 font at (72, 100), each glyph a box painted with B (fill and stroke): MuPDF reports its
     spans with alpha 0 and neither fill nor stroke, yet it shows (a reference visa form's "VISA APPLICATION FORM")."""

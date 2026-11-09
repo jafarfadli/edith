@@ -654,20 +654,24 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
 
 
 # How MuPDF reports a span's paint: `alpha` is its fill opacity (0 also for render mode 3, invisible), `char_flags`
-# says whether its glyphs are filled and/or stroked (neither: render mode 3 or 7).
-CHAR_FILLED, CHAR_STROKED = 16, 32
+# says whether its glyphs are filled and/or stroked (neither: render mode 3) and whether they are a clip (render modes
+# 4–7: MuPDF reports the clip as its own span with alpha 0 and CHAR_FILLED | CHAR_CLIPPED).
+CHAR_FILLED, CHAR_STROKED, CHAR_CLIPPED = 16, 32, 64
 
 
 def invisible_check(page: pymupdf.Page) -> SpanCheck:
     """span → True when it paints nothing: render mode 3 (an OCR layer) or a fill opacity of 0 without a stroke.
-    Whatever the reader sees there is something else, usually an image of the same text. Never a Type 3 font: its
-    glyphs are procedures MuPDF may report so (alpha 0, neither filled nor stroked: glyphs painted with B) while they
-    show ("VISA APPLICATION FORM" of a reference visa form)."""
+    Whatever the reader sees there is something else, usually an image of the same text. Never text used as a clip
+    (render modes 4–7: a gradient or pattern painted through it shows; text inside some other clip is not flagged so).
+    Never a Type 3 font: its glyphs are procedures MuPDF may report so (alpha 0, neither filled nor stroked: glyphs
+    painted with B) while they show ("VISA APPLICATION FORM" of a reference visa form)."""
     type3 = {name_key(name) for f in page.get_fonts(full=True) if f[2] == "Type3" for name in (f[3], f[4]) if name}
 
     def invisible(span: dict) -> bool:
         flags = span.get("char_flags", CHAR_FILLED)
-        return (not flags & CHAR_STROKED and (span.get("alpha", 255) == 0 or not flags & CHAR_FILLED)
+        if flags & (CHAR_STROKED | CHAR_CLIPPED):
+            return False
+        return ((span.get("alpha", 255) == 0 or not flags & CHAR_FILLED)
                 and name_key(span["font"]) not in type3
                 and not span["font"].startswith("Type3"))  # MuPDF's name of a Type 3 font with no name of its own
     return invisible
