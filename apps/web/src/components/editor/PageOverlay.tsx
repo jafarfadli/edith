@@ -171,7 +171,13 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       const r = node.getClientRect({ relativeTo: stage });
       const box = stage.container().getBoundingClientRect();
       const p = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-      openMenu(id, stackAt(p), { x: box.left + p.x, y: box.top + p.y });
+      // An object scrolled out of view: the menu opens at the nearest point of the visible canvas (and the menu
+      // keeps itself inside the window).
+      const view = document.getElementById("page-scroller")?.getBoundingClientRect();
+      const x = box.left + p.x, y = box.top + p.y;
+      openMenu(id, stackAt(p), view
+        ? { x: Math.min(Math.max(x, view.left), view.right), y: Math.min(Math.max(y, view.top), view.bottom) }
+        : { x, y });
     };
     menuOpeners.set(pageKey, open);
     return () => { if (menuOpeners.get(pageKey) === open) menuOpeners.delete(pageKey); };

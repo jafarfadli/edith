@@ -220,10 +220,27 @@ test("the object menu works from the keyboard and stays inside the window", asyn
   await expect(menu(page)).toHaveCount(0);
   expect(colours(await download(page, "keys.pdf"), box, [OVERLAP])).toEqual([RED]);
 
+  // The selected object scrolled out of view: Shift+F10 still opens the menu inside the window.
+  const scroller = page.locator("#page-scroller");
+  await scroller.evaluate(async (el) => {
+    el.scrollBy(0, 700);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); // the scroll event has fired
+  });
+  expect((await page.getByTestId("page").first().boundingBox())!.y + 450).toBeLessThan(0); // A and B are above the window
+  await page.keyboard.press("Shift+F10");
+  await expect(menu(page)).toBeVisible();
+  const off = (await menu(page).boundingBox())!;
+  const win = page.viewportSize()!;
+  expect(off.x).toBeGreaterThanOrEqual(7);
+  expect(off.y).toBeGreaterThanOrEqual(7);
+  expect(off.x + off.width).toBeLessThanOrEqual(win.width - 7);
+  expect(off.y + off.height).toBeLessThanOrEqual(win.height - 7);
+  await page.keyboard.press("Escape");
+  await expect(menu(page)).toHaveCount(0);
+
   // Near the bottom-right corner of the window the menu opens up and to the left of the pointer.
   const view = { width: 760, height: 620 };
   await page.setViewportSize(view);
-  const scroller = page.locator("#page-scroller");
   await scroller.evaluate((el) => el.scrollTo(0, 0));
   const p = (await page.getByTestId("page").first().boundingBox())!;
   const edge = { x: Math.min(p.x + p.width, view.width) - 30, y: 620 - 24 };

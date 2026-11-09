@@ -24,6 +24,11 @@ import { contextMenuStore, Z_COMMANDS, type ObjectMenu } from "./layering";
 const EDGE = 8;
 const close = () => contextMenuStore.getState().close();
 
+/** `at` moved so that `[at, at + size]` lies within `[EDGE, span − EDGE]` (at EDGE when it cannot fit). */
+function clampTo(at: number, size: number, span: number): number {
+  return Math.max(EDGE, Math.min(at, span - EDGE - size));
+}
+
 /** The colour an object shows most (fill, else stroke or ink), for the chip next to it in "Pilih elemen di bawah". */
 function colourOf(op: ContentOp): string | null {
   switch (op.type) {
@@ -62,9 +67,10 @@ function Menu({ menu }: { menu: ObjectMenu }) {
     const el = ref.current;
     if (!el) return;
     const w = el.offsetWidth, h = el.offsetHeight;
-    const left = menu.x + w > window.innerWidth - EDGE ? Math.max(EDGE, menu.x - w) : menu.x;
-    const top = menu.y + h > window.innerHeight - EDGE ? Math.max(EDGE, Math.min(menu.y - h, window.innerHeight - EDGE - h)) : menu.y;
-    setPos({ left, top });
+    const flipX = menu.x + w > window.innerWidth - EDGE ? menu.x - w : menu.x;
+    const flipY = menu.y + h > window.innerHeight - EDGE ? Math.min(menu.y - h, window.innerHeight - EDGE - h) : menu.y;
+    // Then inside the window whatever the anchor (the keyboard opens it over an object that may be scrolled away).
+    setPos({ left: clampTo(flipX, w, window.innerWidth), top: clampTo(flipY, h, window.innerHeight) });
   }, [menu.x, menu.y]);
 
   useEffect(() => {
