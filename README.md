@@ -10,10 +10,11 @@ Batasnya mengikuti tahap bake API, dan layar menumpuk objek dengan aturan yang s
 
 - Redaksi selalu paling bawah: diterapkan sebelum objek apa pun digambar.
 - Objek gambar (whiteout, bentuk, gambar bebas, teks, gambar, tanda tangan, stamp, centang/silang) bisa disusun bebas di antara sesamanya. Whiteout menutupi isi asli PDF dan objek di bawahnya saja.
-- Stabilo, garis bawah, coret dan catatan adalah anotasi PDF asli: selalu di atas semua objek gambar (urutan hanya berlaku di antara sesama anotasi). Link paling atas.
+- Stabilo, garis bawah, coret dan catatan adalah anotasi PDF asli: di layar maupun di hasil ekspor selalu di atas semua objek gambar. Link selalu paling akhir (di PDF link tidak terlihat; di layar hanya bingkai bantu).
+- Satu perbedaan layar vs ekspor yang tersisa, di antara sesama anotasi: di ekspor anotasi (stabilo, garis bawah, coret, catatan) bertumpuk menurut urutan lapisannya lalu link; di layar stabilo/garis bawah/coret digambar di lapisan tersendiri yang di-*multiply* dengan halaman, jadi selalu tampak di atas catatan dan bingkai link. Alat Catatan dan Link sudah disembunyikan sejak M5, jadi ini hanya mengenai draf lama.
 - Teks asli yang diedit: baris yang diubah ikut urutan lapisan objek editnya, baris yang dipertahankan (glif asli) tetap bagian dari halaman, jadi selalu di bawah semua objek.
 
-Urutan hanya bertukar dengan objek di halaman dan tahap yang sama; tombol yang tidak berpengaruh dinonaktifkan, dan menu menjelaskan batas ini bila relevan.
+Urutan hanya bertukar dengan objek di halaman dan tahap yang sama; tombol yang tidak berpengaruh dinonaktifkan, dan menu menjelaskan batas ini bila relevan. "Bertumpuk" diukur dengan kotak pembatas objek (bounding box, termasuk rotasi), bukan bentuk persisnya: garis diagonal atau coretan bebas yang kotaknya beririsan dengan objek lain tanpa benar-benar menyentuhnya dihitung bertumpuk, jadi kadang perlu satu tekan tambahan sebelum perubahannya terlihat.
 
 ## Struktur
 
