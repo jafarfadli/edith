@@ -25,4 +25,11 @@ console.log("fonts synced to", dest, `(CJK pack: ${Object.keys(cjk).length ? Obj
 
 const pdfjsDir = path.dirname(require.resolve("pdfjs-dist/package.json"));
 await cp(path.join(pdfjsDir, "build", "pdf.worker.min.mjs"), path.resolve(here, "../public/pdf.worker.min.mjs"));
-console.log("pdf.js worker synced");
+// The decoders and data pdf.js loads on demand (lib/pdf.ts PDFJS_ASSETS): without the wasm folder it draws no
+// JBIG2 or CCITT fax image at all (scanned letterheads, signatures), and JPEG 2000 / ICC colour fall back.
+const assets = path.resolve(here, "../public/pdfjs");
+await rm(assets, { recursive: true, force: true });
+for (const dir of ["wasm", "cmaps", "standard_fonts", "iccs"]) {
+  await cp(path.join(pdfjsDir, dir), path.join(assets, dir), { recursive: true });
+}
+console.log("pdf.js worker and assets synced");
