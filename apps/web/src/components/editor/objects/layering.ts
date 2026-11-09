@@ -1,15 +1,15 @@
 import { ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, type LucideIcon } from "lucide-react";
 import { createStore } from "zustand/vanilla";
 import { t } from "@/lib/strings";
-import { Z_KEYS, zMoves, type ZMove } from "@/lib/zorder";
+import { zMoves, type ZMove } from "@/lib/zorder";
 import { editorStore } from "@/store/editor";
 
-/** The four stacking commands as the menus list them (front first). */
-export const Z_COMMANDS: { move: ZMove; label: string; icon: LucideIcon; keys: string }[] = [
-  { move: "front", label: t.layers.front, icon: ArrowUpToLine, keys: Z_KEYS.front },
-  { move: "forward", label: t.layers.forward, icon: ArrowUp, keys: Z_KEYS.forward },
-  { move: "backward", label: t.layers.backward, icon: ArrowDown, keys: Z_KEYS.backward },
-  { move: "back", label: t.layers.back, icon: ArrowDownToLine, keys: Z_KEYS.back },
+/** The four stacking commands as the menus list them (front first); their keys: zKeys(mac)[move]. */
+export const Z_COMMANDS: { move: ZMove; label: string; icon: LucideIcon }[] = [
+  { move: "front", label: t.layers.front, icon: ArrowUpToLine },
+  { move: "forward", label: t.layers.forward, icon: ArrowUp },
+  { move: "backward", label: t.layers.backward, icon: ArrowDown },
+  { move: "back", label: t.layers.back, icon: ArrowDownToLine },
 ];
 
 /** The selected objects (one today: the store keeps a single selection; the moves take a group). */

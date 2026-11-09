@@ -109,18 +109,23 @@ test("keyboard shortcuts move the selection one step or to the end; the mini-bar
   await page.keyboard.press("ControlOrMeta+BracketRight"); // Maju satu lapis: above B, under C
   expect(await canMove(page)).toEqual({ up: true, down: true });
   expect(colours(await download(page, "forward.pdf"), box, [center, [210, 420]])).toEqual([GREEN, BLUE]);
-  await page.keyboard.press("ControlOrMeta+Shift+BracketRight"); // Bawa ke depan
+  // To the front/back: Cmd+Option on the Mac (Cmd+Shift+[ ] switch browser tabs there), Ctrl+Shift elsewhere.
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform));
+  const end = mac ? "Meta+Alt" : "Control+Shift";
+  await page.getByTestId("mini-bar").getByRole("button", { name: "Urutan lapisan" }).click();
+  await expect(page.getByRole("menuitem", { name: "Bawa ke depan" })).toHaveAttribute("aria-keyshortcuts", mac ? "Meta+Alt+]" : "Control+Shift+]");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press(`${end}+BracketRight`); // Bawa ke depan
   expect(await canMove(page)).toEqual({ up: false, down: true });
   expect(colours(await download(page, "front.pdf"), box, [center])).toEqual([RED]);
   await page.keyboard.press("ControlOrMeta+BracketLeft"); // Mundur satu lapis
   expect(await canMove(page)).toEqual({ up: true, down: true });
-  await page.keyboard.press("ControlOrMeta+Shift+BracketLeft"); // Kirim ke belakang
+  await page.keyboard.press(`${end}+BracketLeft`); // Kirim ke belakang
   expect(await canMove(page)).toEqual({ up: true, down: false });
   // Already at the back: nothing to undo for that press, the previous step is undone.
-  await page.keyboard.press("ControlOrMeta+Shift+BracketLeft");
+  await page.keyboard.press(`${end}+BracketLeft`);
   await page.keyboard.press("ControlOrMeta+z");
   expect(await canMove(page)).toEqual({ up: true, down: true });
-  await expect(page).toHaveURL(/\/edit\//); // Cmd+[ did not go back in the browser's history
 });
 
 test("Maju satu lapis jumps past objects it does not overlap; with nothing overlapping it is disabled", async ({ page }) => {

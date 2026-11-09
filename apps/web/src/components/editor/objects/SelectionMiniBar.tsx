@@ -8,14 +8,15 @@ import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
 import { ICON } from "../../ui/icon";
 import { POPOVER } from "../../ui/styles";
+import { useIsMac } from "../../ui/useIsMac";
 import { MenuButton } from "../MenuButton";
 import { textEditStore } from "../text/textEdit";
-import { zMoves } from "@/lib/zorder";
+import { zKeys, zMoves } from "@/lib/zorder";
 import { alignSelection, copySelection, duplicateSelection, hasClipboard, pasteClipboard } from "./clipboard";
 import { Z_COMMANDS } from "./layering";
 
 const BAR_H = 34;
-/** Room for the longest command and its three key caps (Ctrl Shift [). */
+/** Room for the longest command and its three key caps (Ctrl Shift [ / ⌘ ⌥ [). */
 const LAYER_MENU_WIDTH = 264;
 /** Room for the Transformer's rotation handle (its offset, half the 8 px anchor, a gap). */
 const ROTATER_CLEARANCE = ROTATE_HANDLE_OFFSET + 4 + 8;
@@ -28,6 +29,7 @@ const ALIGNS: [Align, string][] = [
 export function SelectionMiniBar({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const op = useEditor((s) => (s.selection && s.tool === "select" ? s.doc.objects[s.selection] : undefined));
   const doc = useEditor((s) => s.doc);
+  const mac = useIsMac();
   const editing = useStore(textEditStore, (s) => !!s.editing);
   if (!op || op.pageKey !== pageKey || editing) return null;
 
@@ -55,7 +57,7 @@ export function SelectionMiniBar({ pageKey, geom, scale }: { pageKey: string; ge
       <button aria-label={t.editor.delete} title={t.editor.delete} className="grid h-7 w-7 place-items-center rounded-md text-muted transition-colors hover:bg-danger/15 hover:text-danger-text" onClick={() => s.deleteObject(op.id)}><Trash2 {...ICON} /></button>
       {(moves.front || moves.back) && (
         <MenuButton label={t.layers.menu} className={btn} width={LAYER_MENU_WIDTH}
-          items={Z_COMMANDS.map((c) => ({ label: c.label, icon: c.icon, keys: c.keys, disabled: !moves[c.move], run: () => { s.reorderObjects([op.id], c.move); } }))}>
+          items={Z_COMMANDS.map((c) => ({ label: c.label, icon: c.icon, keys: zKeys(mac)[c.move], disabled: !moves[c.move], run: () => { s.reorderObjects([op.id], c.move); } }))}>
           <Layers {...ICON} />
         </MenuButton>
       )}

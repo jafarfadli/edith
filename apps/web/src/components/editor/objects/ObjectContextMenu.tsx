@@ -9,7 +9,7 @@ import { ariaKeys } from "@/lib/keys";
 import { isCopyable } from "@/lib/objects";
 import { objectLabel } from "@/lib/objectLabels";
 import { t } from "@/lib/strings";
-import { zMoves, zStage } from "@/lib/zorder";
+import { zKeys, zMoves, zStage } from "@/lib/zorder";
 import { editorStore, useEditor } from "@/store/editor";
 import { ICON } from "../../ui/icon";
 import { MENU_ITEM, POPOVER } from "../../ui/styles";
@@ -118,7 +118,7 @@ function Menu({ menu }: { menu: ObjectMenu }) {
       // usePopupFocus focuses the first item right after that first render.
       style={{ left: pos?.left ?? menu.x, top: pos?.top ?? menu.y, maxHeight: `calc(100dvh - ${2 * EDGE}px)` }}
       className={`fixed z-50 flex w-max min-w-60 max-w-80 flex-col overflow-y-auto p-1 ${POPOVER}`}>
-      {Z_COMMANDS.map((c) => item(c.move, c.label, c.icon, () => s.reorderObjects([op.id], c.move), { keys: c.keys, disabled: !moves[c.move] }))}
+      {Z_COMMANDS.map((c) => item(c.move, c.label, c.icon, () => s.reorderObjects([op.id], c.move), { keys: zKeys(mac)[c.move], disabled: !moves[c.move] }))}
       <div role="separator" className="mx-1 my-1 h-px bg-line" />
       {copyable && item("duplicate", t.objects.duplicate, Copy, () => { s.select(op.id); duplicateSelection(); }, { keys: "Mod+D" })}
       {copyable && item("copy", t.objects.copy, ClipboardCopy, () => { s.select(op.id); copySelection(); }, { keys: "Mod+C" })}

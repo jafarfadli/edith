@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
 import { compact } from "@/lib/compact";
-import { nextBelow, reorder, stacked, zMoveForKey, zMoves, zStage } from "@/lib/zorder";
+import { formatKeys } from "@/lib/keys";
+import { nextBelow, reorder, stacked, zKeys, zMoveForKey, zMoves, zStage } from "@/lib/zorder";
 
 const R = { x: 0, y: 0, w: 10, h: 10 };
 const rect = (id: string, pageKey = "o0", r = R, extra: Record<string, unknown> = {}): ContentOp =>
@@ -152,19 +153,36 @@ describe("nextBelow", () => {
   });
 });
 
-describe("zMoveForKey", () => {
-  const k = (key: string, mod: Partial<{ metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }> = {}) =>
-    zMoveForKey({ key, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...mod });
-  it("maps Ctrl/Cmd (+Shift) + brackets", () => {
+describe("zMoveForKey / zKeys", () => {
+  type Mods = Partial<{ code: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }>;
+  const k = (key: string, mod: Mods = {}, mac = false) =>
+    zMoveForKey({ key, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...mod }, mac);
+  it("off the Mac: Ctrl + brackets, with Shift to the end", () => {
     expect(k("]", { ctrlKey: true })).toBe("forward");
-    expect(k("[", { metaKey: true })).toBe("backward");
+    expect(k("[", { ctrlKey: true })).toBe("backward");
     expect(k("}", { ctrlKey: true, shiftKey: true })).toBe("front");
-    expect(k("{", { metaKey: true, shiftKey: true })).toBe("back");
+    expect(k("{", { ctrlKey: true, shiftKey: true })).toBe("back");
     expect(k("]", { ctrlKey: true, shiftKey: true })).toBe("front");
+    expect(k("]", { ctrlKey: true, altKey: true, code: "BracketRight" })).toBeNull();
   });
-  it("ignores other keys and missing or extra modifiers", () => {
+  it("on the Mac: Cmd + brackets, Cmd+Option (by key position) to the end, Cmd+Shift left to the browser", () => {
+    expect(k("]", { metaKey: true }, true)).toBe("forward");
+    expect(k("[", { metaKey: true }, true)).toBe("backward");
+    expect(k("‘", { metaKey: true, altKey: true, code: "BracketRight" }, true)).toBe("front");
+    expect(k("“", { metaKey: true, altKey: true, code: "BracketLeft" }, true)).toBe("back");
+    expect(k("}", { metaKey: true, shiftKey: true, code: "BracketRight" }, true)).toBeNull();
+    expect(k("‘", { ctrlKey: true, altKey: true, code: "BracketRight" }, true)).toBeNull();
+    expect(k("+", { metaKey: true, altKey: true, code: "Equal" }, true)).toBeNull();
+  });
+  it("ignores other keys and missing modifiers", () => {
     expect(k("]")).toBeNull();
-    expect(k("]", { ctrlKey: true, altKey: true })).toBeNull();
     expect(k("+", { ctrlKey: true })).toBeNull();
+    expect(k("+", { ctrlKey: true, code: "BracketRight" })).toBeNull(); // German layout: Ctrl + "+" is zoom
+  });
+  it("names the keys per platform", () => {
+    expect(zKeys(true)).toEqual({ front: "Mod+Alt+]", forward: "Mod+]", backward: "Mod+[", back: "Mod+Alt+[" });
+    expect(zKeys(false).front).toBe("Mod+Shift+]");
+    expect(formatKeys(zKeys(true).front, true)).toEqual(["⌘", "⌥", "]"]);
+    expect(formatKeys(zKeys(false).back, false)).toEqual(["Ctrl", "Shift", "["]);
   });
 });

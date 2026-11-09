@@ -114,14 +114,27 @@ export function nextBelow(stack: readonly string[], current: string | null): str
   return stack[((i < 0 ? 0 : i) + 1) % stack.length];
 }
 
-/** Keyboard shortcuts of the moves (formatKeys / Kbd notation). */
-export const Z_KEYS: Record<ZMove, string> = { front: "Mod+Shift+]", forward: "Mod+]", backward: "Mod+[", back: "Mod+Shift+[" };
+/** Keyboard shortcuts of the moves (formatKeys / Kbd notation). On the Mac, Cmd+Shift+[ / ] switch browser tabs in
+ *  Chrome, Safari and Firefox before a page sees them, so to the front/back is Cmd+Option+] / [ there. */
+export function zKeys(mac: boolean): Record<ZMove, string> {
+  return mac
+    ? { front: "Mod+Alt+]", forward: "Mod+]", backward: "Mod+[", back: "Mod+Alt+[" }
+    : { front: "Mod+Shift+]", forward: "Mod+]", backward: "Mod+[", back: "Mod+Shift+[" };
+}
 
-/** The move of a key press (Ctrl/Cmd + [ or ], with Shift to the end; Shift+] types "}" on a US layout), or null.
- *  By the character, not `e.code`: on a German layout the BracketRight key is "+", and Ctrl/Cmd + "+" must stay the
- *  browser's zoom. */
-export function zMoveForKey(e: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }): ZMove | null {
+/** The move of a key press, or null: Ctrl/Cmd + [ or ] one step; to the end with Shift (not on the Mac) or, on the
+ *  Mac, Cmd+Option. The single steps and Shift go by the character typed (Shift+] types "}" on a US layout): on a
+ *  German layout the BracketRight key types "+", and Ctrl/Cmd + "+" must stay the browser's zoom. Option changes the
+ *  character on the Mac (Option+] types "‘"), so Cmd+Option goes by the key's position (`e.code`). */
+export function zMoveForKey(e: { key: string; code?: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }, mac: boolean): ZMove | null {
+  if (mac && e.altKey) {
+    if (!e.metaKey || e.shiftKey) return null;
+    if (e.code === "BracketRight") return "front";
+    if (e.code === "BracketLeft") return "back";
+    return null;
+  }
   if (!(e.metaKey || e.ctrlKey) || e.altKey) return null;
+  if (mac && e.shiftKey) return null; // the browser's tab switch
   const right = e.key === "]" || e.key === "}";
   const left = e.key === "[" || e.key === "{";
   if (right) return e.shiftKey ? "front" : "forward";
