@@ -1,18 +1,27 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ariaKeys } from "@/lib/keys";
+import { ICON } from "../ui/icon";
 import { MENU_ITEM, POPOVER } from "../ui/styles";
+import { Kbd } from "../ui/Tooltip";
+import { useIsMac } from "../ui/useIsMac";
 import { returnFocus, usePopupFocus } from "../ui/usePopupFocus";
 
-export interface MenuItem { label: string; run: () => void; disabled?: boolean; danger?: boolean }
+/** `icon`, `keys`: a line icon before the label and the shortcut's key caps after it. */
+export interface MenuItem { label: string; run: () => void; disabled?: boolean; danger?: boolean; icon?: LucideIcon; keys?: string }
 
 const MENU_WIDTH = 192;
 const ITEM_HEIGHT = 32; // h-8
 
 /** A button that opens a menu. The menu renders in a portal with fixed positioning so a narrow, scrolling
  *  parent (the sidebar) cannot clip it; it closes on an outside press, Escape, scroll or resize. */
-export function MenuButton({ label, items, children, className }: { label: string; items: MenuItem[]; children: React.ReactNode; className?: string }) {
+export function MenuButton({ label, items, children, className, width = MENU_WIDTH }: {
+  label: string; items: MenuItem[]; children: React.ReactNode; className?: string; width?: number;
+}) {
+  const mac = useIsMac();
   const [at, setAt] = useState<{ top: number; left: number } | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -45,7 +54,7 @@ export function MenuButton({ label, items, children, className }: { label: strin
     // Open upwards when the menu would run past the bottom of the window (an anchor near the bottom edge).
     const height = items.length * ITEM_HEIGHT + 8;
     const below = r.bottom + 4 + height <= window.innerHeight - 8;
-    setAt({ top: below ? r.bottom + 4 : Math.max(8, r.top - 4 - height), left: Math.max(8, Math.min(r.left, window.innerWidth - MENU_WIDTH - 8)) });
+    setAt({ top: below ? r.bottom + 4 : Math.max(8, r.top - 4 - height), left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) });
   }
 
   return (
@@ -64,17 +73,20 @@ export function MenuButton({ label, items, children, className }: { label: strin
         <div
           ref={menu}
           role="menu"
-          style={{ top: at.top, left: at.left, width: MENU_WIDTH }}
+          aria-label={label}
+          style={{ top: at.top, left: at.left, width }}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={onMenuKey}
           className={`fixed z-50 p-1 ${POPOVER}`}
         >
           {items.map((it) => (
-            <button key={it.label} role="menuitem" disabled={it.disabled}
+            <button key={it.label} role="menuitem" disabled={it.disabled} aria-keyshortcuts={it.keys && ariaKeys(it.keys, mac)}
               onClick={() => { returnFocus(menu, button); setAt(null); it.run(); }}
               className={`${MENU_ITEM} ${it.danger ? "text-danger-text" : "text-ink"}`}>
-              {it.label}
+              {it.icon && <it.icon {...ICON} className="text-muted" />}
+              <span className="flex-1">{it.label}</span>
+              {it.keys && <Kbd keys={it.keys} />}
             </button>
           ))}
         </div>,

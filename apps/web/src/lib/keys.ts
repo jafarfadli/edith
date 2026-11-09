@@ -1,6 +1,6 @@
 /** Keyboard shortcuts as shown in tooltips and menus: `Mod` is ⌘ on the Mac and Ctrl elsewhere. */
-const MAC: Record<string, string> = { Mod: "⌘", Shift: "⇧", Alt: "⌥", Ctrl: "⌃" };
-const OTHER: Record<string, string> = { Mod: "Ctrl" };
+const MAC: Record<string, string> = { Mod: "⌘", Shift: "⇧", Alt: "⌥", Ctrl: "⌃", Delete: "⌫" };
+const OTHER: Record<string, string> = { Mod: "Ctrl", Delete: "Del" };
 
 /** The keys of a shortcut such as "Mod+Shift+Z", one entry per key cap. */
 export function formatKeys(spec: string, mac: boolean): string[] {

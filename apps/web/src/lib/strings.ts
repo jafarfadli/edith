@@ -174,6 +174,21 @@ export const t = {
     alignMiddle: "Ratakan ke tengah (vertikal)",
     alignBottom: "Ratakan ke bawah halaman",
   },
+  /** Stacking order of overlapping objects (z-order): context menu, mini-bar menu, Alt+click. */
+  layers: {
+    menu: "Urutan lapisan",
+    contextMenu: "Menu objek",
+    front: "Bawa ke depan",
+    forward: "Maju satu lapis",
+    backward: "Mundur satu lapis",
+    back: "Kirim ke belakang",
+    pickBelow: "Pilih elemen di bawah",
+    /** Key caps of the Alt+click hint ("Alt" becomes ⌥ on the Mac). */
+    altClick: "Alt+Klik",
+    markupAbove: "Stabilo, garis bawah, coret, dan catatan selalu tampil di atas objek lain.",
+    redactBelow: "Redaksi selalu berada di bawah objek lain.",
+    linkAbove: "Link selalu berada di atas objek lain.",
+  },
   crop: {
     title: "Crop",
     thisPage: "Terapkan ke halaman ini",
