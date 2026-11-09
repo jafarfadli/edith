@@ -77,7 +77,7 @@ def test_text_in_a_symbol_font_that_cant_be_reused_is_not_editable(client):
     page.insert_text((72, 100), "abc", fontname="zadb", fontsize=12)  # ZapfDingbats, not embedded
     page.insert_text((72, 140), "Teks biasa", fontname="helv", fontsize=12)
     body = text_of(client, doc.tobytes())
-    assert [p["editable"] for p in body["pages"][0]["paragraphs"]] == [False, True]
+    assert [(p["editable"], p.get("lock")) for p in body["pages"][0]["paragraphs"]] == [(False, "font"), (True, None)]
 
 
 @pytest.mark.parametrize("damage", BROKEN_TABLES)

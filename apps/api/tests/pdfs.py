@@ -655,3 +655,99 @@ def make_spacing_pdf() -> bytes:
     doc.update_stream(xref, (head + tf + rest[:start] + tj + rest[end:]).encode("latin-1"))
     doc.subset_fonts()
     return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+# M5c: text that is a picture. The letterhead of a reference "Nota Dinas" is an image of its lines with the same text
+# laid over it invisibly (iLovePDF / OCR); the body of a reference form is an image of print with no text at all.
+SCAN_LINES = ("KEMENTERIAN CONTOH REPUBLIK", "SEKRETARIAT JENDERAL", "BIRO UMUM DAN ORGANISASI")
+SCAN_RECT = (72, 60, 432, 132)        # make_hidden_text_pdf: where the picture of SCAN_LINES sits (pt)
+RASTER_LINES = tuple(f"{i}. Nama pemohon dan keperluan surat pengantar baris {i}" for i in range(1, 9))
+RASTER_RECT = (72, 300, 512, 480)     # make_raster_text_pdf: the picture of RASTER_LINES
+PRINTED_RECT = (72, 560, 512, 680)    # make_raster_text_pdf: a picture of print with real text written over it
+
+
+def _text_image(lines: tuple[str, ...], width: float, height: float, size: float = 14, scale: float = 3,
+                color: tuple = (0.35, 0.35, 0.35)) -> pymupdf.Pixmap:
+    """`lines` printed in Helvetica Bold on white, as a `scale`× bitmap of a width × height pt box (a scan of them)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=width, height=height)
+    for i, line in enumerate(lines):
+        page.insert_text((4, size * 1.25 * (i + 1)), line, fontname="hebo", fontsize=size, color=color)
+    return page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
+
+
+def _resources(doc: pymupdf.Document, page: pymupdf.Page) -> tuple[int, str]:
+    """(xref, key prefix) under which `page`'s resource dictionary entries are set with xref_set_key."""
+    kind, value = doc.xref_get_key(page.xref, "Resources")
+    return (int(value.split()[0]), "") if kind == "xref" else (page.xref, "Resources/")
+
+
+def make_hidden_text_pdf(hide: str = "mode3") -> bytes:
+    """SCAN_LINES as a grey picture in SCAN_RECT and, laid over it, the same lines as invisible black text (`hide`:
+    "mode3", render mode 3; "opacity", a fill opacity of 0) in Times, narrower than the picture's print; below, a
+    visible paragraph at (72, 200)."""
+    x0, y0, x1, y1 = SCAN_RECT
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_image(pymupdf.Rect(*SCAN_RECT), pixmap=_text_image(SCAN_LINES, x1 - x0, y1 - y0))
+    page.insert_text((72, 200), "Paragraf biasa yang terlihat.", fontname="helv", fontsize=12)
+    writer = pymupdf.TextWriter(page.rect)
+    for i, line in enumerate(SCAN_LINES):
+        writer.append((x0 + 4, y0 + 17.5 * (i + 1)), line, font=pymupdf.Font("tiro"), fontsize=13)
+    if hide == "mode3":
+        writer.write_text(page, render_mode=3)
+    else:
+        writer.write_text(page, opacity=0)
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+def make_type3_pdf() -> bytes:
+    """A heading in a Type 3 font at (72, 100), each glyph a box painted with B (fill and stroke): MuPDF reports its
+    spans with alpha 0 and neither fill nor stroke, yet it shows (a reference visa form's "VISA APPLICATION FORM")."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 300), "Teks biasa di bawahnya.", fontname="helv", fontsize=12)
+    proc = doc.get_new_xref()
+    doc.update_object(proc, "<< >>")
+    doc.update_stream(proc, b"600 0 0 0 500 700 d1 0 0 500 700 re B")
+    font = doc.get_new_xref()
+    doc.update_object(font, f"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 600 700] /FontMatrix [0.001 0 0 0.001 0 0]"
+                            f" /CharProcs << /box {proc} 0 R >> /Encoding << /Type /Encoding /Differences [65 /box] >>"
+                            f" /FirstChar 65 /LastChar 65 /Widths [600] /Resources << >> >>")
+    res, prefix = _resources(doc, page)
+    doc.xref_set_key(res, f"{prefix}Font/T3", f"{font} 0 R")
+    xref = page.get_contents()[-1]
+    doc.update_stream(xref, doc.xref_stream(xref) + b"\nq 0 g BT /T3 16 Tf 72 742 Td (AAAA) Tj ET Q\n")
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+def make_raster_text_pdf(rotation: int = 0) -> bytes:
+    """A page whose body is a picture of print (RASTER_LINES in RASTER_RECT, no text layer), next to real text (a
+    title at (72, 100)), a photo-like picture (smooth shading) and a logo (one solid shape) that hold no text, and a
+    picture of print with real text written over it in PRINTED_RECT (a form typed on a scanned background)."""
+    import math
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 100), "Formulir permohonan", fontname="helv", fontsize=14)
+    x0, y0, x1, y1 = RASTER_RECT
+    page.insert_image(pymupdf.Rect(*RASTER_RECT),
+                      pixmap=_text_image(RASTER_LINES, x1 - x0, y1 - y0, size=11, color=(0, 0, 0)))
+    photo = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 120, 90), False)
+    for y in range(90):
+        for x in range(120):
+            v = int(128 + 100 * math.sin(x / 9) * math.cos(y / 7))
+            photo.set_pixel(x, y, (v, (v + 60) % 256, 255 - v))
+    page.insert_image(pymupdf.Rect(400, 120, 520, 210), pixmap=photo)
+    logo = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 80, 80), False)
+    logo.clear_with(255)
+    for y in range(80):
+        for x in range(80):
+            if (x - 40) ** 2 + (y - 40) ** 2 < 900:
+                logo.set_pixel(x, y, (20, 60, 160))
+    page.insert_image(pymupdf.Rect(80, 120, 160, 200), pixmap=logo)
+    px0, py0, px1, py1 = PRINTED_RECT
+    page.insert_image(pymupdf.Rect(*PRINTED_RECT), pixmap=_text_image(RASTER_LINES[:5], px1 - px0, py1 - py0, size=11))
+    page.insert_text((80, 600), "Isian yang diketik di atas latar pindaian", fontname="helv", fontsize=11)
+    if rotation:
+        page.set_rotation(rotation)
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)

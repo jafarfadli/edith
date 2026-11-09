@@ -7,6 +7,7 @@ from edith.doc_fonts import (collect_fonts, fill_substitutes, font_candidates, i
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
 from edith.fonts import FontRegistry
 from edith.forms import extract_fields
+from edith.imagetext import MAX_PIXELS, image_text_regions
 from edith.paragraphs import extract_paragraphs
 
 
@@ -103,12 +104,15 @@ class TextFonts:
 def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
     """Paragraphs of every page plus the fonts they use. A run whose font is reusable gets
     `{"kind": "original", "ref"}`; any other run gets its bundled substitute. A paragraph with text in a
-    symbol font that can't be reused is not editable: no other font draws its characters."""
+    symbol font that can't be reused is not editable: no other font draws its characters (`lock` says why a paragraph
+    is not editable). `imageText`: the rects of images that look like print with no text over them (see imagetext)."""
     text_fonts = TextFonts(doc, registry)
     pages = []
+    budget = [MAX_PIXELS]
     for page in doc:
         resolve, locked = text_fonts.page(page)
         pages.append({"index": page.number,
-                      "paragraphs": extract_paragraphs(page, resolve, locked, text_fonts.program)})
+                      "paragraphs": extract_paragraphs(page, resolve, locked, text_fonts.program),
+                      "imageText": image_text_regions(page, budget)})
     fill_substitutes(text_fonts.fonts, registry)
     return {"pages": pages, "fonts": [f.to_json() for f in text_fonts.fonts.values()]}

@@ -8,6 +8,7 @@ from typing import Callable
 
 import pymupdf
 
+from edith.doc_fonts import name_key
 from edith.rules import Rules, page_rules
 
 # Version of the segmentation: paragraph ids (g0, g1, …) of a page change when it does. Shared contract with
@@ -576,6 +577,7 @@ def _finish(run: dict, fits: list[_Fit | None]) -> None:
 
 
 def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locked: SpanCheck | None = None,
+               invisible: SpanCheck | None = None,
                program: Program | None = None) -> dict:
     """`program` (a run's FontRef → the font program clients measure it with): when given, runs carry the
     original's measured hScale / charSpacing / wordSpacing (see _fit), and their size is the true size."""
@@ -637,6 +639,7 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
     baselines = [line.baseline for line in lines]
     deltas = [b - a for a, b in zip(baselines, baselines[1:])]
     line_height = _num(median(deltas)) if deltas else _num(1.2 * max(line.size for line in lines))
+    lock = _lock(lines, locked, invisible)
     return {
         "id": pid,
         "rect": _rect(min(_xs(ln)[0] for ln in lines), min(ln.y0 for ln in lines),
@@ -645,9 +648,44 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
         "runs": runs,
         "align": _align(lines),
         "lineHeight": line_height,
-        "editable": all(line.horizontal for line in lines)
-                    and not (locked and any(locked(s) for line in lines for s in line.spans)),
+        "editable": lock is None,
+        **({"lock": lock} if lock else {}),
     }
+
+
+# How MuPDF reports a span's paint: `alpha` is its fill opacity (0 also for render mode 3, invisible), `char_flags`
+# says whether its glyphs are filled and/or stroked (neither: render mode 3 or 7).
+CHAR_FILLED, CHAR_STROKED = 16, 32
+
+
+def invisible_check(page: pymupdf.Page) -> SpanCheck:
+    """span → True when it paints nothing: render mode 3 (an OCR layer) or a fill opacity of 0 without a stroke.
+    Whatever the reader sees there is something else, usually an image of the same text. Never a Type 3 font: its
+    glyphs are procedures MuPDF may report so (alpha 0, neither filled nor stroked: glyphs painted with B) while they
+    show ("VISA APPLICATION FORM" of a reference visa form)."""
+    type3 = {name_key(name) for f in page.get_fonts(full=True) if f[2] == "Type3" for name in (f[3], f[4]) if name}
+
+    def invisible(span: dict) -> bool:
+        flags = span.get("char_flags", CHAR_FILLED)
+        return (not flags & CHAR_STROKED and (span.get("alpha", 255) == 0 or not flags & CHAR_FILLED)
+                and name_key(span["font"]) not in type3
+                and not span["font"].startswith("Type3"))  # MuPDF's name of a Type 3 font with no name of its own
+    return invisible
+
+
+def _lock(lines: list[_Line], locked: SpanCheck | None, invisible: SpanCheck | None) -> str | None:
+    """Why the paragraph can't be edited (None: it can). "hidden": some of its text is invisible (see invisible_check):
+    what shows is an image the bake can't rewrite, so an edit would draw the new text over the old picture of it (M5c).
+    "font": a symbol font no other font can stand in for. "rotated": text that isn't horizontal."""
+    spans = [s for line in lines for s in line.spans]
+    # An invisible space next to visible text is harmless.
+    if invisible and any(invisible(s) for s in spans if s["text"].strip()):
+        return "hidden"
+    if locked and any(locked(s) for s in spans):
+        return "font"
+    if not all(line.horizontal for line in lines):
+        return "rotated"
+    return None
 
 
 def _xs(line: _Line) -> tuple[float, float]:
@@ -677,7 +715,8 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
                        locked: SpanCheck | None = None, program: Program | None = None) -> list[dict]:
     """Paragraphs of `page` in content order, ids `g0`, `g1`, … (stable for a given file and extraction
     version). Coordinates are unrotated-CropBox points. `resolve` maps a span to its run FontRef (None →
-    runs get font None); a paragraph with a span `locked` accepts is not editable. Text is never merged
+    runs get font None); a paragraph with a span `locked` accepts, invisible text or rotated text is not editable
+    (`lock`: "font", "hidden", "rotated"; see _lock). Text is never merged
     across a drawn rule (table borders, separators). Rects and line rects are the ink (no leading or trailing
     spaces). A single-line paragraph gets its alignment from where it sits (see _single) and `maxWidth`: how
     wide it may grow when edited, from its left edge (left), around its centre (center) or from its right
@@ -711,9 +750,10 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
         return min(_room_end(line, every, rules, right_margin), column)
 
     paragraphs: list[dict] = []
+    invisible = invisible_check(page)
     for lines in blocks:
         for group in _split(lines, rules, room_end):
-            paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked, program)
+            paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked, invisible, program)
             if len(group) == 1 and group[0].horizontal:
                 paragraph["align"], paragraph["maxWidth"] = _single(group[0], every, rules, left_margin, right_margin,
                                                                     page.cropbox.width)

@@ -154,8 +154,14 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                 raise InvalidOp(f"unknown pageKey {op.pageKey}", op_index=i)
             if op.type not in HANDLERS:
                 raise BakeFailed(f"no handler for {op.type}", op_id=op.id)
-            if op.type == "text.edit" and pages_src.paragraph(op.pageKey, op.paragraphId) is None:
-                raise InvalidOp(f"no paragraph {op.paragraphId} on {op.pageKey}", op_index=i)
+            if op.type == "text.edit":
+                paragraph = pages_src.paragraph(op.pageKey, op.paragraphId)
+                if paragraph is None:
+                    raise InvalidOp(f"no paragraph {op.paragraphId} on {op.pageKey}", op_index=i)
+                if paragraph.get("lock") == "hidden":
+                    # Invisible text over an image of it: removing it changes nothing, so the new text would be drawn
+                    # over the old picture (M5c). The client never offers it; a draft from before does.
+                    raise InvalidOp(f"paragraph {op.paragraphId} on {op.pageKey} is invisible text", op_index=i)
             if op.type == "link.add" and isinstance(op.target, PageTarget) and op.target.pageKey not in keys:
                 raise InvalidOp(f"link to unknown pageKey {op.target.pageKey}", op_index=i)
 
