@@ -172,3 +172,22 @@ def test_per_line_covers_leave_the_corner_beside_a_short_last_line(ctx):
     bad["covers"] = [R(first), {"x": 0, "y": 0, "w": float("nan"), "h": 1}]
     with pytest.raises(ValidationError):
         ops(bad)
+
+
+def test_invisible_text_under_a_cover_goes_and_other_text_stays(ctx):
+    """A scan with an invisible OCR layer (render mode 3): the old words under the covers leave the export's text (no
+    old value found next to the new one), the layer's words elsewhere and visible text stay."""
+    doc = pymupdf.open(stream=make_scan_form_pdf(paper=PAPER), filetype="pdf")
+    page = doc[0]
+    for word, box in scan_form_words():
+        page.insert_text((box.x0, box.y1 - 2.5), word, fontname="helv", fontsize=10, render_mode=3)
+    page.insert_text((72, 800), "Catatan kaki terlihat", fontname="helv", fontsize=9)
+    scan_with_layer = doc.tobytes()
+    lines = [pymupdf.Rect(70.5, SCAN_BODY_TOP - 10 + 15 * k, 460, SCAN_BODY_TOP + 4 + 15 * k) for k in range(3)]
+    op = ocr_edit(body_cover())
+    op["covers"] = [R(r) for r in lines]
+    text = bake(scan_with_layer, ops(op), ctx)[0].get_text()
+    assert "mengajukan" not in text and "Penduduk." not in text and "mestinya." not in text
+    assert text.count(NEW) == 1
+    assert "FORMULIR" in text and "Budi" in text and "Please" in text  # the layer outside the covers
+    assert "Catatan kaki terlihat" in text

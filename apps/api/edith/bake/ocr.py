@@ -5,7 +5,8 @@ page's original content before any drawn object; the new text is drawn in the op
 Covering rather than erasing pixels: the image stays byte for byte as it was (an image shared by several pages or
 placed twice is not changed elsewhere, its compression is kept, nothing outside the cover can change), and the PDF
 stays as valid as a whiteout leaves it. The old pixels remain inside the image under the cover, as under a whiteout:
-an edit, not a redaction (Redaksi removes them)."""
+an edit, not a redaction (Redaksi removes them). Text of the page under the covers (an invisible OCR layer over the
+scan) is removed, so the old words do not stay findable next to the new ones."""
 import pymupdf
 
 from edith.bake.registry import register
@@ -17,6 +18,22 @@ from edith.ops import TextOcrEdit
 def cover_rects(op: TextOcrEdit) -> list[pymupdf.Rect]:
     """What `op` paints: one rect per line (`covers`), else its one `cover`."""
     return [to_rect(r) for r in (op.covers or [op.cover])]
+
+
+BAND = 0.2  # of a cover's height, above and below its middle: the band the old text under it is removed in
+
+
+@register("text.ocr_edit", phase="redact_text")
+def remove_old_text(page: pymupdf.Page, op: TextOcrEdit, ctx) -> None:
+    """Text of the page under the covers goes, in the text-only redaction pass (images and drawings stay): a scan with
+    an invisible OCR layer would otherwise still give the old words when the export is copied or searched, next to the
+    new ones. Only a band through each cover's middle (BAND), 1 pt in from its ends, so the characters of the lines
+    above and below and of words just beside it, whose boxes may reach into the cover's padding, are kept."""
+    for c in cover_rects(op):
+        mid, half, inset = (c.y0 + c.y1) / 2, BAND * c.height, min(1.0, c.width / 4)
+        band = pymupdf.Rect(c.x0 + inset, mid - half, c.x1 - inset, mid + half) & page.rect
+        if not band.is_empty:
+            page.add_redact_annot(band, fill=False)
 
 
 @register("text.ocr_edit", phase="cover")
