@@ -166,6 +166,30 @@ def compare_one(orig_page, out_page, para, op, null_page=None) -> dict:
         if first_o != first_n:
             starts_diff += 1
         per_line.setdefault(la[i], []).append((dx, dy, i))
+    # EDIT_MODE=typo (F2): the "x" appended to the first word moves the rest of line 0 by its advance `s`, as the
+    # alignment wants it (left: +s; centre: +s/2; right: 0; justified line: word k by s·(1 − gaps before k / gaps)).
+    # word_disp_c = displacement of each matched word less that expected shift (other lines unchanged).
+    word_disp_c = [list(w) for w in word_disp]
+    typo = next((w for w in p_new if p_orig and w["text"] == p_orig[0]["text"] + "x"), None)
+    if typo is not None and len(typo["chars"]) >= 1:
+        s = typo["x1"] - typo["chars"][-1][1]
+        align = op["box"].get("align", "left")
+        line0 = [i for i in range(len(p_orig)) if la[i] == 0]
+        last_line = la[-1] == 0
+        gaps = max(1, len(line0) - 1)
+        for k, (i, j) in enumerate(pairs):
+            if la[i] != 0 or i == 0:
+                continue
+            if align == "center":
+                expect = s / 2
+            elif align == "right":
+                expect = 0.0
+            elif align == "justify" and not last_line:
+                expect = s * (1 - line0.index(i) / gaps)
+            else:
+                expect = s
+            dx, dy = p_new[j]["x"] - p_orig[i]["x"] - expect, p_new[j]["y"] - p_orig[i]["y"]
+            word_disp_c[k][2] = round(math.hypot(dx, dy), 2)
     # Glyph loss: characters of the paragraph gone or changed.
     ca, cb = "".join(a), "".join(b)
     cm = difflib.SequenceMatcher(a=ca, b=cb, autojunk=False)
@@ -239,7 +263,7 @@ def compare_one(orig_page, out_page, para, op, null_page=None) -> dict:
         "damaged_words": [{"text": w["text"], "x": round(w["x"], 1), "y": round(w["y"], 1)} for w in damaged][:12],
         "n_damaged": len(damaged),
         "px_inside": inside, "px_ink": ink, "px_outside": outside,
-        "lines": lines, "api_lines": api_lines, "word_disp": word_disp,
+        "lines": lines, "api_lines": api_lines, "word_disp": word_disp, "word_disp_c": word_disp_c,
         "orig_line_words": [[p_orig[i]["text"] for i in range(len(p_orig)) if la[i] == k] for k in range(la[-1] + 1)] if la else [],
         "new_line_words": [[p_new[j]["text"] for j in range(len(p_new)) if lb[j] == k] for k in range(lb[-1] + 1)] if lb else [],
         "char_delta": round(sum(width_delta) / nchars, 3) if nchars else 0,

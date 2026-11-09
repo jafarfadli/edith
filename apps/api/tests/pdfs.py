@@ -591,3 +591,38 @@ def make_keep_lines_pdf() -> bytes:
     for xref, *_rest in page.get_fonts(full=True):
         doc.xref_set_key(xref, "BaseFont", "/EDITHC+Dotum")
     return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+# M5b F2: one paragraph per kind of original spacing, in an embedded Tinos (reusable: clients lay out with its program).
+SPACING_LINES = (
+    ("Condensed text with horizontal scaling Tz", 12, "90 Tz"),  # hScale 0.9 (MuPDF reports size 12·√0.9)
+    ("LETTER SPACED HEADING", 14, "1.5 Tc"),                      # charSpacing 1.5 pt
+    ("wide word gaps placed word by word", 11, None),             # each space + SPACING_GAP (TJ), as Hancom places words
+)
+SPACING_GAP = 130  # thousandths of an em after every space of the third line (Hancom: gaps ≈ 1.4 × the space glyph)
+SPACING_Y = (100, 160, 220)
+
+
+def make_spacing_pdf() -> bytes:
+    """apps/web/e2e/fixtures/spacing.pdf and the F2 unit tests: SPACING_LINES at x 72 on baselines SPACING_Y."""
+    tinos = (FONT_FILES / "Tinos-Regular.ttf").read_bytes()
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_font(fontname="TI", fontbuffer=tinos)
+    for (text, size, _op), y in zip(SPACING_LINES, SPACING_Y):
+        page.insert_text((72, y), text, fontname="TI", fontsize=size)
+    page.clean_contents()
+    xref = page.get_contents()[0]
+    stream = doc.xref_stream(xref).decode("latin-1")
+    for _text, size, op in SPACING_LINES:
+        if op:
+            stream = stream.replace(f"/TI {size} Tf", f"/TI {size} Tf {op}", 1)
+    tf = f"/TI {SPACING_LINES[2][1]} Tf"
+    head, rest = stream.split(tf, 1)
+    start, end = rest.index("[<") + 2, rest.index(">]")
+    space = f"{pymupdf.Font(fontbuffer=tinos).has_glyph(32):04X}"
+    glyphs = [rest[i:i + 4] for i in range(start, end, 4)]
+    tj = "".join(g + (f">-{SPACING_GAP}<" if g.upper() == space else "") for g in glyphs)
+    doc.update_stream(xref, (head + tf + rest[:start] + tj + rest[end:]).encode("latin-1"))
+    doc.subset_fonts()
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
