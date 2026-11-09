@@ -569,12 +569,17 @@ KEEP_LINES = ("신청인은 아래 사항을 정확하게 기재하여야 하며
               "기재한 경우에는 사증 발급이 거부될 수 있습니다. Applicants must fill in",
               "every item correctly; a visa may be refused when the form is false.")
 KEEP_TZ = 94.7
+# A tight paragraph: 10 pt at a 10 pt leading from baseline 300, descenders on every line.
+TIGHT_LINES = ("Pygmy jiggery gypsy quippy jagged foggy yoga by the grumpy happy",
+               "guy, gladly sloppy giggly jumpy puppy yapping happily gulping soggy",
+               "porridge quickly; grumpy goggles gaping at a jiggly pig.")
 
 
 def make_keep_lines_pdf() -> bytes:
     """apps/web/e2e/fixtures/keep-lines.pdf: KEEP_LINES as one paragraph in a cmap-less CID subset named "Dotum",
     every line set with horizontal scaling Tz KEEP_TZ (the Hancom export of the owner's visa form condenses its text
-    so): Edith's own layout of a line (font advances) puts its words elsewhere, the original glyphs stay exact."""
+    so): Edith's own layout of a line (font advances) puts its words elsewhere, the original glyphs stay exact.
+    TIGHT_LINES below it: a paragraph whose descenders reach into the next line's ascender band."""
     doc = pymupdf.open()
     page = doc.new_page(width=595, height=842)
     droid = pymupdf.Font("korea")
@@ -583,6 +588,8 @@ def make_keep_lines_pdf() -> bytes:
     for i, text in enumerate(KEEP_LINES):
         page.insert_text((56, 120 + 14 * i), text, fontname="DO", fontsize=10)
     page.insert_text((56, 200), "다음 쪽으로 계속 Continued overleaf", fontname="DO", fontsize=10)
+    for i, text in enumerate(TIGHT_LINES):
+        page.insert_text((56, 300 + 10 * i), text, fontname="DO", fontsize=10)
     page.clean_contents()
     xref = page.get_contents()[0]
     stream = doc.xref_stream(xref).decode("latin-1")

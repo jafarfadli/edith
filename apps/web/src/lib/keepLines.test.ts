@@ -192,6 +192,25 @@ describe("kept lines on screen", () => {
     expect(maskRects(LEFT)).toHaveLength(4); // no box (the editor is open): every line
   });
 
+  it("stops a cover where a kept neighbour's band starts at tight leading (descenders stay visible)", () => {
+    // 10 pt lines at a 10 pt leading: bands (0.95 above, 0.25 below the baseline) overlap by 2 pt.
+    const line = (baseline: number) => ({ rect: { x: 10, y: baseline - 9, w: 100, h: 12 }, baseline, size: 10, start: 0, end: 1 });
+    const p = { ...LEFT, lines: [line(100), line(110), line(120)] };
+    const layout = (sources: (number | null)[]) => ({ ...paragraphBox(LEFT, bundled), layout: sources.map((s) => ({ baseline: 0, segments: [], ...(s === null ? {} : { source: s }) })) });
+    const [middle] = maskRects(p, layout([0, null, 2]));
+    expect(middle.y).toBeCloseTo(102.5); // below the upper line's descenders (0.25 em) …
+    expect(middle.y + middle.h).toBeCloseTo(112.5); // … above the lower line's ascenders (0.75 em)
+    expect(middle.y).toBeLessThanOrEqual(110 - 0.75 * 10); // still over the replaced line's own ascenders
+    // Two replaced lines next to each other keep their full covers between them.
+    const [first, second] = maskRects(p, layout([null, null, 2]));
+    expect(first.y).toBeCloseTo(100 - 9.5);
+    expect(first.y + first.h).toBeCloseTo(102.5);
+    expect(second.y).toBeCloseTo(110 - 9.5);
+    // Wide leading: nothing to share, the usual covers.
+    const loose = { ...LEFT, lines: [line(100), line(120)] };
+    expect(maskRects(loose, layout([0, null]))[0]).toEqual({ x: 9.5, y: 120 - 9.5, w: 101, h: 12 });
+  });
+
   it("treats an op from an older draft (no `source`) as redrawing every line, as before", () => {
     const { box } = edit(LEFT, (t) => swap(t, "selebar", "selebat"));
     const old: TextBox = JSON.parse(JSON.stringify({ ...box, layout: box.layout.map((l) => ({ baseline: l.baseline, segments: l.segments })) }));
