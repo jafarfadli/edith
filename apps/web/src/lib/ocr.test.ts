@@ -3,7 +3,7 @@ import type { TextBox } from "@edith/ops";
 import type { OcrParagraph } from "@/lib/api";
 import { isLowConfidence, LOW_CONFIDENCE, ocrBadge, ocrEditOp, ocrEditsOn, ocrOverflows, ocrQualityMessage, unedited } from "@/lib/ocr";
 import { objectLabel } from "@/lib/objectLabels";
-import { isTextOp, moveOp } from "@/lib/objects";
+import { hasOpacity, isCopyable, isRotatable, isTextOp, moveOp } from "@/lib/objects";
 import { zStage } from "@/lib/zorder";
 import { ocrErrorMessage, t } from "@/lib/strings";
 
@@ -55,6 +55,10 @@ describe("OCR paragraphs", () => {
     expect(moved.cover).toEqual(op.cover); // the old picture stays where it was
     expect(objectLabel(op)).toEqual({ icon: "textEdit", label: t.objectKinds.textOcr, detail: "Nama Lengkap" });
     expect(zStage(op)).toBe("draw");
+    // Like a text.edit: no copy (one edit per OCR paragraph), no opacity or rotation (the op has neither).
+    expect(isCopyable(op)).toBe(false);
+    expect(hasOpacity(op)).toBe(false);
+    expect(isRotatable(op)).toBe(false);
   });
 
   it("says why OCR found nothing, and why it failed", () => {

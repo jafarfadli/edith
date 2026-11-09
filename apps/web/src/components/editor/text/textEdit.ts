@@ -211,6 +211,8 @@ export async function startOcrEdit(pageKey: string, p: OcrParagraph): Promise<vo
   }
   if (textEditStore.getState().editing || pendingCommit || ocrEditFor(editorStore.getState().doc, pageKey, p.id)) return;
   textEditStore.getState().start({ id: newId(), pageKey, box, isNew: true, kind: "text.ocr_edit", paragraphId: p.id, initial: box.paragraphs, ocr });
+  // A photo or a gradient behind the text: one flat colour covers it, and may show.
+  if (!p.coverUniform) noticeStore.getState().show({ kind: "info", text: t.ocr.uneven });
 }
 
 /** Turns original paragraph `p` into a text.edit op changed by `change` (moved, resized), selected. */

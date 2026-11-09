@@ -14,9 +14,11 @@ jobs:
           path: packages/fonts/files/cjk
           key: cjk-fonts-${{ hashFiles('packages/fonts/manifest.json', 'packages/fonts/scripts/fetch-cjk.mjs') }}
       - run: node packages/fonts/scripts/fetch-cjk.mjs
-      - run: cd apps/api && uv sync && uv run pytest -q
+      # OCR (M5d): Tesseract with Indonesian and English; EDITH_REQUIRE_TESSERACT turns the OCR tests' skip into a failure.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng
+      - run: cd apps/api && uv sync && EDITH_REQUIRE_TESSERACT=1 uv run pytest -q
       - run: npm run check -w packages/ops
       - run: npm test -w apps/web
       - run: npx tsc --noEmit -p apps/web
       - run: npm run lint -w apps/web
-      - run: npx playwright install --with-deps chromium && npm run e2e -w apps/web
+      - run: npx playwright install --with-deps chromium && EDITH_REQUIRE_TESSERACT=1 npm run e2e -w apps/web

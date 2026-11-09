@@ -254,7 +254,7 @@ export function mapPoints<T extends ContentOp>(op: T, f: (p: Pt) => Pt): T {
 /** Objects the mini-bar can copy, duplicate and align: everything except edited paragraphs and text markup,
  *  which belong to the text of their page. */
 export function isCopyable(op: ContentOp | undefined): boolean {
-  return !!op && op.type !== "text.edit" && !isMarkup(op);
+  return !!op && op.type !== "text.edit" && op.type !== "text.ocr_edit" && !isMarkup(op);
 }
 
 /** A copy of `op` on `pageKey` with a new id, moved by (dx, dy). */

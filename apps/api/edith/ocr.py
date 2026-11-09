@@ -50,6 +50,7 @@ DENSE = 0.35              # a word's rows with this share of its busiest row's i
 TINY = 0.4                # a word less than this share of the page's usual word height: dots of a leader, specks
 LEADER = 0.7              # a word whose inked columns are this often short (≤ TINY × usual height): a dot leader
 BOX_EDGE, BOX_HOLLOW = 0.7, 0.15  # a checkbox: each side this much ink, its inside at most this much
+MAX_RESCUES, RESCUE_TIME = 40, 3.0  # stretches read again (_rescue) at most, and only with this many seconds left
 
 
 @dataclass
@@ -184,15 +185,19 @@ def _rules(ink: np.ndarray, min_len: int, max_thick: int) -> tuple[list, list]:
     ink in adjacent rows (columns) that overlap, at most `max_thick` rows thick (a dark block is not a line)."""
     out: tuple[list, list] = ([], [])
     for axis, mask in ((0, ink), (1, ink.T)):
-        groups: list[list] = []  # [first row, last row, lo, hi]
+        done: list[list] = []
+        open_: list[list] = []  # [first row, last row, lo, hi] of the groups that reached the row before
         for row, a, b in _segments(mask, min_len):
-            for g in groups:
-                if g[1] >= row - 1 and a < g[3] and b > g[2]:
+            if open_ and open_[0][1] < row - 1:  # segments come row by row: close the groups left behind
+                done += [g for g in open_ if g[1] < row - 1]
+                open_ = [g for g in open_ if g[1] >= row - 1]
+            for g in open_:
+                if a < g[3] and b > g[2]:
                     g[1], g[2], g[3] = row, min(g[2], a), max(g[3], b)
                     break
             else:
-                groups.append([row, row, a, b])
-        for first, last, lo, hi in groups:
+                open_.append([row, row, a, b])
+        for first, last, lo, hi in done + open_:
             thick = last - first + 1
             if thick <= max_thick:
                 out[axis].append(((first + last + 1) / 2, lo, hi, thick))
@@ -488,18 +493,22 @@ def _rescue(leaders: list[tuple[Word, int]], regions: list[_Region], usual: floa
             time_left) -> list[tuple[Word, int]]:
     """The words inside long leaders (_tall_runs), each stretch read again on its own as one line."""
     out = []
-    for w, i in leaders:
+    runs = [(w, i, a, b) for w, i in leaders for a, b in _tall_runs(w, regions[i], usual)]
+    for w, i, a, b in runs[:MAX_RESCUES]:
+        if time_left() < RESCUE_TIME:
+            break  # what was read so far is kept: no stretch is worth timing the page out
         region = regions[i]
         h, wd = region.grey.shape
         pad = int(0.4 * usual)
-        for a, b in _tall_runs(w, region, usual):
-            x0, y0, x1, y1 = max(a - pad, 0), max(int(w.box[1]) - pad, 0), min(b + pad, wd), min(int(w.box[3]) + pad, h)
-            crop = np.ascontiguousarray(region.grey[y0:y1, x0:x1])
-            pix = pymupdf.Pixmap(pymupdf.csGRAY, x1 - x0, y1 - y0, crop.tobytes(), False)
-            pix.set_dpi(region.dpi, region.dpi)
-            for v in run_tesseract(pix.tobytes("png"), region.dpi, time_left(), cmd, psm=7):
-                box = (v.box[0] + x0, v.box[1] + y0, v.box[2] + x0, v.box[3] + y0)
-                out.append((Word(v.text, v.conf, box, w.line), i))
+        x0, y0, x1, y1 = max(a - pad, 0), max(int(w.box[1]) - pad, 0), min(b + pad, wd), min(int(w.box[3]) + pad, h)
+        if x1 - x0 < 2 or y1 - y0 < 2:
+            continue
+        crop = np.ascontiguousarray(region.grey[y0:y1, x0:x1])
+        pix = pymupdf.Pixmap(pymupdf.csGRAY, x1 - x0, y1 - y0, crop.tobytes(), False)
+        pix.set_dpi(region.dpi, region.dpi)
+        for v in run_tesseract(pix.tobytes("png"), region.dpi, time_left(), cmd, psm=7):
+            box = (v.box[0] + x0, v.box[1] + y0, v.box[2] + x0, v.box[3] + y0)
+            out.append((Word(v.text, v.conf, box, w.line), i))
     return out
 
 
