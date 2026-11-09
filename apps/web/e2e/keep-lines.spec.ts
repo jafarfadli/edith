@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import { pdfReport } from "./pdfAnnots";
 import { pdfInfo } from "./pdfText";
-import { pdfSpans, type Span } from "./pdfSpans";
+import { pdfChars, pdfSpans, type Char, type Span } from "./pdfSpans";
 
 // apps/api/scripts/e2e_keep_pdf.py: a three-line Korean + Latin paragraph (baselines 120, 134, 148, x 56) in a
 // cmap-less CID subset named Dotum, condensed with Tz 94.7 as Hancom exports it, so Edith's own layout of a line puts
@@ -88,6 +88,16 @@ test("a one-character edit keeps the paragraph's other lines exactly where they 
   expect(line2.map((s) => s.text).join("").replace(/\s+/g, " ").trim()).toBe(LINE2.replace("Applicants", "Applicant"));
   expect(line2[0].origin[0]).toBeCloseTo(56, 1);
   expect(line2.every((s) => s.font.includes("Dotum"))).toBe(true);
+  // M5b F2: the redrawn line keeps the original's Tz (hScale, true size 10): MuPDF reads the same size as before and
+  // the line ends where the original did, less the deleted "s" (its pen advance in the original), within 1 pt.
+  const was2 = before.filter((s) => onLine(s, BASELINES[1]));
+  for (const s of line2) expect(s.size).toBeCloseTo(was2[0].size, 1);
+  const onLine2 = (cs: Char[]) => cs.filter((c) => Math.abs(c.origin[1] - BASELINES[1]) < 0.5);
+  const wasChars = onLine2(pdfChars(PDF)[0]), nowChars = onLine2(pdfChars(file)[0]).filter((c) => c.c.trim());
+  const at = wasChars.map((c) => c.c).join("").indexOf("Applicants") + 9; // the "s"
+  const deleted = wasChars[at + 1].origin[0] - wasChars[at].origin[0];
+  const wasEnd = wasChars.filter((c) => c.c.trim()).at(-1)!.x1;
+  expect(Math.abs(nowChars.at(-1)!.x1 - (wasEnd - deleted))).toBeLessThan(1);
 
   // Searchable, and the kept text is there once (not redrawn over itself).
   const text = (await pdfInfo(file)).pages[0].text;

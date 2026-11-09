@@ -25,6 +25,9 @@ export type Color = string;
 export type Bgcolor = string | null;
 export type Underline = boolean;
 export type Strike = boolean;
+export type Hscale = number;
+export type Charspacing = number;
+export type Wordspacing = number;
 export type Paragraphs = Run[][];
 export type Baseline = number;
 export type X1 = number;
@@ -260,6 +263,12 @@ export interface Rect {
   h: H;
 }
 /**
+ * `hScale`, `charSpacing`, `wordSpacing`: the original PDF's horizontal scaling (Tz), character spacing (Tc,
+ * TJ condensing) and word spacing (Tw, per-word placement), measured by GET /text for original text. The pen
+ * advance of a character is `hScale · advance · size + charSpacing (+ wordSpacing for " ")`, in pt; the glyph
+ * is drawn `hScale` times as wide. Clients split a run with spacing into one segment per character
+ * (`charSpacing`) or per word and space (`wordSpacing`), so a segment's own glyphs only need `hScale`.
+ *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "Run".
  */
@@ -271,6 +280,9 @@ export interface Run {
   bgColor?: Bgcolor;
   underline?: Underline;
   strike?: Strike;
+  hScale?: Hscale;
+  charSpacing?: Charspacing;
+  wordSpacing?: Wordspacing;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema

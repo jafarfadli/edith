@@ -77,7 +77,8 @@
      ],
      "align": "left",
      "lineHeight": 15.51,
-     "editable": true
+     "editable": true,
+     "maxWidth": 286.0
     },
     {
      "id": "g1",
@@ -302,7 +303,8 @@
      ],
      "align": "left",
      "lineHeight": 12.22,
-     "editable": true
+     "editable": true,
+     "maxWidth": 449.0
     },
     {
      "id": "g4",
@@ -416,7 +418,8 @@
      ],
      "align": "left",
      "lineHeight": 13.0,
-     "editable": true
+     "editable": true,
+     "maxWidth": 163.85
     },
     {
      "id": "g6",

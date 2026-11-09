@@ -7,7 +7,12 @@ import { normalizeRuns } from "@/lib/runs";
 export type FontTable = Record<string, DocFont>;
 
 /** Character style of a run — the attributes of the rich editor's `run` mark. */
-export interface RunAttrs { font: FontRef; size: number; color: string; bgColor: string | null; underline: boolean; strike: boolean }
+export interface RunAttrs {
+  font: FontRef; size: number; color: string; bgColor: string | null; underline: boolean; strike: boolean;
+  /** The original PDF's horizontal scale and spacing (Run.hScale / charSpacing / wordSpacing): carried unchanged, so
+   *  edited original text keeps the original's widths. Absent = 1 / 0 / 0. */
+  hScale?: number; charSpacing?: number; wordSpacing?: number;
+}
 /** A style change from the properties bar; only the given fields change. */
 export interface StylePatch {
   family?: string; bold?: boolean; italic?: boolean; size?: number; color?: string;
@@ -15,7 +20,16 @@ export interface StylePatch {
 }
 
 export function attrsOf(r: Run): RunAttrs {
-  return { font: r.font, size: r.size, color: r.color, bgColor: r.bgColor ?? null, underline: !!r.underline, strike: !!r.strike };
+  return { font: r.font, size: r.size, color: r.color, bgColor: r.bgColor ?? null, underline: !!r.underline, strike: !!r.strike, ...spacingOf(r) };
+}
+
+/** The non-default spacing fields of `a` (Run.hScale / charSpacing / wordSpacing). */
+export function spacingOf(a: Pick<Run, "hScale" | "charSpacing" | "wordSpacing">): Pick<Run, "hScale" | "charSpacing" | "wordSpacing"> {
+  return {
+    ...(a.hScale !== undefined && a.hScale !== null && a.hScale !== 1 ? { hScale: a.hScale } : {}),
+    ...(a.charSpacing ? { charSpacing: a.charSpacing } : {}),
+    ...(a.wordSpacing ? { wordSpacing: a.wordSpacing } : {}),
+  };
 }
 
 /** A run with `a`'s style; default decoration fields are left out (as the API's defaults). */
@@ -25,6 +39,7 @@ export function runOf(text: string, a: RunAttrs): Run {
     ...(a.bgColor ? { bgColor: a.bgColor } : {}),
     ...(a.underline ? { underline: true } : {}),
     ...(a.strike ? { strike: true } : {}),
+    ...spacingOf(a),
   };
 }
 
@@ -61,6 +76,7 @@ export function applyPatch(a: RunAttrs, p: StylePatch, fonts: FontTable): RunAtt
     bgColor: p.bgColor !== undefined ? p.bgColor : a.bgColor,
     underline: p.underline ?? a.underline,
     strike: p.strike ?? a.strike,
+    ...spacingOf(a),
   };
 }
 
@@ -107,6 +123,7 @@ export function docToRuns(doc: RichNode, fallback: RunAttrs): Run[][] {
           bgColor: "bgColor" in a ? a.bgColor ?? null : last.bgColor,
           underline: "underline" in a ? a.underline ?? false : last.underline,
           strike: "strike" in a ? a.strike ?? false : last.strike,
+          ...spacingOf("hScale" in a || "charSpacing" in a || "wordSpacing" in a ? a : last),
         };
       }
       return runOf(n.text!, last);

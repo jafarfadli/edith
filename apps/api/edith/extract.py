@@ -1,6 +1,7 @@
 import pymupdf
 
-from edith.doc_fonts import collect_fonts, fill_substitutes, font_candidates, is_symbolic, name_key, pick_font, span_fonts
+from edith.doc_fonts import (collect_fonts, fill_substitutes, font_candidates, is_symbolic, load_font, name_key,
+                              pick_font, span_fonts)
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
 from edith.fonts import FontRegistry
 from edith.forms import extract_fields
@@ -49,6 +50,19 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
     `{"kind": "original", "ref"}`; any other run gets its bundled substitute. A paragraph with text in a
     symbol font that can't be reused is not editable: no other font draws its characters."""
     fonts = collect_fonts(doc)
+    programs: dict[str, pymupdf.Font | None] = {}
+
+    def program(ref: dict) -> pymupdf.Font | None:
+        """The program a client measures a run in (the served original, or the bundled substitute file)."""
+        key = repr(sorted(ref.items()))
+        if key not in programs:
+            try:
+                programs[key] = (load_font(doc, int(ref["ref"][1:])) if ref.get("kind") == "original"
+                                 else registry.font(ref["family"], ref.get("bold", False), ref.get("italic", False)))
+            except Exception:  # noqa: BLE001 - unknown family or unreadable program: no spacing measured
+                programs[key] = None
+        return programs[key]
+
     pages = []
     for page in doc:
         by_name = span_fonts(page, fonts)
@@ -76,6 +90,6 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
                 return candidates[0].symbolic and not candidates[0].reusable
             return is_symbolic(span["font"]) and not any(f.reusable for f in candidates)
 
-        pages.append({"index": page.number, "paragraphs": extract_paragraphs(page, resolve, locked)})
+        pages.append({"index": page.number, "paragraphs": extract_paragraphs(page, resolve, locked, program)})
     fill_substitutes(fonts, registry)
     return {"pages": pages, "fonts": [f.to_json() for f in fonts.values()]}

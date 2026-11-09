@@ -16,3 +16,19 @@ export function pdfSpans(file: string, raw = false): Span[][] {
   const out = execFileSync("uv", ["run", "python", "-c", SCRIPT, file, raw ? "raw" : "clean"], { cwd: path.join(__dirname, "..", "..", "api"), encoding: "utf8" });
   return JSON.parse(out) as Span[][];
 }
+
+export interface Char { c: string; origin: [number, number]; x1: number }
+
+const CHARS = `
+import json, sys, pymupdf
+doc = pymupdf.open(sys.argv[1])
+print(json.dumps([[{"c": c["c"], "origin": c["origin"], "x1": c["bbox"][2]}
+                   for b in page.get_text("rawdict")["blocks"] for l in b.get("lines", []) for s in l["spans"] for c in s["chars"]]
+                  for page in doc]))
+`;
+
+/** Every character per page with its origin and right edge, as PyMuPDF reads them. */
+export function pdfChars(file: string): Char[][] {
+  const out = execFileSync("uv", ["run", "python", "-c", CHARS, file], { cwd: path.join(__dirname, "..", "..", "api"), encoding: "utf8" });
+  return JSON.parse(out) as Char[][];
+}

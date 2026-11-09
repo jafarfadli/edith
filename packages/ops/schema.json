@@ -874,6 +874,7 @@
     },
     "Run": {
       "additionalProperties": false,
+      "description": "`hScale`, `charSpacing`, `wordSpacing`: the original PDF's horizontal scaling (Tz), character spacing (Tc,\nTJ condensing) and word spacing (Tw, per-word placement), measured by GET /text for original text. The pen\nadvance of a character is `hScale \u00b7 advance \u00b7 size + charSpacing (+ wordSpacing for \" \")`, in pt; the glyph\nis drawn `hScale` times as wide. Clients split a run with spacing into one segment per character\n(`charSpacing`) or per word and space (`wordSpacing`), so a segment's own glyphs only need `hScale`.",
       "properties": {
         "text": {
           "title": "Text",
@@ -923,6 +924,27 @@
           "default": false,
           "title": "Strike",
           "type": "boolean"
+        },
+        "hScale": {
+          "default": 1,
+          "maximum": 4,
+          "minimum": 0.25,
+          "title": "Hscale",
+          "type": "number"
+        },
+        "charSpacing": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Charspacing",
+          "type": "number"
+        },
+        "wordSpacing": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Wordspacing",
+          "type": "number"
         }
       },
       "required": [

@@ -1,4 +1,5 @@
 """Original text of a page as editable paragraphs (spec: Ekstraksi paragraf)."""
+import math
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -43,6 +44,16 @@ WIDE_EM = 0.8
 
 FontResolver = Callable[[dict], dict]  # pymupdf span → FontRef JSON
 SpanCheck = Callable[[dict], bool]     # pymupdf span → True when the paragraph holding it can't be edited
+Program = Callable[[dict], "pymupdf.Font | None"]  # run FontRef JSON → the font program clients measure it with
+
+# Spacing of the original text (Run.hScale / charSpacing / wordSpacing), fitted per span from its pen advances
+# (next glyph origin − this one) against the program advances clients lay out with (see _fit).
+H_TOL = 0.004        # a horizontal scale this close to 1 is 1 (rounding of sizes and box widths)
+H_SUBSTITUTE = (0.8, 1.25)  # a bundled substitute is scaled to the original widths only within these bounds
+SPACING_MIN = 0.02   # pt: smaller character / word spacing is 0
+FIT_GLYPHS = 3       # glyph advances a span needs before its scale and spacing are measured
+OUTLIER_EM = 0.25    # an advance this far (× size) from the median extra is a jump, not spacing
+MERGE_H, MERGE_TC, MERGE_TW = 0.003, 0.03, 0.15  # spans this close in scale / spacing (pt) share a run
 
 
 @dataclass
@@ -445,22 +456,147 @@ def _color(c: int) -> str:
     return f"#{c & 0xFFFFFF:06x}"
 
 
-def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locked: SpanCheck | None = None) -> dict:
+@dataclass
+class _Fit:
+    """Measured spacing of a span: `scale` = pen advance per em of program advance (size · hScale), `tc` = extra pt
+    per glyph, `tw` = extra pt per space (None: not measured), `n` = glyph advances measured."""
+    scale: float
+    tc: float
+    tw: float | None
+    n: int
+
+
+def _quantized(font: "pymupdf.Font", c: str) -> float:
+    """Program advance in ems, in whole thousandths as the bake (bake/text.py quantized_width) and the web use it."""
+    return math.floor(round(font.glyph_advance(ord(c)) * 1000, 3)) / 1000
+
+
+def _scale(a: float, size: float, original: bool) -> tuple[float, float]:
+    """(true size, hScale) of a span whose glyphs advance `a` pt per em. MuPDF reports the size of horizontally
+    scaled text (Tz) as size · √hScale (the square root of its matrix's determinant): for an original font, whose
+    program widths are the PDF's, the scale is therefore (a / reported size)². A bundled substitute keeps the
+    reported size and is scaled to the original widths (within H_SUBSTITUTE)."""
+    if original:
+        h = (a / size) ** 2
+        if abs(h - 1) <= H_TOL:
+            return size, 1.0
+        true = round(size / math.sqrt(h), 2)
+        return true, a / true
+    h = a / size
+    return size, (h if abs(h - 1) > H_TOL and H_SUBSTITUTE[0] <= h <= H_SUBSTITUTE[1] else 1.0)
+
+
+def _fit(span: dict, prog: "pymupdf.Font", original: bool, spaces: bool) -> _Fit | None:
+    """What harness/probe_widths.py measures, per span: the glyph boxes' width against the program advance gives the
+    scale (Tz); the median pen advance beyond it gives the character spacing (Tc, TJ condensing); the median space
+    advance beyond that gives the word spacing (Tw, or Hancom's per-word placement: gaps ≈ 1.4 × the space glyph).
+    `spaces` False: the gaps are not natural (a justified line) and are not measured. None: too few glyphs."""
+    chars, size = span.get("chars") or [], span["size"]
+    ratios = [(c["bbox"][2] - c["bbox"][0]) / q for c in chars if not c["c"].isspace()
+              and (q := _quantized(prog, c["c"])) > 0.05 and c["bbox"][2] > c["bbox"][0]]
+    if len(ratios) < FIT_GLYPHS:
+        return None
+    true, h = _scale(median(ratios), size, original)
+    a = true * h
+    glyph, space = [], []
+    for c, nxt in zip(chars, chars[1:]):
+        pen = nxt["origin"][0] - c["origin"][0]
+        if not 0 < pen < 3 * size:
+            continue  # a tab or a jump: not an advance
+        if c["c"].isspace():
+            space.append(pen - _quantized(prog, " ") * a)
+        elif (q := _quantized(prog, c["c"])) > 0.05:
+            glyph.append(pen - q * a)
+    if len(glyph) < FIT_GLYPHS - 1:
+        return None
+    tc = _mean(glyph, OUTLIER_EM * true)
+    if abs(tc) > 0.25 * true:  # a substitute far off the original widths: no spacing makes it fit
+        tc = 0.0
+    tw = _mean(space, OUTLIER_EM * true) - tc if spaces and space else None
+    return _Fit(a, tc, tw, len(glyph))
+
+
+def _mean(values: list[float], spread: float) -> float:
+    """Mean of the values within `spread` of their median: the line keeps its length (the mean extra), while a
+    tab-like jump or a kerned pair does not pull the spacing."""
+    mid = median(values)
+    kept = [v for v in values if abs(v - mid) <= spread]
+    return sum(kept) / len(kept)
+
+
+def _fits_with(fits: list[_Fit | None], fit: _Fit | None) -> bool:
+    """A span with `fit` may join a run whose spans measured `fits` (unmeasured spans join any run)."""
+    known = [f for f in fits if f is not None]
+    if fit is None or not known:
+        return True
+    a, tc, tw = _merged(known)
+    return (abs(fit.scale / a - 1) <= MERGE_H and abs(fit.tc - tc) <= MERGE_TC
+            and (fit.tw is None or tw is None or abs(fit.tw - tw) <= MERGE_TW))
+
+
+def _merged(fits: list[_Fit]) -> tuple[float, float, float | None]:
+    n = sum(f.n for f in fits)
+    words = [f for f in fits if f.tw is not None]
+    tw = sum(f.tw * f.n for f in words) / max(1, sum(f.n for f in words)) if words else None
+    return sum(f.scale * f.n for f in fits) / n, sum(f.tc * f.n for f in fits) / n, tw
+
+
+def _finish(run: dict, fits: list[_Fit | None]) -> None:
+    """Sets the run's measured size, hScale, charSpacing and wordSpacing (only those that are not the default)."""
+    known = [f for f in fits if f is not None]
+    if not known:
+        return
+    a, tc, tw = _merged(known)
+    size, h = _scale(a, run["size"], (run["font"] or {}).get("kind") == "original")
+    run["size"] = size
+    if h != 1.0:
+        run["hScale"] = round(h, 4)
+    if abs(tc) >= SPACING_MIN:
+        run["charSpacing"] = round(tc, 3)
+    if tw is not None and abs(tw) >= SPACING_MIN:
+        run["wordSpacing"] = round(tw, 3)
+
+
+def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locked: SpanCheck | None = None,
+               program: Program | None = None) -> dict:
+    """`program` (a run's FontRef → the font program clients measure it with): when given, runs carry the
+    original's measured hScale / charSpacing / wordSpacing (see _fit), and their size is the true size."""
     runs: list[dict] = []
+    fits: list[list[_Fit | None]] = []  # per run: the fits of its spans
+    measured: dict[int, _Fit | None] = {}
     out_lines: list[dict] = []
     offset = 0
+    justified = _align(lines) == "justify"
+    natural: set[int] = set()  # spans whose word gaps are natural (not stretched by justification)
+    flat = {id(s) for line in lines if line.horizontal for s in line.spans}  # rotated text: no pen advances in x
+
+    def fit_of(span: dict, font: dict | None) -> _Fit | None:
+        if program is None or font is None or id(span) not in flat:
+            return None
+        if id(span) not in measured:
+            prog = program(font)
+            measured[id(span)] = (None if prog is None else
+                                  _fit(span, prog, font.get("kind") == "original", id(span) in natural))
+        return measured[id(span)]
 
     def add(text: str, span: dict) -> None:
         nonlocal offset
         font = resolve(span) if resolve else None
         size, color = _num(span["size"]), _color(span["color"])
+        fit = fit_of(span, font)
         last = runs[-1] if runs else None
-        if last and last["font"] == font and last["size"] == size and last["color"] == color:
+        if (last and last["font"] == font and last["size"] == size and last["color"] == color
+                and _fits_with(fits[-1], fit)):
             last["text"] += text
+            fits[-1].append(fit)
         else:
             runs.append({"text": text, "font": font, "size": size, "color": color})
+            fits.append([fit])
         offset += len(text)
 
+    for i, line in enumerate(lines):
+        if not justified or i == len(lines) - 1:
+            natural.update(id(s) for s in line.spans)
     for i, line in enumerate(lines):
         if i > 0:
             prev, cur = lines[i - 1].text, line.text
@@ -477,6 +613,8 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
             "rect": _rect(x0, line.y0, x1, line.y1),
             "baseline": _num(line.baseline), "size": _num(line.size), "start": start, "end": offset,
         })
+    for run, run_fits in zip(runs, fits):
+        _finish(run, run_fits)
 
     baselines = [line.baseline for line in lines]
     deltas = [b - a for a, b in zip(baselines, baselines[1:])]
@@ -518,14 +656,14 @@ def _rect(x0: float, y0: float, x1: float, y1: float) -> dict:
 
 
 def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
-                       locked: SpanCheck | None = None) -> list[dict]:
+                       locked: SpanCheck | None = None, program: Program | None = None) -> list[dict]:
     """Paragraphs of `page` in content order, ids `g0`, `g1`, … (stable for a given file and extraction
     version). Coordinates are unrotated-CropBox points. `resolve` maps a span to its run FontRef (None →
     runs get font None); a paragraph with a span `locked` accepts is not editable. Text is never merged
     across a drawn rule (table borders, separators). Rects and line rects are the ink (no leading or trailing
     spaces). A single-line paragraph gets its alignment from where it sits (see _single) and `maxWidth`: how
     wide it may grow when edited, from its left edge (left), around its centre (center) or from its right
-    edge (right)."""
+    edge (right). A left-aligned multi-line paragraph gets `maxWidth` too: the room beside all its lines. With `program` (see _paragraph), runs carry the original's measured scale and spacing."""
     rules = page_rules(page)
     blocks: list[list[_Line]] = []
     for block in page.get_text("rawdict", flags=FLAGS)["blocks"]:
@@ -557,10 +695,16 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
     paragraphs: list[dict] = []
     for lines in blocks:
         for group in _split(lines, rules, room_end):
-            paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked)
+            paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked, program)
             if len(group) == 1 and group[0].horizontal:
                 paragraph["align"], paragraph["maxWidth"] = _single(group[0], every, rules, left_margin, right_margin,
                                                                     page.cropbox.width)
+            elif paragraph["align"] == "left" and all(line.horizontal for line in group):
+                # The room beside every line (M5b F2): the web wraps a little wider than the widest line, so a small
+                # edit does not re-wrap a paragraph that fit its column by a hair.
+                left = min(line.ink_x0 for line in group)
+                end = min(_room_end(line, every, rules, right_margin) for line in group)
+                paragraph["maxWidth"] = _num(max(end - left, max(line.ink_x1 for line in group) - left))
             paragraphs.append(paragraph)
     return paragraphs
 

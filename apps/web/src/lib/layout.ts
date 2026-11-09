@@ -21,7 +21,9 @@ export function layoutText(input: LayoutInput, metricsFor: (f: FontRef) => FontM
   const flat = input.paragraphs.flat();
   const ascentOf = (i: number) => { const r = flat[i]; const m = metricsFor(r.font); return (m.ascent / m.unitsPerEm) * r.size; };
   const descentOf = (i: number) => { const r = flat[i]; const m = metricsFor(r.font); return (m.descent / m.unitsPerEm) * r.size; };
-  const measure = (text: string, i: number) => textWidth(text, metricsFor(flat[i].font), flat[i].size);
+  const measure = (text: string, i: number) => textWidth(text, metricsFor(flat[i].font), flat[i].size, flat[i]);
+  // A line ends at its last glyph's ink: the character spacing after it (Run.charSpacing) is not part of its width.
+  const trail = (t: Token | undefined) => (t && !t.space ? flat[t.runIndex].charSpacing ?? 0 : 0);
 
   const lines: LayoutLine[] = [];
   const ranges: LineRange[] = [];
@@ -87,14 +89,14 @@ export function layoutText(input: LayoutInput, metricsFor: (f: FontRef) => FontM
     const fitted: Token[][] = [];
     for (const unit of split) {
       const uw = unit.reduce((sum, t) => sum + t.width, 0);
-      if (unit[0].space || uw <= input.width + EPS) { fitted.push(unit); continue; }
+      if (unit[0].space || uw - trail(unit[unit.length - 1]) <= input.width + EPS) { fitted.push(unit); continue; }
       let chunk: Token[] = [];
       let chunkWidth = 0;
       for (const t of unit) {
         let at = t.start;
         for (const ch of t.text) {
           const cw = measure(ch, t.runIndex);
-          if (chunk.length && chunkWidth + cw > input.width + EPS) {
+          if (chunk.length && chunkWidth + cw - (flat[t.runIndex].charSpacing ?? 0) > input.width + EPS) {
             fitted.push(chunk);
             chunk = [];
             chunkWidth = 0;
@@ -126,7 +128,8 @@ export function layoutText(input: LayoutInput, metricsFor: (f: FontRef) => FontM
       // A forced break between the line's first word and this one …
       const force = current.length > 0 && fi < forced.length && forced[fi] <= at;
       // … or the line already holds a word and this whole word (plus the spaces before it) overflows.
-      if (force || (current.length > 0 && currentWidth - trailingSpaceWidth(current) > 0 && currentWidth + uw > input.width + EPS)) {
+      if (force || (current.length > 0 && currentWidth - trailingSpaceWidth(current) > 0
+        && currentWidth + uw - trail(unit[unit.length - 1]) > input.width + EPS)) {
         rawLines.push(trimEnd(current));
         current = [];
         currentWidth = 0;
@@ -143,9 +146,9 @@ export function layoutText(input: LayoutInput, metricsFor: (f: FontRef) => FontM
       const ascent = Math.max(...runIdxs.map(ascentOf));
       baseline = lines.length === 0 ? ascent : baseline + input.lineHeight;
       lastDescent = Math.max(...runIdxs.map(descentOf));
-      const lineWidth = lineTokens.reduce((s, t) => s + t.width, 0);
+      const lineWidth = lineTokens.reduce((s, t) => s + t.width, 0) - trail(lineTokens[lineTokens.length - 1]);
       contentWidth = Math.max(contentWidth, lineWidth);
-      lines.push({ baseline, segments: placeSegments(lineTokens, lineWidth, input, isLast) });
+      lines.push({ baseline, segments: placeSegments(lineTokens, lineWidth, input, isLast, flat, measure) });
       ranges.push(lineTokens.length
         ? { start: lineTokens[0].start, end: tokenEnd(lineTokens[lineTokens.length - 1]), last: isLast }
         : { start: paraStart, end: paraStart, last: isLast });
@@ -168,15 +171,32 @@ function trimEnd(tokens: Token[]): Token[] {
   return tokens.slice(0, end);
 }
 
-function placeSegments(tokens: Token[], lineWidth: number, input: LayoutInput, isLastLine: boolean): Segment[] {
+/** Segments of a line. A run's tokens merge into one segment, except with the original's spacing: one segment per
+ *  character for Run.charSpacing and one per word and per space for Run.wordSpacing, so that the bake (which only
+ *  scales a segment's glyphs by hScale) puts every glyph where the layout measured it. */
+function placeSegments(
+  tokens: Token[], lineWidth: number, input: LayoutInput, isLastLine: boolean,
+  runs: Run[], measure: (text: string, i: number) => number,
+): Segment[] {
+  const segs: Segment[] = [];
+  /** Places token `t` at `x`; `join`: it may extend the previous segment of its run. */
+  const place = (t: Token, x: number, join: boolean) => {
+    const r = runs[t.runIndex];
+    if (r.charSpacing) {
+      for (const ch of t.text) { segs.push({ x, text: ch, runIndex: t.runIndex }); x += measure(ch, t.runIndex); }
+      return;
+    }
+    const last = segs[segs.length - 1];
+    if (join && last && last.runIndex === t.runIndex && !r.wordSpacing) last.text += t.text;
+    else segs.push({ x, text: t.text, runIndex: t.runIndex });
+  };
   const spaces = tokens.filter((t) => t.space).length;
   if (input.align === "justify" && !isLastLine && spaces > 0) {
     const extra = (input.width - lineWidth) / spaces;
-    const segs: Segment[] = [];
     let x = 0;
     for (const t of tokens) {
       if (t.space) { x += t.width + extra; continue; }
-      segs.push({ x, text: t.text, runIndex: t.runIndex });
+      place(t, x, false);
       x += t.width;
     }
     return segs;
@@ -184,11 +204,8 @@ function placeSegments(tokens: Token[], lineWidth: number, input: LayoutInput, i
   let x = 0;
   if (input.align === "right") x = input.width - lineWidth;
   else if (input.align === "center") x = (input.width - lineWidth) / 2;
-  const segs: Segment[] = [];
   for (const t of tokens) {
-    const last = segs[segs.length - 1];
-    if (last && last.runIndex === t.runIndex) last.text += t.text;
-    else segs.push({ x, text: t.text, runIndex: t.runIndex });
+    place(t, x, true);
     x += t.width;
   }
   return segs;

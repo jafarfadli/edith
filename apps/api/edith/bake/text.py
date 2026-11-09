@@ -42,6 +42,18 @@ def quantized_width(font: pymupdf.Font, text: str, size: float) -> float:
     return sum(math.floor(round(font.glyph_advance(ord(c)) * 1000, 3)) for c in text) / 1000 * size
 
 
+def run_width(font: pymupdf.Font, text: str, run: Run) -> float:
+    """Pen advance of `text` in `run` (Run.hScale / charSpacing / wordSpacing), as the web measures it
+    (lib/fonts.ts textWidth)."""
+    return (quantized_width(font, text, run.size) * run.hScale + len(text) * run.charSpacing
+            + text.count(" ") * run.wordSpacing)
+
+
+# Horizontally scaled text (Run.hScale) is written by one TextWriter per (colour, scale), morphed by the scale
+# around this fixed point (writer coordinates): a segment's origin is moved so that it lands where intended.
+SCALE_PIVOT = pymupdf.Point(0, 0)
+
+
 def run_font(run: Run, ctx) -> pymupdf.Font:
     if run.font.kind == "original":
         if ctx.source is None:
@@ -57,7 +69,7 @@ def _band(x: float, y: float, w: float, top: float, height: float, size: float) 
 def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozenset[int] = frozenset()) -> None:
     """Draws the box's layout, except the lines whose index is in `skip` (kept original lines of a text.edit)."""
     runs = [r for paragraph in box.paragraphs for r in paragraph]
-    writers: dict[str, pymupdf.TextWriter] = defaultdict(lambda: pymupdf.TextWriter(page.rect))
+    writers: dict[tuple[str, float], pymupdf.TextWriter] = defaultdict(lambda: pymupdf.TextWriter(page.rect))
     backgrounds: list[tuple[pymupdf.Rect, str]] = []
     lines: list[tuple[pymupdf.Rect, str]] = []
     for k, line in enumerate(box.layout):
@@ -75,19 +87,23 @@ def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozen
                     raise ValueError(f"font {r.font.ref} has no glyph for {''.join(missing)!r}")
             x, y = box.rect.x + seg.x, box.rect.y + line.baseline
             if r.bgColor or r.underline or r.strike:
-                w = quantized_width(font, seg.text, r.size)
+                w = run_width(font, seg.text, r)
                 if r.bgColor:
                     backgrounds.append((_band(x, y, w, -BG_ASCENT, BG_ASCENT + BG_DESCENT, r.size), r.bgColor))
                 if r.underline:
                     lines.append((_band(x, y, w, UNDERLINE_TOP, DECOR_THICKNESS, r.size), r.color))
                 if r.strike:
                     lines.append((_band(x, y, w, STRIKE_TOP, DECOR_THICKNESS, r.size), r.color))
-            writers[r.color].append(writer_origin(page, (x, y)), seg.text, font=font, fontsize=r.size)
+            origin = writer_origin(page, (x, y))
+            if r.hScale != 1:  # undone by the writer's morph (see SCALE_PIVOT)
+                origin = pymupdf.Point(SCALE_PIVOT.x + (origin.x - SCALE_PIVOT.x) / r.hScale, origin.y)
+            writers[(r.color, r.hScale)].append(origin, seg.text, font=font, fontsize=r.size)
     for rect, color in backgrounds:
         page.draw_rect(rect, color=None, fill=rgb(color), width=0, overlay=True)
     before = {f[0] for f in page.get_fonts(full=True)}
-    for color, writer in writers.items():
-        writer.write_text(page, color=rgb(color))
+    for (color, scale), writer in writers.items():
+        morph = None if scale == 1 else (SCALE_PIVOT, pymupdf.Matrix(scale, 0, 0, 1, 0, 0))
+        writer.write_text(page, color=rgb(color), morph=morph)
     for xref in {f[0] for f in page.get_fonts(full=True)} - before:
         fix_to_unicode(page.parent, xref)  # spaces read back as U+0020, not U+00A0
     for rect, color in lines:
@@ -166,7 +182,10 @@ def kept_lines(box: TextBox, paragraph: dict, font_keys) -> dict[int, int]:
 
 def _same_char(orig: tuple[str, dict], new: tuple[str, Run], font_keys) -> bool:
     (c, span), (d, run) = orig, new
-    if c != d or abs(run.size - span["size"]) > SIZE_TOL or run.color.lower() != span["color"].lower():
+    # GET /text gives horizontally scaled text its true size; the bake's extraction (no font programs) MuPDF's
+    # size · √hScale (paragraphs._scale).
+    sizes = (run.size, run.size * math.sqrt(run.hScale))
+    if c != d or min(abs(s - span["size"]) for s in sizes) > SIZE_TOL or run.color.lower() != span["color"].lower():
         return False
     if run.bgColor or run.underline or run.strike:
         return False

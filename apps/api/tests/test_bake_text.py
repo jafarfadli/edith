@@ -173,6 +173,41 @@ def test_quantized_width_matches_the_client_rule(fonts):
     assert quantized_width(fonts.font("Arimo", False, False), "A", 20) == pytest.approx(13.32)  # floor(666.99)/1000·20
 
 
+# M5b F2: horizontal scale (Run.hScale) through the writer's morph; spacing comes as per-glyph / per-word segments.
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+def test_horizontally_scaled_segment_lands_on_its_x(ctx, fonts, rotation):
+    """A scaled segment starts at its x and advances by the quantized width × hScale (as lib/fonts.ts measures),
+    on a cropped and rotated page too."""
+    r = {**run("Halo", size=20), "hScale": 0.9}
+    ops = text_op([r], [{"baseline": 15, "segments": [{"x": 5, "text": "Halo", "runIndex": 0}]}])
+    out = bake(make_pdf(pages=1, text=False, crop=CROP, rotation=rotation), ops, ctx)
+    cs = chars(unrotated(out))
+    assert "".join(c[0] for c in cs) == "Halo"
+    assert cs[0][1] == pytest.approx((105, 215), abs=0.01)
+    arimo = fonts.font("Arimo", False, False)
+    assert cs[3][1][0] - cs[0][1][0] == pytest.approx(quantized_width(arimo, "Hal", 20) * 0.9, abs=0.01)
+
+
+def test_scaled_and_unscaled_runs_share_a_line(ctx, fonts):
+    runs = [{**run("ab", size=10), "hScale": 0.8}, run("cd", size=10)]
+    layout = [{"baseline": 10, "segments": [{"x": 0, "text": "ab", "runIndex": 0}, {"x": 40, "text": "cd", "runIndex": 1}]}]
+    cs = chars(bake(make_pdf(pages=1, text=False), text_op(runs, layout), ctx)[0])
+    xs = {c[0]: c[1][0] for c in cs}
+    arimo = fonts.font("Arimo", False, False)
+    assert xs["a"] == pytest.approx(100, abs=0.01) and xs["c"] == pytest.approx(140, abs=0.01)
+    assert xs["b"] - xs["a"] == pytest.approx(quantized_width(arimo, "a", 10) * 0.8, abs=0.01)
+    assert xs["d"] - xs["c"] == pytest.approx(quantized_width(arimo, "c", 10), abs=0.01)
+
+
+def test_decorations_of_spaced_text_cover_its_advance(ctx, fonts):
+    r = {**run("Garis", size=20), "underline": True, "hScale": 0.9, "charSpacing": 1.5}
+    ops = text_op([r], [{"baseline": 15, "segments": [{"x": 5, "text": "Garis", "runIndex": 0}]}])
+    page = pymupdf.open(stream=bake(make_pdf(pages=1, text=False), ops, ctx).tobytes(), filetype="pdf")[0]
+    (under,) = (d["rect"] for d in page.get_drawings())
+    w = quantized_width(fonts.font("Arimo", False, False), "Garis", 20) * 0.9 + 5 * 1.5
+    assert (under.x0, under.x1) == pytest.approx((105, 105 + w), abs=0.01)
+
+
 def _ref(data: bytes, name: str) -> str:
     return next(f.ref for f in collect_fonts(pymupdf.open(stream=data, filetype="pdf")).values() if f.name == name)
 

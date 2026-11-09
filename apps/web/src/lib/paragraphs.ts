@@ -25,7 +25,10 @@ export function measureRange(runs: Run[], start: number, end: number, metricsFor
     if (text) pieces[pieces.length - 1] = { ...last, text };
     else pieces.pop();
   }
-  return pieces.reduce((w, r) => w + textWidth(r.text, metricsFor(r.font), r.size), 0);
+  const w = pieces.reduce((sum, r) => sum + textWidth(r.text, metricsFor(r.font), r.size, r), 0);
+  // The range ends at its last glyph's ink: not the character spacing after it (as layoutText measures lines).
+  const last = pieces[pieces.length - 1];
+  return trimEnd && last && /\S$/.test(last.text) ? w - (last.charSpacing ?? 0) : w;
 }
 
 /** Box width that holds every original line on one line. */
@@ -73,14 +76,58 @@ export function rawToBox(p: Paragraph, breaks: number[]): (offset: number) => nu
   };
 }
 
+/** How far (pt) a single line measured wider than its room may still exceed it (paragraphFrame). */
+const OVERSHOOT = 1;
+/** A wrap width stays this far (pt) under the narrowest soft break's "line + space + next word" (wrapWidth). */
+const BREAK_MARGIN = 0.05;
+/** CJK ideographs, kana and full-width forms: lines wrap after any of them (paragraphs.py _wide). */
+const WIDE = /^[⺀-〿぀-ヿ㐀-䶿一-鿿豈-﫿＀-｠￠-￦]/;
+
+/** The first word of `text`: up to the first space; a CJK ideograph or kana alone. */
+function firstWord(text: string): string {
+  return WIDE.test(text) ? [...text][0] : /^\S*/.exec(text)![0];
+}
+
+/**
+ * Width a multi-line left-aligned paragraph wraps at (M5b F2). Any width from its widest line up to just under the
+ * narrowest "line + space + next line's first word" (its soft breaks) reproduces the original breaks: it takes the
+ * middle of that slack, no wider than the room the API measured beside its lines (`maxWidth`: up to the next rule,
+ * other text or the right margin). Its widest line no longer fills the box, so a one-character edit does not push a
+ * word to the next line (nor, shortening a line, pull one up). Without `maxWidth` (older API): the widest line.
+ */
+export function wrapWidth(p: Paragraph, natural: number, metricsFor: MetricsFor): number {
+  if (!p.maxWidth) return natural;
+  const text = runsText(p.runs);
+  const hard = new Set(hardBreaks(p, natural, metricsFor));
+  let soft = Infinity;
+  p.lines.forEach((line, i) => {
+    const next = p.lines[i + 1];
+    if (!next || hard.has(i)) return;
+    const word = firstWord(text.slice(next.start));
+    soft = Math.min(soft, measureRange(p.runs, line.start, next.start + word.length, metricsFor) - BREAK_MARGIN);
+  });
+  // Halfway into the slack: a line may grow by as much as the tightest soft break may shrink (an edit that shortens
+  // that line would otherwise pull the next line's first word up).
+  const middle = soft === Infinity ? Infinity : natural + (soft - natural) / 2;
+  return Math.max(natural, Math.min(p.maxWidth + WIDTH_SLACK, middle));
+}
+
 /** What paragraphBox lays `p` out in: the box left edge and width, the lines followed by a hard break and the
  *  logical paragraphs. */
 export function paragraphFrame(p: Paragraph, metricsFor: MetricsFor): { x: number; width: number; breaks: number[]; paragraphs: Run[][] } {
   // A single line (a form label, a table cell, a title) may grow into the room the API measured beside it:
   // rightwards when left-aligned, around its centre when centred, leftwards when right-aligned (M5b).
   const single = p.lines.length === 1 && p.align !== "justify";
-  const room = single && p.maxWidth ? p.maxWidth + WIDTH_SLACK : 0;
-  const width = Math.max(paragraphWidth(p, metricsFor), room);
+  const natural = paragraphWidth(p, metricsFor);
+  let width = natural;
+  if (single && p.maxWidth) {
+    // Clamped (M5b F2): a line measured wider than its room (a substitute font) exceeds it by OVERSHOOT at most, then
+    // wraps rather than running off the page or into its neighbour.
+    const room = p.maxWidth + WIDTH_SLACK;
+    width = Math.max(room, Math.min(natural, room + OVERSHOOT));
+  } else if (p.lines.length > 1 && p.align === "left") {
+    width = wrapWidth(p, natural, metricsFor);
+  }
   const x = !single ? p.rect.x
     : p.align === "center" ? p.rect.x + p.rect.w / 2 - width / 2
       : p.align === "right" ? p.rect.x + p.rect.w - width : p.rect.x;
