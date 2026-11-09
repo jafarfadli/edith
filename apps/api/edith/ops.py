@@ -44,6 +44,11 @@ FontRef = Union[BundledFont, OriginalFont]
 
 
 class Run(Model):
+    """`hScale`, `charSpacing`, `wordSpacing`: the original PDF's horizontal scaling (Tz), character spacing (Tc,
+    TJ condensing) and word spacing (Tw, per-word placement), measured by GET /text for original text. The pen
+    advance of a character is `hScale · advance · size + charSpacing (+ wordSpacing for " ")`, in pt; the glyph
+    is drawn `hScale` times as wide. Clients split a run with spacing into one segment per character
+    (`charSpacing`) or per word and space (`wordSpacing`), so a segment's own glyphs only need `hScale`."""
     text: str
     font: FontRef
     size: float = Field(gt=0, le=500)
@@ -51,6 +56,9 @@ class Run(Model):
     bgColor: HexColor | None = None
     underline: bool = False
     strike: bool = False
+    hScale: float = Field(default=1, ge=0.25, le=4)
+    charSpacing: float = Field(default=0, ge=-100, le=100)
+    wordSpacing: float = Field(default=0, ge=-100, le=100)
 
 
 class Segment(Model):
