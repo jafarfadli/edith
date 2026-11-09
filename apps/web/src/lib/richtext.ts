@@ -1,6 +1,6 @@
 import type { FontRef, Run } from "@edith/ops";
 import type { DocFont } from "@/lib/api";
-import { cssFamily, fontId, isOriginal } from "@/lib/fonts";
+import { cssFamily, fontId, fontKey, isOriginal } from "@/lib/fonts";
 import { normalizeRuns } from "@/lib/runs";
 
 /** Embedded fonts by `fontId`. */
@@ -68,15 +68,18 @@ export function patchFont(f: FontRef, patch: StylePatch, fonts: FontTable): Font
   return { kind: "bundled", family: patch.family ?? cur.family, bold, italic };
 }
 
+/** `a` with the patch applied. The original's measured scale and spacing (hScale / charSpacing / wordSpacing) stay
+ *  only while the font and size do: they were measured against that font program at that size. */
 export function applyPatch(a: RunAttrs, p: StylePatch, fonts: FontTable): RunAttrs {
+  const font = patchFont(a.font, p, fonts);
+  const size = p.size ?? a.size;
   return {
-    font: patchFont(a.font, p, fonts),
-    size: p.size ?? a.size,
+    font, size,
     color: p.color ?? a.color,
     bgColor: p.bgColor !== undefined ? p.bgColor : a.bgColor,
     underline: p.underline ?? a.underline,
     strike: p.strike ?? a.strike,
-    ...spacingOf(a),
+    ...(fontKey(font) === fontKey(a.font) && size === a.size ? spacingOf(a) : {}),
   };
 }
 
