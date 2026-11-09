@@ -4,7 +4,10 @@ import { useEffect } from "react";
 import { toolForKey } from "@/lib/toolKeys";
 import { editorStore } from "@/store/editor";
 import { openFind } from "./find/findStore";
+import { isMac } from "@/lib/keys";
+import { zMoveForKey } from "@/lib/zorder";
 import { copySelection, duplicateSelection, pasteClipboard } from "./objects/clipboard";
+import { moveSelection, openMenuForSelection } from "./objects/layering";
 import { afterTextCommitted, textEditStore, textSessionBusy } from "./text/textEdit";
 
 export function isTyping(target: EventTarget | null): boolean {
@@ -44,6 +47,9 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       else if (mod && k === "c" && !e.shiftKey && !e.altKey) { if (copySelection()) e.preventDefault(); } // else: the browser's copy
       else if (mod && k === "v" && !e.shiftKey && !e.altKey) { if (pasteClipboard()) e.preventDefault(); }
       else if (mod && k === "d" && !e.shiftKey && !e.altKey) { e.preventDefault(); duplicateSelection(); } // not the bookmark dialog
+      // Only with an object selected: otherwise Ctrl/Cmd+[ ] stay the browser's Back/Forward.
+      else if (s.selection && zMoveForKey(e, isMac())) { e.preventDefault(); moveSelection(zMoveForKey(e, isMac())!); }
+      else if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && s.selection) { if (openMenuForSelection()) e.preventDefault(); }
       else if ((e.key === "Delete" || e.key === "Backspace") && s.selection) { e.preventDefault(); s.deleteObject(s.selection); }
       else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); }
       else if (!e.repeat && !textSessionBusy() && toolForKey(e)) { e.preventDefault(); s.setTool(toolForKey(e)!); } // V, T, R …: see TOOL_KEYS

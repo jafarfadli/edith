@@ -5,6 +5,7 @@ import type { FormField } from "@/lib/api";
 import { normRotation, type CropBox, type PageGeom, type Rotation } from "@/lib/coords";
 import type { Dash } from "@/lib/geometry";
 import * as P from "@/lib/pages";
+import { reorder, type ZMove } from "@/lib/zorder";
 
 export interface StructurePage { index: number; width: number; height: number; rotation: number; hasText: boolean }
 /** `imports`/`importFields`: page sizes and form fields of the other PDFs imported into this one, by doc id
@@ -49,6 +50,9 @@ export interface EditorState {
   /** Adds or replaces several objects and deletes the objects `remove` as one undo step (Replace All). */
   putObjects(ops: ContentOp[], remove?: string[]): void;
   deleteObject(id: string): void;
+  /** Moves objects `ids` in the stacking order of their page (lib/zorder.ts reorder) as one undo step; false when
+   *  nothing changed (already at the front/back, unknown ids). */
+  reorderObjects(ids: readonly string[], move: ZMove): boolean;
   /** Sets AcroForm field `name` (every widget of that name); `coalesce` as in updateObject (typing). */
   setFormValue(name: string, value: FormValue, opts?: { coalesce?: string }, doc?: string): void;
   rotatePage(pageKey: string, delta: 90 | -90): void;
@@ -194,6 +198,15 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
           return { ...d, objects, order: d.order.filter((x) => x !== id) };
         });
         if (get().selection === id) set({ selection: null });
+      },
+
+      reorderObjects(ids, move) {
+        const before = get().doc;
+        commit((d) => {
+          const order = reorder(d, ids, move);
+          return order ? { ...d, order } : d;
+        });
+        return get().doc !== before;
       },
 
       setFormValue(name, value, opts, doc) {

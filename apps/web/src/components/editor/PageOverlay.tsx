@@ -20,6 +20,9 @@ import { ObjectShape } from "./ObjectShape";
 import { usePolyTool } from "./shapes/usePolyTool";
 import { textEditStore, updateTextOp } from "./text/textEdit";
 import { CANVAS } from "@/lib/theme";
+import { isMac } from "@/lib/keys";
+import { boundsOf, nextBelow, stacked } from "@/lib/zorder";
+import { contextMenuStore, menuOpeners } from "./objects/layering";
 
 type TextOp = TextAdd | TextEdit;
 
@@ -77,6 +80,9 @@ export const overlayHooks: {
   renderOver?: (pageKey: string) => React.ReactNode;
 } = {};
 
+/** Page points around an object's box still tried by stackAt (half the widest stroke and the hit tolerance). */
+const HIT_PAD = 12;
+
 /** Below this size (px) a box side gets no middle anchor: on a small object (a check mark) eight anchors hid it. */
 const MIDDLE_ANCHOR_MIN = 40;
 
@@ -111,10 +117,78 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   // The draw in progress. Move/up are tracked on window so a drag released outside the stage still commits.
   const drawing = useRef<{ start: Pt; draft: ContentOp | null; stop: () => void } | null>(null);
 
-  const mine = order.map((id) => objects[id]).filter((op): op is ContentOp => !!op && op.pageKey === pageKey);
+  // Stacked as the export draws them (lib/zorder.ts): redactions, drawn objects in z-order, notes, links.
+  const mine = stacked(order.map((id) => objects[id]).filter((op): op is ContentOp => !!op && op.pageKey === pageKey));
   // Text markup is drawn in its own (multiplying) layer, over the objects: in the PDF it is an annotation.
   const objs = mine.filter((op) => !isMarkup(op));
   const markups = mine.filter(isMarkup);
+
+  /** The objects under stage point `at` (default: the pointer), topmost first, as the canvas stacks them. */
+  function stackAt(at?: { x: number; y: number } | null): string[] {
+    const stage = stageRef.current, page = pageRef.current;
+    const p = at ?? stage?.getPointerPosition();
+    if (!stage || !page || !p) return [];
+    // Hit-testing a shape draws it on a stage-sized canvas: only try the objects whose box (padded for strokes and
+    // Konva's hit tolerance) holds the point.
+    const q = page.getAbsoluteTransform().copy().invert().point(p);
+    const near = [...objs, ...markups].filter((op) => {
+      const b = boundsOf(op);
+      return q.x >= b.x - HIT_PAD && q.x <= b.x + b.w + HIT_PAD && q.y >= b.y - HIT_PAD && q.y <= b.y + b.h + HIT_PAD;
+    }).map((op) => op.id);
+    if (!near.length) return [];
+    const groups = new Map(stage.find(".object").map((g) => [g.id(), g as Konva.Group]));
+    return near.filter((id) => groups.get(id)?.find("Shape").some((s) => s.isVisible() && (s as Konva.Shape).intersects(p))).reverse();
+  }
+
+  /** A press on object `id` with the select tool: selects it; Alt selects the next object beneath the selection at
+   *  the pointer instead (cycling); other buttons leave the selection to the context menu, and so does Ctrl+click on
+   *  the Mac (its right-click: selecting the topmost here would lose a selection beneath it). */
+  function pressObject(e: Konva.KonvaEventObject<PointerEvent>, id: string) {
+    e.cancelBubble = true; // not a press on the empty page
+    if (e.evt.button !== 0 || (e.evt.ctrlKey && isMac())) return;
+    textEditStore.getState().selectParagraph(null);
+    const s = editorStore.getState();
+    s.select(e.evt.altKey ? nextBelow(stackAt(), s.selection) ?? id : id);
+  }
+
+  function openMenu(target: string, stack: string[], client: { x: number; y: number }) {
+    const s = editorStore.getState();
+    textEditStore.getState().selectParagraph(null);
+    if (s.selection !== target) s.select(target);
+    contextMenuStore.getState().open({ x: client.x, y: client.y, target, stack });
+  }
+
+  /** Right-click: on an object, selects it (unless the selection is also under the pointer) and opens the object
+   *  menu; elsewhere (the empty page, original text) the browser keeps its own menu. */
+  function onContextMenu(e: Konva.KonvaEventObject<MouseEvent>) {
+    if (tool !== "select" || textEditStore.getState().editing) return;
+    const stack = stackAt();
+    if (!stack.length) return;
+    e.evt.preventDefault();
+    const sel = editorStore.getState().selection;
+    openMenu(sel !== null && stack.includes(sel) ? sel : stack[0], stack, { x: e.evt.clientX, y: e.evt.clientY });
+  }
+
+  // The keyboard's menu key / Shift+F10 opens the menu over the selected object (useShortcuts → menuOpeners).
+  useEffect(() => {
+    const open = (id: string) => {
+      const stage = stageRef.current;
+      const node = stage?.find(".object").find((n) => n.id() === id);
+      if (!stage || !node) return;
+      const r = node.getClientRect({ relativeTo: stage });
+      const box = stage.container().getBoundingClientRect();
+      const p = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      // An object scrolled out of view: the menu opens at the nearest point of the visible canvas (and the menu
+      // keeps itself inside the window).
+      const view = document.getElementById("page-scroller")?.getBoundingClientRect();
+      const x = box.left + p.x, y = box.top + p.y;
+      openMenu(id, stackAt(p), view
+        ? { x: Math.min(Math.max(x, view.left), view.right), y: Math.min(Math.max(y, view.top), view.bottom) }
+        : { x, y });
+    };
+    menuOpeners.set(pageKey, open);
+    return () => { if (menuOpeners.get(pageKey) === open) menuOpeners.delete(pageKey); };
+  });
 
   useEffect(() => {
     const node = selection ? nodes.current.get(selection) : undefined;
@@ -257,6 +331,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
         onPointerDown={onDown}
         onPointerMove={() => { if (poly.active) poly.hover(pos()); }}
         onDblClick={() => poly.doubleClick()}
+        onContextMenu={onContextMenu}
       >
         <Layer>
           <Group ref={pageRef} x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale} offsetX={tr.offsetX} offsetY={tr.offsetY}>
@@ -265,15 +340,14 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
               <Group
                 key={op.id}
                 ref={(n) => { if (n) nodes.current.set(op.id, n); else nodes.current.delete(op.id); }}
+                name="object"
+                id={op.id}
                 {...objectGroupAttrs(op)}
                 draggable={tool === "select"}
                 listening={tool === "select"}
-                onPointerDown={(e) => {
-                  if (tool !== "select") return;
-                  e.cancelBubble = true;
-                  textEditStore.getState().selectParagraph(null);
-                  editorStore.getState().select(op.id);
-                }}
+                onPointerDown={(e) => { if (tool === "select") pressObject(e, op.id); }}
+                // Alt+drag would move the object on top, not the one Alt+click picked beneath it.
+                onDragStart={(e) => { if (e.evt?.altKey) e.target.stopDrag(); }}
                 onDragEnd={(e) => {
                   const g = e.currentTarget as Konva.Group;
                   const cur = editorStore.getState().doc.objects[op.id];
@@ -322,11 +396,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
         <Layer ref={multiplyLayer} listening={tool === "select"}>
           <Group x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale} offsetX={tr.offsetX} offsetY={tr.offsetY}>
             {markups.map((op) => (
-              <Group key={op.id} onPointerDown={(e) => {
-                e.cancelBubble = true;
-                textEditStore.getState().selectParagraph(null);
-                editorStore.getState().select(op.id);
-              }}
+              <Group key={op.id} name="object" id={op.id} onPointerDown={(e) => pressObject(e, op.id)}
               // The markup layer is above the text: a double-click edits the text under the markup.
               onDblClick={() => overlayHooks.onMarkupDoubleClick?.(pageKey, pos())}
               onDblTap={() => overlayHooks.onMarkupDoubleClick?.(pageKey, pos())}>

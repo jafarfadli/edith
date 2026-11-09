@@ -11,6 +11,12 @@ describe("formatKeys", () => {
     expect(formatKeys("Mod+Z", true)).toEqual(["⌘", "Z"]);
     expect(formatKeys("Mod+Shift+Z", true)).toEqual(["⌘", "⇧", "Z"]);
     expect(formatKeys("Alt+X", true)).toEqual(["⌥", "X"]);
+    expect(formatKeys("Mod+Shift+]", true)).toEqual(["⌘", "⇧", "]"]);
+  });
+
+  it("writes Delete as the key it is on each keyboard (the Mac's delete key is ⌫)", () => {
+    expect(formatKeys("Delete", true)).toEqual(["⌫"]);
+    expect(formatKeys("Delete", false)).toEqual(["Del"]);
   });
 
   it("single keys stay as they are", () => {

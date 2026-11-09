@@ -24,6 +24,7 @@ import { FormLayer } from "./forms/FormLayer";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
 import { PageList } from "./PageList";
+import { ObjectContextMenu } from "./objects/ObjectContextMenu";
 import { SelectionMiniBar } from "./objects/SelectionMiniBar";
 import { PropertiesBar } from "./PropertiesBar";
 import { Sidebar } from "./Sidebar";
@@ -206,6 +207,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
         </div>
       </div>
       <FindBar />
+      <ObjectContextMenu />
     </div>
   );
 }

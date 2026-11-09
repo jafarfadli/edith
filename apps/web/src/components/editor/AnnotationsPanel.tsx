@@ -1,22 +1,14 @@
 "use client";
 
 import type { ContentOp } from "@edith/ops";
-import {
-  ArrowUpRight, Check, Circle, Cloud, Eraser, EyeOff, Highlighter, Image, Link2, MessageSquare, Pencil, Pentagon, Signature, Slash,
-  Spline, Square, Stamp, Strikethrough, Type, Underline, X, type LucideIcon,
-} from "lucide-react";
+import { X } from "lucide-react";
 import { useRef } from "react";
-import { listedObjects, objectLabel, type ObjectIcon } from "@/lib/objectLabels";
+import { listedObjects, objectLabel } from "@/lib/objectLabels";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
 import { ICON_SM } from "../ui/icon";
+import { OBJECT_ICONS } from "./objectIcons";
 import { scrollToPage } from "./ZoomPill";
-
-const ICONS: Record<ObjectIcon, LucideIcon> = {
-  text: Type, textEdit: Type, image: Image, signature: Signature, rect: Square, ellipse: Circle, line: Slash, arrow: ArrowUpRight,
-  polygon: Pentagon, polyline: Spline, cloud: Cloud, ink: Pencil, whiteout: Eraser, redact: EyeOff, stamp: Stamp, check: Check, cross: X,
-  link: Link2, note: MessageSquare, highlight: Highlighter, underline: Underline, strike: Strikethrough,
-};
 
 /** Every object added to the document, grouped by page in page order: a click goes to it and selects it. */
 export function AnnotationsPanel() {
@@ -55,10 +47,10 @@ export function AnnotationsPanel() {
           <ul className="flex flex-col gap-0.5">
             {g.ops.map((op) => {
               const { icon, label, detail } = objectLabel(op);
-              const Icon = ICONS[icon];
+              const Icon = OBJECT_ICONS[icon];
               return (
                 <li key={op.id} className={`group flex items-center rounded-md ${selection === op.id ? "bg-accent/20 text-accent-text" : "text-ink hover:bg-hover"}`}>
-                  <button onClick={() => go(op)} data-testid="annotation-item" data-op-id={op.id} className="flex h-8 min-w-0 flex-1 items-center gap-2 px-2 text-left text-xs">
+                  <button onClick={() => go(op)} data-testid="annotation-item" data-op-id={op.id} aria-current={selection === op.id || undefined} className="flex h-8 min-w-0 flex-1 items-center gap-2 px-2 text-left text-xs">
                     <Icon {...ICON_SM} className="shrink-0 text-muted" />
                     <span className="shrink-0">{label}</span>
                     {detail && <span className="truncate text-faint">{detail}</span>}

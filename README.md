@@ -2,6 +2,20 @@
 
 Editor PDF berbasis web: unggah PDF, edit teks aslinya (paragraf dipisah per sel tabel, butir dan baris formulir; font asli PDF dipakai ulang, termasuk subset CJK tanpa cmap; rich text per kata, Cari & Ganti), tambah teks, bentuk (termasuk poligon, garis bersambung dan awan; garis putus-putus, opasitas dan rotasi), gambar, gambar bebas, whiteout, redaksi, stabilo/garis bawah/coret (anotasi PDF asli), tanda tangan (dengan pustaka di browser), stamp (34 preset Indonesia/Inggris), centang/silang, isi form (opsional diratakan), kelola halaman (putar, duplikat, pindah, hapus, sisip halaman kosong, impor PDF lain yang teks dan form-nya juga bisa diedit), crop, salin/tempel/ratakan objek dan panel Anotasi, lalu unduh.
 
+## Urutan lapisan objek
+
+Objek yang bertumpuk punya urutan lapisan per halaman (posisi di `doc.order`, paling bawah dulu). Klik kanan objek → **Bawa ke depan** (Ctrl Shift ] · Mac: ⌘ ⌥ ]), **Maju satu lapis** (Ctrl/⌘ ]), **Mundur satu lapis** (Ctrl/⌘ [), **Kirim ke belakang** (Ctrl Shift [ · Mac: ⌘ ⌥ [; ⌘ ⇧ [ ] dipakai browser untuk pindah tab); pintasan ini hanya aktif saat ada objek terpilih, selain itu Ctrl/⌘ [ ] tetap milik browser (kembali/maju); juga lewat tombol lapisan di bilah kecil objek, dan Shift+F10 membuka menu itu dari keyboard. Seperti di Figma/Canva, "satu lapis" melompati objek yang tidak bersinggungan dengan objek terpilih: objek naik/turun tepat melewati objek terdekat yang kotaknya beririsan dengannya; bila tidak ada, tombol itu nonaktif. Alt+klik memilih objek di bawah objek yang dipilih (berulang), dan menu klik kanan mendaftar semua objek di titik itu ("Pilih elemen di bawah"). Setiap perubahan urutan satu langkah urungkan, tersimpan di draf dan ikut diekspor (ops dikirim dalam urutan lapisan, API menggambarnya dalam urutan itu).
+
+Batasnya mengikuti tahap bake API, dan layar menumpuk objek dengan aturan yang sama:
+
+- Redaksi selalu paling bawah: diterapkan sebelum objek apa pun digambar.
+- Objek gambar (whiteout, bentuk, gambar bebas, teks, gambar, tanda tangan, stamp, centang/silang) bisa disusun bebas di antara sesamanya. Whiteout menutupi isi asli PDF dan objek di bawahnya saja.
+- Stabilo, garis bawah, coret dan catatan adalah anotasi PDF asli: di layar maupun di hasil ekspor selalu di atas semua objek gambar. Link selalu paling akhir (di PDF link tidak terlihat; di layar hanya bingkai bantu).
+- Satu perbedaan layar vs ekspor yang tersisa, di antara sesama anotasi: di ekspor anotasi (stabilo, garis bawah, coret, catatan) bertumpuk menurut urutan lapisannya lalu link; di layar stabilo/garis bawah/coret digambar di lapisan tersendiri yang di-*multiply* dengan halaman, jadi selalu tampak di atas catatan dan bingkai link. Alat Catatan dan Link sudah disembunyikan sejak M5, jadi ini hanya mengenai draf lama.
+- Teks asli yang diedit: baris yang diubah ikut urutan lapisan objek editnya, baris yang dipertahankan (glif asli) tetap bagian dari halaman, jadi selalu di bawah semua objek.
+
+Urutan hanya bertukar dengan objek di halaman dan tahap yang sama; tombol yang tidak berpengaruh dinonaktifkan, dan menu menjelaskan batas ini bila relevan. "Bertumpuk" diukur dengan kotak pembatas objek (bounding box, termasuk rotasi), bukan bentuk persisnya: garis diagonal atau coretan bebas yang kotaknya beririsan dengan objek lain tanpa benar-benar menyentuhnya dihitung bertumpuk, jadi kadang perlu satu tekan tambahan sebelum perubahannya terlihat.
+
 ## Struktur
 
 - `apps/api` — FastAPI + PyMuPDF. Menyimpan unggahan selama 1 jam dan menerapkan ("bake") operasi edit saat ekspor.
