@@ -64,6 +64,15 @@ export const t = {
     nextPage: "Halaman berikutnya",
     restored: "Perubahan sebelumnya dipulihkan",
     textEditsDropped: "Perubahan sebelumnya dipulihkan, kecuali suntingan teks asli: pembagian paragraf dokumen ini sudah diperbarui. Ulangi suntingan teks tersebut.",
+    /** Why an original paragraph (Paragraph.lock) or an image of print can't be edited, shown when it is clicked. */
+    locked: {
+      hidden: "Teks ini sebenarnya gambar, jadi tidak bisa diedit langsung. Untuk menggantinya, tutup dengan Whiteout (menu Penghapus), lalu tambahkan Teks baru di atasnya.",
+      font: "Teks ini memakai font simbol yang tidak bisa digantikan font lain, jadi tidak bisa diedit.",
+      rotated: "Teks yang diputar belum bisa diedit.",
+      imageText: "Bagian ini berupa gambar (mis. hasil pindai), bukan teks, jadi tidak bisa diedit langsung. Untuk menggantinya, tutup dengan Whiteout (menu Penghapus), lalu tambahkan Teks baru di atasnya.",
+    },
+    lockedEditsDropped: "Suntingan pada teks yang ternyata gambar dihapus; pakai Whiteout lalu Teks baru.",
+    pictureText: "Sebagian teks di dokumen ini berupa gambar (hasil pindai) dan tidak bisa diedit langsung. Klik bagian itu untuk melihat caranya.",
     tools: "Alat",
     properties: "Properti",
     options: "pilihan",
@@ -211,6 +220,7 @@ export const t = {
     invalid_op: "Ada perubahan yang tidak valid.",
     bake_failed: "Gagal menyimpan salah satu objek. Hapus objek yang disorot lalu coba lagi.",
     text_outdated: "Edith diperbarui sejak halaman ini dibuka. Muat ulang halaman, lalu ulangi suntingan teks asli.",
+    text_locked: "Teks yang disorot ternyata gambar dan tidak bisa diedit langsung. Hapus suntingannya, lalu pakai Whiteout dan Teks baru.",
     network: "Tidak dapat terhubung ke server. Periksa koneksi Anda.",
     timeout: "Server terlalu lama membuat PDF.",
     internal: "Server mengalami kesalahan saat membuat PDF.",

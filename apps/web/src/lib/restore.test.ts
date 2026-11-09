@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
-import { dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
+import { dropLockedTextEdits, dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
 
 describe("restoreDraft", () => {
   const draft = {
@@ -124,5 +124,36 @@ describe("dropStaleTextEdits", () => {
     expect(dropped).toBe(0);
     expect(out.order).toEqual(["e", "w"]);
     expect(out).not.toHaveProperty("paragraphsVersion");
+  });
+});
+
+describe("dropLockedTextEdits (M5c)", () => {
+  const box = { rect: { x: 0, y: 0, w: 10, h: 10 }, lineHeight: 12, paragraphs: [], layout: [] };
+  const para = (id: string, lock?: "hidden" | "font") => ({ id, rect: box.rect, lines: [], runs: [], align: "left" as const,
+    lineHeight: 12, editable: !lock, ...(lock ? { lock } : {}) });
+  const doc = {
+    pages: [{ pageKey: "o0", src: { doc: "D", index: 0 }, rotate: 0 as const }, { pageKey: "u-b", src: { blank: { width: 1, height: 1 } }, rotate: 0 as const }],
+    objects: {
+      kop: { id: "kop", type: "text.edit", pageKey: "o0", paragraphId: "g1", box },
+      body: { id: "body", type: "text.edit", pageKey: "o0", paragraphId: "g3", box },
+      sym: { id: "sym", type: "text.edit", pageKey: "o0", paragraphId: "g4", box },
+      w: { id: "w", type: "whiteout.add", pageKey: "o0", rect: { x: 0, y: 0, w: 5, h: 5 } },
+    },
+    order: ["kop", "body", "sym", "w"],
+  } as unknown as Parameters<typeof dropLockedTextEdits>[0];
+  const pages = { "D:0": [para("g1", "hidden"), para("g3"), para("g4", "font")] };
+
+  it("drops the text edits of paragraphs that turned out to be invisible text over a picture, and nothing else", () => {
+    const { doc: out, dropped } = dropLockedTextEdits(doc, pages);
+    expect(dropped).toBe(1);
+    expect(out.order).toEqual(["body", "sym", "w"]);
+    expect(Object.keys(out.objects).sort()).toEqual(["body", "sym", "w"]);
+  });
+
+  it("returns the same document when there is nothing to drop (no history entry, no autosave)", () => {
+    const rest = { ...doc, order: ["body", "w"] };
+    expect(dropLockedTextEdits(rest, pages)).toEqual({ doc: rest, dropped: 0 });
+    expect(dropLockedTextEdits(rest, pages).doc).toBe(rest);
+    expect(dropLockedTextEdits(doc, {}).doc).toBe(doc); // text not loaded: nothing known to drop
   });
 });
