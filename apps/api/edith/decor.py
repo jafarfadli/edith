@@ -26,6 +26,8 @@ SPILL_EM = 0.35       # a mark may run this far past the ink it covers (an under
 PAD = 0.3             # pt around a mark's painted extent: the rect that removes it
 SAME = 0.05           # pt: drawings this close are the same mark (drawn twice)
 WHITE = 0.98          # a fill whose every component is at least this is white: paper, not a highlight
+OPAQUE = 0.99         # a translucent fill (a tint, a multiply-like overlay) is no highlight we can redraw
+TOUCH = 0.5           # pt: a bar's end this close to other line art meets it
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,8 @@ class Mark:
     bar: bool
     color: str
     remove: pymupdf.Rect
+    seqno: int = -1        # its place in the page's painting order (get_cdrawings / get_texttrace)
+    opaque: bool = True    # painted at full opacity
 
 
 def _hex(c) -> str | None:
@@ -93,18 +97,21 @@ class PageMarks:
                 else:
                     r = pymupdf.Rect(it[1]) if it[0] == "re" else pymupdf.Quad(it[1]).rect
                     self._extents.append(r)
+            seqno = path.get("seqno", -1)
             if kind == "f" and path.get("fill_opacity", 1) > 0:
                 color = _hex(path.get("fill"))
+                opaque = path.get("fill_opacity", 1) >= OPAQUE
                 for it in items:
                     r = _rect_of(it)
                     if color and r is not None and r.width > 0.5 and r.height >= LINE_MIN:
-                        self.marks.append(Mark(r, r.height <= LINE_MAX, color, r + (-PAD, -PAD, PAD, PAD)))
+                        self.marks.append(Mark(r, r.height <= LINE_MAX, color, r + (-PAD, -PAD, PAD, PAD), seqno, opaque))
             elif kind == "s" and path.get("stroke_opacity", 1) > 0 and LINE_MIN <= (path.get("width") or 0) <= LINE_MAX:
                 color, w = _hex(path.get("color")), path["width"]
                 for x0, x1, y in _strokes(items) or []:
                     if color and x1 - x0 > 0.5:
                         r = pymupdf.Rect(x0, y - w / 2, x1, y + w / 2)
-                        self.marks.append(Mark(r, True, color, r + (-w / 2 - PAD, -PAD, w / 2 + PAD, PAD)))
+                        self.marks.append(Mark(r, True, color, r + (-w / 2 - PAD, -PAD, w / 2 + PAD, PAD), seqno,
+                                               path.get("stroke_opacity", 1) >= OPAQUE))
         # get_cdrawings() also gives the appearances of annotations (a highlight, a square, a widget's border): no
         # redaction removes those, they stay drawings (in _extents) but are no marks.
         # (Not every page has them: OCR extracts paragraphs from a stand-in page of its own.)
@@ -112,6 +119,30 @@ class PageMarks:
         annots += [pymupdf.Rect(w.rect) + (-1, -1, 1, 1) for w in (page.widgets() if hasattr(page, "widgets") else [])]
         if annots:
             self.marks = [m for m in self.marks if not any(m.rect in a for a in annots)]
+        self._page = page
+        self._trace: list[tuple[pymupdf.Rect, int]] | None = None
+
+    def under_text(self, mark: Mark, area: pymupdf.Rect) -> bool:
+        """`mark` is painted before every piece of text over `area` (a highlight lies under its text; a box painted over
+        the text covers it). False when the page cannot say (no text trace)."""
+        if self._trace is None:
+            try:
+                self._trace = [(pymupdf.Rect(s["bbox"]), s["seqno"]) for s in self._page.get_texttrace()]
+            except Exception:  # noqa: BLE001 - a stand-in page (OCR) or an unreadable trace
+                self._trace = []
+        over = [seq for r, seq in self._trace if r.intersects(area)]
+        return bool(over) and mark.seqno >= 0 and all(seq > mark.seqno for seq in over)
+
+    def touches_line_art(self, mark: Mark) -> bool:
+        """An end of bar `mark` meets other line art reaching above or below it: the bottom of a box (a table cell as wide
+        as its text, with its side borders), not an underline (which touches nothing, or the next underline)."""
+        r = mark.rect
+        for x in (r.x0, r.x1):
+            probe = pymupdf.Rect(x - TOUCH, r.y0 - TOUCH, x + TOUCH, r.y1 + TOUCH)
+            for e in self._extents:
+                if _meets(e, probe) and (e.y0 < r.y0 - TOUCH or e.y1 > r.y1 + TOUCH):
+                    return True
+        return False
 
     def removable(self, mark: Mark) -> bool:
         """Removing `mark` removes nothing else: every drawn piece inside its removal rect is the mark itself (or the
@@ -126,6 +157,11 @@ class PageMarks:
     def find(self, rect: pymupdf.Rect) -> list[Mark]:
         """The marks whose painted extent is `rect` (within SAME)."""
         return [m for m in self.marks if all(abs(a - b) <= SAME for a, b in zip(m.rect, rect))]
+
+
+def _meets(e: pymupdf.Rect, probe: pymupdf.Rect) -> bool:
+    """A degenerate rect (a line's extent) overlapping `probe` (Rect.intersects is False for empty rects)."""
+    return e.x0 <= probe.x1 and e.x1 >= probe.x0 and e.y0 <= probe.y1 and e.y1 >= probe.y0
 
 
 def _same(e: pymupdf.Rect, own: pymupdf.Rect, mark: Mark) -> bool:
@@ -188,6 +224,12 @@ def decorate(chars: list[tuple[dict, float, float]], marks: list[Mark], page: Pa
         elif not m.bar and min(int(m.color[i:i + 2], 16) for i in (1, 3, 5)) < WHITE * 255:
             if BG_TOP[0] <= (r.y0 - base) / size <= BG_TOP[1] and BG_BOTTOM[0] <= (r.y1 - base) / size <= BG_BOTTOM[1]:
                 kind = "bg"
+        if kind == "bg":
+            ink_box = pymupdf.Rect(x0s[ink[0]], r.y0, x1s[ink[-1]], r.y1)
+            if not (m.opaque and page.under_text(m, ink_box)):
+                continue  # painted over the text (a cover) or translucent: not a highlight we can redraw
+        elif kind is not None and page.touches_line_art(m):
+            continue  # the bottom of a box (a cell as wide as its text), not an underline
         if kind is None or not page.removable(m):
             continue
         page.claimed.add(id(m))

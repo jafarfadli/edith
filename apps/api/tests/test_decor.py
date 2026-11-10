@@ -90,6 +90,59 @@ def test_runs_carry_the_drawn_decorations_and_lines_their_marks():
     assert len(every) == 5  # two bars of g0, strike and highlight of g1, g3's bar
 
 
+def _word_pdf(draw) -> bytes:
+    """"Kata disorot di sini" (Helvetica 12, baseline 100, x 72); `draw(page, x0, x1)` adds drawings around "disorot"
+    (x0 … x1 its advance box), before or after the text as it calls page.insert_text itself."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    from tests.pdfs import _at
+    x0, x1 = _at(72, "Kata disorot di sini", "disorot")
+    draw(page, x0, x1)
+    return doc.tobytes()
+
+
+def _text(page) -> None:
+    page.insert_text((72, 100), "Kata disorot di sini", fontname="helv", fontsize=12)
+
+
+def _runs(data: bytes) -> list[dict]:
+    """The runs of every paragraph (a highlight's or a cell's sides are rules: they cut the line)."""
+    return [r for p in paragraphs(data) for r in p["runs"]]
+
+
+def test_a_highlight_is_a_fill_painted_under_the_text_and_opaque():
+    def under(page, x0, x1):
+        page.draw_rect(pymupdf.Rect(x0, 89.2, x1, 103), color=None, fill=(1, 1, 0))
+        _text(page)
+
+    def over(page, x0, x1):  # an opaque box over the word (a cover, a redaction look-alike): no highlight
+        _text(page)
+        page.draw_rect(pymupdf.Rect(x0, 89.2, x1, 103), color=None, fill=(1, 1, 0))
+
+    def translucent(page, x0, x1):
+        page.draw_rect(pymupdf.Rect(x0, 89.2, x1, 103), color=None, fill=(1, 1, 0), fill_opacity=0.4)
+        _text(page)
+    assert [r.get("bgColor") for r in _runs(_word_pdf(under))] == [None, "#ffff00", None]
+    for draw in (over, translucent):
+        assert all("bgColor" not in r for r in _runs(_word_pdf(draw))), draw.__name__
+
+
+def test_a_cell_border_as_wide_as_its_text_is_no_underline():
+    """A table cell exactly as wide as its word: its bottom border touches the side borders, an underline touches
+    nothing."""
+    def cell(page, x0, x1):
+        _text(page)
+        page.draw_rect(pymupdf.Rect(x0, 101.2, x1, 101.8), color=None, fill=(0, 0, 0))   # bottom border
+        page.draw_rect(pymupdf.Rect(x0 - 0.6, 86, x0, 101.8), color=None, fill=(0, 0, 0))  # left border
+        page.draw_rect(pymupdf.Rect(x1, 86, x1 + 0.6, 101.8), color=None, fill=(0, 0, 0))  # right border
+
+    def underline(page, x0, x1):
+        _text(page)
+        page.draw_rect(pymupdf.Rect(x0, 101.2, x1, 101.8), color=None, fill=(0, 0, 0))
+    assert all(not r.get("underline") for p in paragraphs(_word_pdf(cell)) for r in p["runs"])
+    assert [r.get("underline", False) for r in _runs(_word_pdf(underline))] == [False, True, False]
+
+
 def test_a_mark_whose_removal_would_take_something_else_is_not_reported():
     g3 = paragraphs(make_decor_pdf(extra=True))[3]
     assert not g3["runs"][0].get("underline") and "decor" not in g3["lines"][0]
