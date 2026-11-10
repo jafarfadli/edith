@@ -6,6 +6,7 @@ from edith.chars import page_chars
 from edith.doc_fonts import font_bytes
 from edith.errors import DocExpired, FontNotFound, PageNotFound
 from edith.extract import extract_text, open_pdf
+from edith.hiddentext import hidden_text
 from edith.paragraphs import PARAGRAPHS_VERSION
 
 router = APIRouter()
@@ -26,6 +27,20 @@ def get_text(request: Request, doc_id: str) -> dict:
     doc = _open_source(request, doc_id)
     try:
         return {"doc_id": doc_id, "paragraphsVersion": PARAGRAPHS_VERSION, **extract_text(doc, request.app.state.fonts)}
+    finally:
+        doc.close()
+
+
+@router.get("/documents/{doc_id}/pages/{index}/hidden-text")
+def get_hidden_text(request: Request, doc_id: str, index: int) -> dict:
+    """The hidden paragraphs of page `index` (GET /text: lock "hidden") whose picture could be measured, as paragraphs
+    to edit like OCR ones (edith.hiddentext.hidden_text): ids `hg0`, `hg1`, … replacing `g0`, `g1`, … Asked per page
+    (the client asks for the pages it shows that have hidden text): measuring renders the pictures under the lines."""
+    doc = _open_source(request, doc_id)
+    try:
+        if not 0 <= index < doc.page_count:
+            raise PageNotFound(f"no page {index}")
+        return {"doc_id": doc_id, "index": index, "paragraphs": hidden_text(doc[index], request.app.state.fonts)}
     finally:
         doc.close()
 

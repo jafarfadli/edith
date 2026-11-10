@@ -981,3 +981,87 @@ def make_lshape_scan_pdf(dpi: int = 200) -> bytes:
     q = out.new_page(width=595, height=842)
     q.insert_image(q.rect, stream=pix.tobytes("png"))
     return out.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+# Text in pictures anywhere: a letterhead of one picture per line under narrower invisible text (as a reference "Nota
+# Dinas" has it), and pictures that may hold text without looking like a paragraph of print.
+KOP_LINES = (("KEMENTERIAN CONTOH DAN DIGITAL RI", 16, (140, 30, 520, 52), 47),
+             ("SEKRETARIAT JENDERAL", 16, (140, 48, 360, 70), 64),
+             ("BIRO UMUM DAN ORGANISASI", 15, (140, 66, 520, 88), 81))  # text, size, picture rect, baseline (pt)
+KOP_ADDRESS = ("Jl. Contoh Raya No. 12, Jakarta 10110 Telp. (021) 1234567", 9, (140, 92, 520, 106), 102)
+KOP_LOGO_RECT = (40, 34, 112, 108)
+KOP_INK = (0.35, 0.35, 0.36)
+KOP_BODY = "Nomor: 123/ND/2026 tentang undangan rapat koordinasi."
+
+
+def _picture(lines: list[tuple[str, float, float, float]], width: float, height: float, scale: float = 3,
+             ink: tuple = (0, 0, 0), paper: tuple = (1, 1, 1), disc: tuple | None = None) -> pymupdf.Pixmap:
+    """A `scale`× bitmap of a width × height pt picture on `paper`: each (text, size, x, baseline) printed in Helvetica
+    Bold in `ink`; `disc`: (cx, cy, r, colour) a filled circle (a logo's emblem)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=width, height=height)
+    page.draw_rect(page.rect, color=None, fill=paper, width=0)
+    if disc:
+        cx, cy, r, colour = disc
+        page.draw_circle((cx, cy), r, color=None, fill=colour)
+    for text, size, x, y in lines:
+        page.insert_text((x, y), text, fontname="hebo", fontsize=size, color=ink)
+    return page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
+
+
+def make_kop_pdf() -> bytes:
+    """A letterhead like a reference "Nota Dinas": KOP_LINES each pictured in grey (KOP_INK) in a picture of its own
+    (pictures overlapping), under the same lines as invisible text (fill opacity 0) in Times Bold, narrower than the
+    print and a little lower; KOP_ADDRESS pictured alone with no text over it (one line: no paragraph of print); a logo
+    of an emblem over its name; a double rule; a visible body line (KOP_BODY at (72, 160))."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    for text, size, rect, base in KOP_LINES + (KOP_ADDRESS,):
+        x0, y0, x1, y1 = rect
+        page.insert_image(pymupdf.Rect(*rect), pixmap=_picture([(text, size, 2, base - y0)], x1 - x0, y1 - y0,
+                                                               ink=KOP_INK))
+    lx0, ly0, lx1, ly1 = KOP_LOGO_RECT
+    page.insert_image(pymupdf.Rect(*KOP_LOGO_RECT), pixmap=_picture(
+        [("CONTOH", 11, 11, 68)], lx1 - lx0, ly1 - ly0, ink=(0.2, 0.3, 0.6), disc=(36, 28, 22, (0.1, 0.45, 0.8))))
+    page.draw_line((40, 116), (555, 116), color=(0, 0, 0), width=1.5)
+    page.draw_line((40, 119), (555, 119), color=(0, 0, 0), width=0.5)
+    page.insert_text((72, 160), KOP_BODY, fontname="helv", fontsize=11)
+    writer = pymupdf.TextWriter(page.rect)
+    for text, size, rect, base in KOP_LINES:
+        writer.append((rect[0] + 2, base + 2.5), text, font=pymupdf.Font("tibo"), fontsize=size - 1)
+    writer.write_text(page, opacity=0)
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+MAYBE_LINE = ("Jl. Contoh Raya No. 12, Jakarta 10110", (72, 220, 372, 238))   # one pictured line of print
+MAYBE_DARK = (("PEMERINTAH KOTA CONTOH", "DINAS KOMUNIKASI"), (72, 260, 372, 304))  # white print on a dark band
+MAYBE_LOGO = (420, 210, 480, 270)   # an emblem over its name
+MAYBE_DISC = (420, 290, 480, 350)   # an emblem alone: no text
+MAYBE_PHOTO = (420, 370, 540, 460)  # smooth shading: no text
+
+
+def make_maybe_text_pdf() -> bytes:
+    """Pictures that may hold text but look like no paragraph of print (imagetext "maybe" tier): MAYBE_LINE, MAYBE_DARK,
+    MAYBE_LOGO; and pictures that hold none: MAYBE_DISC, MAYBE_PHOTO. A visible title at (72, 100)."""
+    import math
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 100), "Halaman dengan gambar", fontname="helv", fontsize=14)
+    text, (x0, y0, x1, y1) = MAYBE_LINE
+    page.insert_image(pymupdf.Rect(x0, y0, x1, y1), pixmap=_picture([(text, 11, 3, 13)], x1 - x0, y1 - y0))
+    lines, (x0, y0, x1, y1) = MAYBE_DARK
+    page.insert_image(pymupdf.Rect(x0, y0, x1, y1), pixmap=_picture(
+        [(lines[0], 13, 6, 18), (lines[1], 11, 6, 36)], x1 - x0, y1 - y0, ink=(1, 1, 1), paper=(0.1, 0.2, 0.4)))
+    x0, y0, x1, y1 = MAYBE_LOGO
+    page.insert_image(pymupdf.Rect(*MAYBE_LOGO), pixmap=_picture(
+        [("CONTOH", 10, 9, 54)], x1 - x0, y1 - y0, ink=(0.2, 0.3, 0.6), disc=(30, 22, 18, (0.1, 0.45, 0.8))))
+    x0, y0, x1, y1 = MAYBE_DISC
+    page.insert_image(pymupdf.Rect(*MAYBE_DISC),
+                      pixmap=_picture([], x1 - x0, y1 - y0, disc=(30, 30, 24, (0.1, 0.45, 0.8))))
+    photo = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 120, 90), False)
+    for y in range(90):
+        for x in range(120):
+            v = int(128 + 100 * math.sin(x / 9) * math.cos(y / 7))
+            photo.set_pixel(x, y, (v, (v + 60) % 256, 255 - v))
+    page.insert_image(pymupdf.Rect(*MAYBE_PHOTO), pixmap=photo)
+    return doc.tobytes(garbage=3, deflate=True, no_new_id=True)

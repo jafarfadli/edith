@@ -33,6 +33,10 @@ def rect(r) -> dict:
     return {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}
 
 
+def printed(r) -> dict:
+    return rect(r) | {"tier": "print"}
+
+
 @pytest.mark.parametrize("hide", ["mode3", "opacity"])
 def test_invisible_text_over_its_picture_is_locked(hide):
     ps = extract_paragraphs(page_of(make_hidden_text_pdf(hide)))
@@ -74,17 +78,19 @@ def test_every_locked_paragraph_says_why():
 
 def test_a_picture_of_print_is_reported_and_other_pictures_are_not():
     # The photo, the logo and the picture with real text typed over it are left out.
-    assert image_text_regions(page_of(make_raster_text_pdf())) == [rect(RASTER_RECT)]
+    assert image_text_regions(page_of(make_raster_text_pdf())) == [printed(RASTER_RECT)]
+    # Nor as "maybe": a photo has no plain background, a logo no row of letter-like marks.
+    assert image_text_regions(page_of(make_raster_text_pdf()), maybe=True) == [printed(RASTER_RECT)]
 
 
 def test_image_text_rects_are_unrotated_page_points():
-    assert image_text_regions(page_of(make_raster_text_pdf(rotation=90))) == [rect(RASTER_RECT)]
+    assert image_text_regions(page_of(make_raster_text_pdf(rotation=90))) == [printed(RASTER_RECT)]
 
 
 def test_image_text_analysis_stops_when_the_budget_is_spent(monkeypatch):
     import edith.imagetext as imagetext
     read = []
-    monkeypatch.setattr(imagetext, "_visible_words", lambda page: read.append(page) or [])
+    monkeypatch.setattr(imagetext, "page_words", lambda page: read.append(page) or ([], []))
     budget = Budget(pixels=100)
     assert image_text_regions(page_of(make_raster_text_pdf()), budget) == []
     assert budget.pixels == 100 and read == []  # nothing rendered, and the text not even read
@@ -93,7 +99,7 @@ def test_image_text_analysis_stops_when_the_budget_is_spent(monkeypatch):
 def test_image_text_analysis_stops_at_its_deadline():
     assert image_text_regions(page_of(make_raster_text_pdf()), Budget(deadline=time.monotonic() - 1)) == []
     budget = Budget()
-    assert image_text_regions(page_of(make_raster_text_pdf()), budget) == [rect(RASTER_RECT)]
+    assert image_text_regions(page_of(make_raster_text_pdf()), budget) == [printed(RASTER_RECT)]
     # Rendered: the print, the photo and the logo (whole pixels each), not the picture with text typed over it.
     assert MAX_PIXELS - budget.pixels == pytest.approx(440 * 180 + 120 * 90 + 80 * 80, abs=3)
 
@@ -102,18 +108,25 @@ def test_image_text_uses_the_visible_text_it_is_given():
     """extract_text passes the lines of its visible paragraphs: the page's text is not read again."""
     page = page_of(make_raster_text_pdf())
     x0, y0, x1, y1 = RASTER_RECT
-    assert image_text_regions(page, visible=[pymupdf.Rect(x0 + 10, y0 + 10, x0 + 100, y0 + 20)]) == [rect(PRINTED_RECT)]
+    assert image_text_regions(page, visible=[pymupdf.Rect(x0 + 10, y0 + 10, x0 + 100, y0 + 20)]) == [printed(PRINTED_RECT)]
     # Told there is no visible text, the picture with text typed over it counts too.
-    assert image_text_regions(page, visible=[]) == [rect(RASTER_RECT), rect(PRINTED_RECT)]
+    assert image_text_regions(page, visible=[]) == [printed(RASTER_RECT), printed(PRINTED_RECT)]
+    # Invisible text over a picture is its own words (edited as such: edith.hiddentext), not a picture to read.
+    assert image_text_regions(page, visible=[], hidden=[pymupdf.Rect(x0 + 10, y0 + 10, x0 + 100, y0 + 20)]) == [
+        printed(PRINTED_RECT)]
 
 
 def test_get_text_reports_locks_and_image_text(client):
     doc_id = upload(client, make_hidden_text_pdf()).json()["doc_id"]
     page = client.get(f"/documents/{doc_id}/text").json()["pages"][0]
     assert [p.get("lock") for p in page["paragraphs"]] == [None, "hidden", "hidden"]
-    assert page["imageText"] == [rect(SCAN_RECT)]  # its only text is invisible: the picture is what shows
+    # Its only text is invisible: the picture's own words, edited as such (GET .../hidden-text), not a picture to read.
+    assert page["imageText"] == []
+    assert page["images"] == [rect(SCAN_RECT)]  # still a picture the client may offer to read
     doc_id = upload(client, make_raster_text_pdf()).json()["doc_id"]
-    assert client.get(f"/documents/{doc_id}/text").json()["pages"][0]["imageText"] == [rect(RASTER_RECT)]
+    page = client.get(f"/documents/{doc_id}/text").json()["pages"][0]
+    assert page["imageText"] == [printed(RASTER_RECT)]
+    assert len(page["images"]) == 4  # the print, the photo, the logo, the print with text typed over it
 
 
 def test_e2e_fixture_pictures_are_ccitt_and_read_as_the_reference_cases():
@@ -128,7 +141,7 @@ def test_e2e_fixture_pictures_are_ccitt_and_read_as_the_reference_cases():
     assert filters == {"/CCITTFaxDecode"}
     ps = extract_paragraphs(doc[0])
     assert [p.get("lock") for p in ps] == [None, "hidden", "hidden"]
-    assert image_text_regions(doc[0]) == [rect(SCAN_RECT), rect(RASTER_RECT)]
+    assert image_text_regions(doc[0]) == [printed(RASTER_RECT)]  # the letterhead's words are its invisible text
 
 
 @pytest.fixture

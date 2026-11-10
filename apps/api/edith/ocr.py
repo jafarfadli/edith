@@ -873,8 +873,10 @@ def _merged(rects: list[pymupdf.Rect]) -> list[pymupdf.Rect]:
 
 
 def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: float = TIMEOUT,
-             max_pixels: int = MAX_PIXELS, dpi: int = DPI, clock=None, words_out: list | None = None) -> dict:
-    """OCR of the pictures of print on `page` (imagetext.image_text_regions). `quality`: "ok"; "none" (no picture of
+             max_pixels: int = MAX_PIXELS, dpi: int = DPI, clock=None, words_out: list | None = None,
+             area: pymupdf.Rect | None = None) -> dict:
+    """OCR of the pictures of print on `page` (imagetext.image_text_regions), or of `area` (unrotated-CropBox points:
+    a picture the user picked, any part of the page) instead. `quality`: "ok"; "none" (no picture of
     print); "empty" (nothing read); "rotated" (the page has /Rotate: its text would not be horizontal in page
     coordinates); "skewed" (`angle`, degrees, beyond MAX_SKEW); "unreadable" (median confidence under
     MIN_CONFIDENCE); "too_large" (a picture over max_pixels at MIN_DPI). Only "ok" has paragraphs. `words_out`
@@ -891,10 +893,13 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
         return {**result, "quality": "rotated"}
     if len(page.get_image_info()) > MAX_IMAGES:
         raise OcrTooComplex(f"more than {MAX_IMAGES} pictures on the page", max_images=MAX_IMAGES)
-    # Finding the pictures renders each one (with what lies under it): within the page's time, and the pixel budget.
-    found = image_text_regions(page, Budget(deadline=time.monotonic() + max(min(FIND_SECONDS, deadline - clock()), 0)))
-    in_time()
-    rects = _merged([pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"]) for r in found])
+    if area is not None:
+        rects = [] if area.is_empty else [pymupdf.Rect(area)]
+    else:
+        # Finding the pictures renders each one (with what lies under it): within the page's time, and the pixel budget.
+        found = image_text_regions(page, Budget(deadline=time.monotonic() + max(min(FIND_SECONDS, deadline - clock()), 0)))
+        in_time()
+        rects = _merged([pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"]) for r in found])
     if not rects:
         return result
     regions: list[_Region] = []

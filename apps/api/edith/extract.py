@@ -7,7 +7,7 @@ from edith.doc_fonts import (collect_fonts, fill_substitutes, font_candidates, i
 from edith.errors import PdfCorrupt, PdfEncrypted, TooLarge
 from edith.fonts import FontRegistry
 from edith.forms import extract_fields
-from edith.imagetext import Budget, image_text_regions
+from edith.imagetext import Budget, image_text_regions, page_images
 from edith.paragraphs import extract_paragraphs
 
 
@@ -105,18 +105,20 @@ def extract_text(doc: pymupdf.Document, registry: FontRegistry) -> dict:
     """Paragraphs of every page plus the fonts they use. A run whose font is reusable gets
     `{"kind": "original", "ref"}`; any other run gets its bundled substitute. A paragraph with text in a
     symbol font that can't be reused is not editable: no other font draws its characters (`lock` says why a paragraph
-    is not editable). `imageText`: the rects of images that look like print with no text over them (see imagetext)."""
+    is not editable). `imageText`: the rects of images that look like print with no text over them, with their `tier` (see
+    imagetext); `images`: the rects of every picture of the page (the client offers OCR of any of them)."""
     text_fonts = TextFonts(doc, registry)
     pages = []
     budget = Budget()
     for page in doc:
         resolve, locked = text_fonts.page(page)
         paragraphs = extract_paragraphs(page, resolve, locked, text_fonts.program)
-        # The page's visible text, from its paragraphs (the page's text is not read again): every line of a paragraph
-        # that is not invisible text.
-        visible = [pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"])
-                   for p in paragraphs if p.get("lock") != "hidden" for r in (ln["rect"] for ln in p["lines"])]
+        # The page's visible and invisible text, from its paragraphs (the page's text is not read again).
+        lines = [(p.get("lock") == "hidden", pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"]))
+                 for p in paragraphs for r in (ln["rect"] for ln in p["lines"])]
         pages.append({"index": page.number, "paragraphs": paragraphs,
-                      "imageText": image_text_regions(page, budget, visible)})
+                      "imageText": image_text_regions(page, budget, visible=[r for h, r in lines if not h],
+                                                      hidden=[r for h, r in lines if h], maybe=True),
+                      "images": page_images(page)})
     fill_substitutes(text_fonts.fonts, registry)
     return {"pages": pages, "fonts": [f.to_json() for f in text_fonts.fonts.values()]}
