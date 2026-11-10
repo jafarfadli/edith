@@ -92,7 +92,13 @@ export function dropLockedTextEdits(doc: EditorDoc, pages: ParagraphPages): { do
 
 export function dropStaleTextEdits(doc: EditorDoc): { doc: EditorDoc; dropped: number } {
   const version = doc.paragraphsVersion ?? 1;
-  const stale = version === PARAGRAPHS_VERSION ? [] : doc.order.filter((id) => doc.objects[id]?.type === "text.edit");
+  // A hidden paragraph's rewrite (text.ocr_edit of hgN) names its paragraph by the same ids: it goes too. An OCR
+  // paragraph's (ocrN) does not: OCR numbers its own paragraphs.
+  const named = (id: string) => {
+    const op = doc.objects[id];
+    return op?.type === "text.edit" || (op?.type === "text.ocr_edit" && op.paragraphId.startsWith("hg"));
+  };
+  const stale = version === PARAGRAPHS_VERSION ? [] : doc.order.filter(named);
   const rest = { ...doc };
   delete rest.paragraphsVersion; // a stamp of the stored draft, not part of the document
   if (!stale.length) return { doc: rest, dropped: 0 };

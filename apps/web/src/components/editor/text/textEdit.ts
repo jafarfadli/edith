@@ -17,7 +17,7 @@ import { t } from "@/lib/strings";
 import { keepRotatedTopLeft, rotationOf } from "@/lib/objects";
 import { boxFonts, boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, ocrEditFor, textEditFor, type EditorDoc } from "@/store/editor";
-import { ocrParagraphsOf, paragraphsOf, textStore } from "@/store/text";
+import { paragraphsOf, pictureParagraphsOf, textStore } from "@/store/text";
 
 type Pt = [number, number];
 
@@ -284,7 +284,7 @@ export function selectedParagraph(): { pageKey: string; original?: Paragraph; oc
   const st = editorStore.getState();
   const entry = sel && st.tool === "select" ? st.doc.pages.find((pg) => pg.pageKey === sel.pageKey) : undefined;
   if (!sel || !entry) return null;
-  const ocr = ocrParagraphsOf(entry.src).find((x) => x.id === sel.id);
+  const ocr = pictureParagraphsOf(entry.src).find((x) => x.id === sel.id);
   if (ocr) return ocrEditFor(st.doc, sel.pageKey, ocr.id) ? null : { pageKey: sel.pageKey, ocr };
   const original = paragraphsOf(entry.src).find((x) => x.id === sel.id);
   return original?.editable && !textEditFor(st.doc, sel.pageKey, original.id) ? { pageKey: sel.pageKey, original } : null;

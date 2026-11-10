@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCopy, Copy, Trash2, Type, Undo2, type LucideIcon } from "lucide-react";
+import { ClipboardCopy, Copy, ScanText, Trash2, Type, Undo2, type LucideIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
@@ -8,9 +8,13 @@ import type { ContentOp } from "@edith/ops";
 import { ariaKeys } from "@/lib/keys";
 import { isCopyable } from "@/lib/objects";
 import { objectLabel } from "@/lib/objectLabels";
+import { areaKey } from "@/lib/ocr";
+import { srcKey } from "@/lib/sources";
 import { t } from "@/lib/strings";
 import { zKeys, zMoves, zStage } from "@/lib/zorder";
 import { editorStore, useEditor } from "@/store/editor";
+import { useText } from "@/store/text";
+import { runPageOcr } from "../text/ocrRun";
 import { ICON } from "../../ui/icon";
 import { MENU_ITEM, POPOVER } from "../../ui/styles";
 import { Kbd } from "../../ui/Tooltip";
@@ -18,7 +22,7 @@ import { useIsMac } from "../../ui/useIsMac";
 import { usePopupFocus } from "../../ui/usePopupFocus";
 import { OBJECT_ICONS } from "../objectIcons";
 import { copySelection, duplicateSelection } from "./clipboard";
-import { contextMenuStore, Z_COMMANDS, type ObjectMenu, type ParagraphMenu } from "./layering";
+import { contextMenuStore, Z_COMMANDS, type ContextMenu, type ObjectMenu } from "./layering";
 import { deleteObjectOrText, deleteSelectedParagraph, editSelectedParagraph, isDeletedText, isTextEdit, textEditStore } from "../text/textEdit";
 
 /** Distance (px) the menu keeps from the window's edges. */
@@ -45,11 +49,12 @@ function colourOf(op: ContentOp): string | null {
 export function ObjectContextMenu() {
   const menu = useStore(contextMenuStore, (s) => s.menu);
   // A new menu (another right-click) is a new instance: position, focus and "focus before" start over.
-  const target = menu && ("paragraph" in menu ? `${menu.paragraph.pageKey}/${menu.paragraph.id}` : menu.target);
+  const target = menu && ("paragraph" in menu ? `${menu.paragraph.pageKey}/${menu.paragraph.id}`
+    : "picture" in menu ? `${menu.picture.pageKey}/picture/${areaKey(menu.picture.rect)}` : menu.target);
   return menu ? <Menu key={`${target}:${menu.x}:${menu.y}`} menu={menu} /> : null;
 }
 
-function Menu({ menu }: { menu: ObjectMenu | ParagraphMenu }) {
+function Menu({ menu }: { menu: ContextMenu }) {
   const ref = useRef<HTMLDivElement>(null);
   const before = useRef<HTMLElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -58,7 +63,11 @@ function Menu({ menu }: { menu: ObjectMenu | ParagraphMenu }) {
   const tool = useEditor((s) => s.tool);
   const mac = useIsMac();
   const paragraph = "paragraph" in menu ? menu.paragraph : null;
-  const op = paragraph ? undefined : doc.objects[(menu as ObjectMenu).target];
+  const picture = "picture" in menu ? menu.picture : null;
+  const op = paragraph || picture ? undefined : doc.objects[(menu as ObjectMenu).target];
+  // A picture's menu: whether OCR of it ran already, or any OCR of its document runs (one at a time).
+  const pictureRead = useText((s) => !!picture && !!s.ocr[srcKey(picture.doc, picture.index)]?.areas?.includes(areaKey(picture.rect)));
+  const ocrBusy = useText((s) => !!picture && Object.entries(s.ocr).some(([k, v]) => v.status === "loading" && k.startsWith(picture.doc + ":")));
   // A paragraph's menu lasts while it stays selected and not edited.
   const paragraphOn = useStore(textEditStore, (s) => !!paragraph && s.paragraph?.pageKey === paragraph.pageKey
     && s.paragraph.id === paragraph.id && !s.editing);
@@ -94,7 +103,7 @@ function Menu({ menu }: { menu: ObjectMenu | ParagraphMenu }) {
     };
   }, []);
 
-  const gone = paragraph ? !paragraphOn : !op;
+  const gone = picture ? false : paragraph ? !paragraphOn : !op;
   useEffect(() => { if (gone) close(); }, [gone]); // deleted, undone or edited meanwhile
   useEffect(() => { if (tool !== "select") close(); }, [tool]); // a tool key pressed while focus was elsewhere
 
@@ -130,6 +139,14 @@ function Menu({ menu }: { menu: ObjectMenu | ParagraphMenu }) {
     </div>,
     document.body,
   );
+
+  // A picture of the page: read the text in it (any picture: the API's guess of which hold text may miss some).
+  if (picture) {
+    return shell(t.ocr.pictureMenu, "picture-menu", <>
+      {item("ocr", pictureRead ? t.ocr.pictureRead : t.ocr.runPicture, ScanText,
+        () => { void runPageOcr(picture.doc, picture.index, picture.rect); }, { disabled: pictureRead || ocrBusy })}
+    </>);
+  }
 
   // Original (or OCR) text not edited yet: what can be done to it.
   if (!op) {

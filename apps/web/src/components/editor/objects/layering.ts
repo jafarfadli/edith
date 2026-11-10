@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, type LucideIcon } from "lucide-react";
 import { createStore } from "zustand/vanilla";
+import type { Rect } from "@edith/ops";
 import { t } from "@/lib/strings";
 import { zMoves, type ZMove } from "@/lib/zorder";
 import { editorStore } from "@/store/editor";
@@ -35,7 +36,13 @@ export interface ObjectMenu { x: number; y: number; target: string; stack: strin
 /** The menu of the selected paragraph of original (or OCR) text, not edited yet: Edit teks, Hapus teks. */
 export interface ParagraphMenu { x: number; y: number; paragraph: { pageKey: string; id: string } }
 
-export const contextMenuStore = createStore<{ menu: ObjectMenu | ParagraphMenu | null; open(m: ObjectMenu | ParagraphMenu): void; close(): void }>()((set) => ({
+/** The menu of a picture of the page (any image the API lists, nothing over it to edit): Kenali teks (OCR) of its
+ *  rect (unrotated page points) on source page `index` of `doc`. */
+export interface PictureMenu { x: number; y: number; picture: { pageKey: string; doc: string; index: number; rect: Rect } }
+
+export type ContextMenu = ObjectMenu | ParagraphMenu | PictureMenu;
+
+export const contextMenuStore = createStore<{ menu: ContextMenu | null; open(m: ContextMenu): void; close(): void }>()((set) => ({
   menu: null,
   open: (menu) => set({ menu }),
   close: () => set({ menu: null }),

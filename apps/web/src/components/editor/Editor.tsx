@@ -18,7 +18,7 @@ import { boxFonts } from "@/lib/textbox";
 import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
 import { pdfStore } from "@/store/pdfs";
 import { charsStore } from "@/store/chars";
-import { hasPictureText, imageTextOf, textStore } from "@/store/text";
+import { hasPictureText, imageTextOf, isPrint, paragraphsOf, textStore } from "@/store/text";
 import { BTN_PRIMARY } from "../ui/styles";
 import { FormLayer } from "./forms/FormLayer";
 import { Header } from "./Header";
@@ -99,12 +99,23 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
           editorStore.setState((s) => ({ doc: drop(s.doc), past: s.past.map(drop), future: s.future.map(drop), selection: null }));
           setNotice({ kind: "error", text: t.editor.lockedEditsDropped });
         } else if (hasPictureText()) {
-          // A page with a picture of print: offer to read the first one (OCR, M5d); invisible text over its picture only: say why.
-          const first = editorStore.getState().doc.pages.map((p) => p.src).find((src) => imageTextOf(src).length > 0);
-          const msg: NoticeMsg = first && "doc" in first
-            ? { kind: "info", text: t.editor.pictureTextOcr, action: { label: t.ocr.run, run: () => { void runPageOcr(first.doc, first.index); } } }
-            : { kind: "info", text: t.editor.pictureText };
-          setNotice((n) => (n?.kind === "error" ? n : msg));
+          // A page with a picture of print: offer to read the first one (OCR, M5d). Invisible text over its picture only:
+          // the first page with some says whether it can be edited as its picture (GET .../hidden-text), or why not.
+          const srcs = editorStore.getState().doc.pages.map((p) => p.src);
+          const first = srcs.find((src) => imageTextOf(src).some(isPrint));
+          const say = (msg: NoticeMsg) => setNotice((n) => (n?.kind === "error" ? n : msg));
+          if (first && "doc" in first) {
+            say({ kind: "info", text: t.editor.pictureTextOcr, action: { label: t.ocr.run, run: () => { void runPageOcr(first.doc, first.index); } } });
+            return;
+          }
+          const hiddenSrc = srcs.find((src) => paragraphsOf(src).some((p) => p.lock === "hidden"));
+          if (!hiddenSrc || !("doc" in hiddenSrc)) return;
+          void textStore.getState().loadHidden(hiddenSrc.doc, hiddenSrc.index).then((st) => {
+            if (cancelled || textStore.getState().docId !== docId) return;
+            const editable = new Set(st.paragraphs.map((p) => p.replaces));
+            const all = paragraphsOf(hiddenSrc).filter((p) => p.lock === "hidden").every((p) => editable.has(p.id));
+            say({ kind: "info", text: all ? t.editor.pictureTextHidden : t.editor.pictureText });
+          });
         }
       });
       for (const id of Object.keys(resolved?.imports ?? {})) void textStore.getState().loadImport(id);

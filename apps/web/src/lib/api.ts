@@ -40,7 +40,16 @@ export interface Paragraph {
  *  text.ocr_edit op, which carries them. */
 export interface OcrParagraph extends Paragraph {
   ocr: true; confidence: number; cover: Rect; covers: Rect[]; coverColor: string; coverUniform: boolean;
+  /** "hidden" (GET /documents/{id}/pages/{n}/hidden-text): not read by OCR but the invisible text laid over a picture of
+   *  it, its lines measured in the picture (`confidence` 1); id `hgN`, replacing the locked original paragraph
+   *  `replaces` (gN). Absent: read by OCR. */
+  source?: "hidden"; replaces?: string;
 }
+/** How sure the API is that a picture holds text (GET /text `imageText`): "print", rows of print on a plain background
+ *  (what a page's OCR reads); "maybe", a picture that may hold some (one pictured line, a logo with its name, light print
+ *  on a dark band), read only when asked. Absent: "print" (an API from before). */
+export type ImageTextTier = "print" | "maybe";
+export interface ImageTextRect extends Rect { tier?: ImageTextTier }
 /** "ok" (paragraphs found), "none" (no picture of print on the page), "empty" (nothing read), "rotated" (the page is
  *  turned in the PDF), "skewed" (`angle` degrees, too much to read into straight lines), "unreadable", "too_large". */
 export type OcrQuality = "ok" | "none" | "empty" | "rotated" | "skewed" | "unreadable" | "too_large";
@@ -56,8 +65,9 @@ export interface DocFont {
 }
 export interface TextData {
   /** `imageText` (M5c): rects of images that look like print with no text over them (a scanned form): nothing there can
-   *  be edited as text. */
-  doc_id: string; pages: { index: number; paragraphs: Paragraph[]; imageText?: Rect[] }[]; fonts: DocFont[];
+   *  be edited as text until OCR reads it; `tier` says how sure that is. `images`: every picture of the page (OCR of any
+   *  of them can be asked for). */
+  doc_id: string; pages: { index: number; paragraphs: Paragraph[]; imageText?: ImageTextRect[]; images?: Rect[] }[]; fonts: DocFont[];
   /** Segmentation version (2 since M5, 3 since M5b); absent in fixtures built from extract_text directly. */
   paragraphsVersion?: number;
 }
@@ -112,9 +122,17 @@ export async function getText(docId: string): Promise<TextData> {
 /** One page's OCR takes up to 30 s on the server (its own timeout), plus the upload of nothing and the answer. */
 export const OCR_TIMEOUT_MS = 60_000;
 
-export async function ocrPage(docId: string, index: number): Promise<OcrResult> {
-  const res = await request(`/documents/${docId}/pages/${index}/ocr`, { method: "POST", signal: AbortSignal.timeout(OCR_TIMEOUT_MS) });
+/** OCR of page `index`: its pictures of print, or `rect` of it (a picture the user picked, an area of the page). */
+export async function ocrPage(docId: string, index: number, rect?: Rect): Promise<OcrResult> {
+  const init: RequestInit = rect ? json({ rect }) : { method: "POST" };
+  const res = await request(`/documents/${docId}/pages/${index}/ocr`, { ...init, signal: AbortSignal.timeout(OCR_TIMEOUT_MS) });
   return res.json();
+}
+
+/** The hidden paragraphs of page `index` (lock "hidden") that can be edited as the picture they lie over (see
+ *  OcrParagraph.source). */
+export async function getHiddenText(docId: string, index: number): Promise<OcrParagraph[]> {
+  return ((await (await request(`/documents/${docId}/pages/${index}/hidden-text`)).json()) as { paragraphs: OcrParagraph[] }).paragraphs;
 }
 
 export async function getChars(docId: string, index: number): Promise<CharLine[]> {

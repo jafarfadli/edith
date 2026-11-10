@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DocFont, Paragraph } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
-import { hasPictureText, imageTextOf, ocrParagraphsOf, ocrStateOf, paragraphsOf, textStore } from "@/store/text";
+import { hasPictureText, hiddenParagraphsOf, imagesOf, imageTextOf, ocrParagraphsOf, ocrStateOf, paragraphsOf, pictureParagraphsOf, textStore } from "@/store/text";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  textStore.setState({ status: "idle", docId: null, pages: {}, imageText: {}, fonts: {}, imports: {}, ocr: {} });
+  textStore.setState({ status: "idle", docId: null, pages: {}, imageText: {}, images: {}, fonts: {}, imports: {}, ocr: {}, hidden: {} });
 });
 
 const para: Paragraph = { id: "g0", rect: { x: 0, y: 0, w: 10, h: 10 }, lines: [], runs: [], align: "left", lineHeight: 12, editable: true };
@@ -101,5 +101,66 @@ describe("textStore", () => {
     expect(textStore.getState().runOcr("D", 1)).toBeInstanceOf(Promise); // a failure can be retried
     await textStore.getState().load("D"); // another load forgets the results
     expect(ocrParagraphsOf({ doc: "D", index: 0 })).toEqual([]);
+  });
+
+  const ocrAt = (id: string, x: number, y: number) => ({
+    ...para, id, rect: { x, y, w: 50, h: 10 }, ocr: true as const, confidence: 0.9, cover: { x, y, w: 50, h: 10 }, covers: [],
+    coverColor: "#ffffff", coverUniform: true,
+  });
+
+  it("keeps every picture's rect and how sure each image of print is; only sure print counts as picture text", async () => {
+    const logo = { x: 40, y: 34, w: 72, h: 74 };
+    const body = { doc_id: "D", pages: [{ index: 0, paragraphs: [para], imageText: [{ ...logo, tier: "maybe" }], images: [logo] }], fonts: [] };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })));
+    await textStore.getState().load("D");
+    expect(imagesOf({ doc: "D", index: 0 })).toEqual([logo]);
+    expect(imageTextOf({ doc: "D", index: 0 })).toEqual([{ ...logo, tier: "maybe" }]);
+    expect(hasPictureText()).toBe(false); // a logo that may hold its name: nothing to say at load
+  });
+
+  it("reads areas of a page one by one; their paragraphs join the page's, numbered apart, each area once", async () => {
+    let answer = ocrAt("ocr0", 100, 100);
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/text")) return new Response(JSON.stringify({ doc_id: "D", pages: [{ index: 0, paragraphs: [] }], fonts: [] }), { status: 200 });
+      return new Response(JSON.stringify({ doc_id: "D", index: 0, quality: "ok", angle: 0, dpi: 300, regions: [], paragraphs: [answer] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await textStore.getState().load("D");
+    const area = { x: 90, y: 90, w: 100, h: 30 };
+    let st = await textStore.getState().runOcr("D", 0, area, ["ocr1000"]);
+    expect(fetchMock).toHaveBeenLastCalledWith("http://localhost:8000/documents/D/pages/0/ocr",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ rect: area }) }));
+    expect(st.paragraphs.map((p) => p.id)).toEqual(["ocr1001"]); // an area's ids: from 1000, never an edit's
+    expect(st.full).toBeFalsy();
+    expect(st.areas).toHaveLength(1);
+    expect(st.last).toMatchObject({ quality: "ok", found: 1 });
+    await textStore.getState().runOcr("D", 0, area); // read already
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith("/ocr"))).toHaveLength(1);
+    // The page's own OCR then: what it reads again (the same paragraph) is left out, the rest keeps its ids.
+    answer = ocrAt("ocr0", 300, 300);
+    st = await textStore.getState().runOcr("D", 0);
+    expect(st.full).toBe(true);
+    expect(st.paragraphs.map((p) => p.id)).toEqual(["ocr1001", "ocr0"]);
+    answer = ocrAt("ocr0", 102, 101);
+    st = await textStore.getState().runOcr("D", 0, { x: 95, y: 95, w: 80, h: 20 });
+    expect(st.paragraphs).toHaveLength(2);
+    expect(st.last).toMatchObject({ quality: "empty", found: 0 });
+  });
+
+  it("asks once per page which hidden paragraphs can be edited as their picture", async () => {
+    const hidden = { ...ocrAt("hg1", 140, 30), source: "hidden", replaces: "g1", confidence: 1 };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/text")) return new Response(JSON.stringify({ doc_id: "D", pages: [{ index: 0, paragraphs: [] }], fonts: [] }), { status: 200 });
+      return new Response(JSON.stringify({ doc_id: "D", index: 0, paragraphs: [hidden] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await textStore.getState().load("D");
+    await textStore.getState().loadHidden("D", 0);
+    await textStore.getState().loadHidden("D", 0);
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).endsWith("/pages/0/hidden-text"))).toHaveLength(1);
+    expect(hiddenParagraphsOf({ doc: "D", index: 0 })).toEqual([hidden]);
+    textStore.setState({ ocr: { "D:0": { status: "ready", paragraphs: [ocrAt("ocr0", 100, 300)] } } });
+    expect(pictureParagraphsOf({ doc: "D", index: 0 }).map((p) => p.id)).toEqual(["hg1", "ocr0"]);
+    expect(pictureParagraphsOf({ blank: { width: 1, height: 1 } })).toEqual([]);
   });
 });

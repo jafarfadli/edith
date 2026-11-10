@@ -4,21 +4,35 @@ import { useState } from "react";
 import { Loader2, ScanText, X } from "lucide-react";
 import type { Rect } from "@edith/ops";
 import { toScreen, type PageGeom, type Pt } from "@/lib/coords";
-import { isLowConfidence, ocrQualityMessage } from "@/lib/ocr";
+import { areaKey, isLowConfidence, ocrQualityMessage } from "@/lib/ocr";
 import { srcKey } from "@/lib/sources";
 import { t } from "@/lib/strings";
 import { useEditor } from "@/store/editor";
-import { imageTextOf, ocrStateOf, useText } from "@/store/text";
+import { imageTextOf, isPrint, ocrStateOf, PAGE_RUN, useText } from "@/store/text";
+import type { ImageTextRect } from "@/lib/api";
 import { ICON_SM } from "../../ui/icon";
 import { POPOVER } from "../../ui/styles";
 import { runPageOcr } from "./ocrRun";
 
 /** Gap (px) between the pill and the picture's top-right corner, inside the picture. */
 const INSET = 8;
-const NONE: Rect[] = [];
+/** Gap (px) for the small button of a picture that may hold text (it is often small: a logo, one line). */
+const SMALL_INSET = 2;
+const NONE: ImageTextRect[] = [];
 
-/** Over the top-right corner of a page's pictures of print (M5d): "Kenali teks (OCR)" until OCR ran (again after it
- *  failed), "Mengenali teks…" while it runs (any page of the document: one at a time), then what it found. */
+/** The top-right corner of `rects` as shown (the page may be turned), as CSS for a box placed inside it. */
+function corner(rects: Rect[], geom: PageGeom, scale: number, inset: number) {
+  const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
+  const x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
+  const corners = ([[x0, y0], [x1, y0], [x0, y1], [x1, y1]] as Pt[]).map((p) => toScreen(p, geom, scale));
+  const right = Math.max(...corners.map((c) => c[0])), top = Math.min(...corners.map((c) => c[1]));
+  return { right: `calc(100% - ${right - inset}px)`, top: top + inset } as const;
+}
+
+/** Over the top-right corner of a page's pictures of print (M5d): "Kenali teks (OCR)" until OCR of the page ran (again
+ *  after it failed), "Mengenali teks…" while it runs (any OCR of the document: one at a time), then what it found. Over
+ *  each picture that only maybe holds text (a logo with its name, one pictured line): a small button reading that
+ *  picture alone, until it was read. */
 export function OcrButton({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const src = useEditor((s) => {
     const entry = s.doc.pages.find((p) => p.pageKey === pageKey);
@@ -29,46 +43,65 @@ export function OcrButton({ pageKey, geom, scale }: { pageKey: string; geom: Pag
   const busy = useText((s) => !!src && Object.entries(s.ocr).some(([k, v]) => v.status === "loading" && k.startsWith(src.doc + ":")
     && k !== srcKey(src.doc, src.index)));
   const [hidden, setHidden] = useState(false);
-  if (!src || !rects.length || (hidden && state?.status === "ready")) return null;
-
-  // The top-right corner of the pictures, as shown (the page may be turned).
-  const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
-  const x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
-  const corners = ([[x0, y0], [x1, y0], [x0, y1], [x1, y1]] as Pt[]).map((p) => toScreen(p, geom, scale));
-  const right = Math.max(...corners.map((c) => c[0])), top = Math.min(...corners.map((c) => c[1]));
-  const place = { right: `calc(100% - ${right - INSET}px)`, top: top + INSET } as const;
+  if (!src || !rects.length) return null;
+  const print = rects.filter(isPrint);
+  const maybe = rects.filter((r) => !isPrint(r) && !state?.areas?.includes(areaKey(r)));
+  const loading = state?.status === "loading";
   const pill = `absolute z-[12] inline-flex h-7 max-w-[calc(100%-16px)] items-center gap-1.5 px-2.5 text-xs ${POPOVER}`;
 
-  if (state?.status === "ready") {
-    const why = ocrQualityMessage(state.quality ?? "empty", state.angle ?? 0);
-    const low = state.paragraphs.filter(isLowConfidence).length;
-    return (
-      // Clicks go through the pill to the page under it (an OCR paragraph or object in the picture's corner); only its
-      // close button takes them.
-      <div role="status" data-testid="ocr-status" title={why ?? t.ocr.foundHint} className={`${pill} pointer-events-none cursor-default pr-1`} style={place}>
-        <ScanText {...ICON_SM} className={why ? "text-muted" : "text-accent-text"} />
-        {why ? <span className="truncate text-muted">{t.ocr.short[state.quality as keyof typeof t.ocr.short] ?? why}</span> : (
-          <span className="truncate">
-            {t.ocr.found(state.paragraphs.length)}
-            {low > 0 && <span className="text-warn"> · {t.ocr.toCheck(low)}</span>}
-          </span>
-        )}
-        <button type="button" aria-label={t.ocr.hideStatus} title={t.ocr.hideStatus} data-testid="ocr-status-close"
-          className="pointer-events-auto grid h-5 w-5 shrink-0 place-items-center rounded text-muted hover:bg-line hover:text-ink"
-          onPointerDown={(e) => e.stopPropagation()} onClick={() => setHidden(true)}>
-          <X size={12} strokeWidth={1.75} aria-hidden />
+  let main: React.ReactNode = null;
+  if (print.length && !(hidden && state?.full && !loading)) {
+    const place = corner(print, geom, scale, INSET);
+    if (state?.full && !loading) {
+      const why = ocrQualityMessage(state.quality ?? "empty", state.angle ?? 0);
+      const low = state.paragraphs.filter(isLowConfidence).length;
+      main = (
+        // Clicks go through the pill to the page under it (an OCR paragraph or object in the picture's corner); only its
+        // close button takes them.
+        <div role="status" data-testid="ocr-status" title={why ?? t.ocr.foundHint} className={`${pill} pointer-events-none cursor-default pr-1`} style={place}>
+          <ScanText {...ICON_SM} className={why ? "text-muted" : "text-accent-text"} />
+          {why ? <span className="truncate text-muted">{t.ocr.short[state.quality as keyof typeof t.ocr.short] ?? why}</span> : (
+            <span className="truncate">
+              {t.ocr.found(state.paragraphs.length)}
+              {low > 0 && <span className="text-warn"> · {t.ocr.toCheck(low)}</span>}
+            </span>
+          )}
+          <button type="button" aria-label={t.ocr.hideStatus} title={t.ocr.hideStatus} data-testid="ocr-status-close"
+            className="pointer-events-auto grid h-5 w-5 shrink-0 place-items-center rounded text-muted hover:bg-line hover:text-ink"
+            onPointerDown={(e) => e.stopPropagation()} onClick={() => setHidden(true)}>
+            <X size={12} strokeWidth={1.75} aria-hidden />
+          </button>
+        </div>
+      );
+    } else {
+      const running = loading && state?.running === PAGE_RUN;
+      main = (
+        <button type="button" data-testid="ocr-button" title={t.ocr.hint} disabled={loading || busy} aria-busy={running}
+          className={`${pill} font-medium transition-colors hover:bg-line disabled:cursor-default disabled:hover:bg-raised`} style={place}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => { void runPageOcr(src.doc, src.index); }}>
+          {running ? <Loader2 {...ICON_SM} className="animate-spin text-accent-text" /> : <ScanText {...ICON_SM} className="text-accent-text" />}
+          {running ? t.ocr.running : t.ocr.run}
         </button>
-      </div>
-    );
+      );
+    }
   }
-  const running = state?.status === "loading";
   return (
-    <button type="button" data-testid="ocr-button" title={t.ocr.hint} disabled={running || busy} aria-busy={running}
-      className={`${pill} font-medium transition-colors hover:bg-line disabled:cursor-default disabled:hover:bg-raised`} style={place}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={() => { void runPageOcr(src.doc, src.index); }}>
-      {running ? <Loader2 {...ICON_SM} className="animate-spin text-accent-text" /> : <ScanText {...ICON_SM} className="text-accent-text" />}
-      {running ? t.ocr.running : t.ocr.run}
-    </button>
+    <>
+      {main}
+      {maybe.map((r) => {
+        const running = loading && state?.running === areaKey(r);
+        return (
+          <button key={areaKey(r)} type="button" data-testid="ocr-maybe" aria-label={t.ocr.maybe} title={t.ocr.maybe}
+            disabled={loading || busy} aria-busy={running}
+            className={`absolute z-[12] grid h-6 w-6 place-items-center ${POPOVER} transition-colors hover:bg-line disabled:cursor-default disabled:hover:bg-raised`}
+            style={corner([r], geom, scale, SMALL_INSET)}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => { void runPageOcr(src.doc, src.index, { x: r.x, y: r.y, w: r.w, h: r.h }); }}>
+            {running ? <Loader2 {...ICON_SM} className="animate-spin text-accent-text" /> : <ScanText {...ICON_SM} className="text-accent-text" />}
+          </button>
+        );
+      })}
+    </>
   );
 }

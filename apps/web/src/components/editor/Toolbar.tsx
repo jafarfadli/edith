@@ -2,7 +2,7 @@
 
 import {
   ArrowUpRight, Check, Circle, Cloud, Crop, Eraser, EyeOff, Highlighter, ImagePlus, LayoutGrid, MousePointer2, Pencil, Pentagon,
-  Redo2, Signature, Slash, Spline, Square, Stamp, Strikethrough, Type, Underline, Undo2, X, type LucideIcon,
+  Redo2, ScanText, Signature, Slash, Spline, Square, Stamp, Strikethrough, Type, Underline, Undo2, X, type LucideIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import type { ContentOp } from "@edith/ops";
@@ -63,6 +63,7 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
         <Sep />
         <ToolButton tool="select" label={t.editor.select} icon={MousePointer2} active={tool} />
         <ToolButton tool="text" label={t.editor.text} icon={Type} active={tool} />
+        <ToolButton tool="ocr" label={t.ocr.areaTool} icon={ScanText} active={tool} />
         <SplitButton label={t.editor.erase} active={tool} onPick={pick} options={[
           { tool: "whiteout", label: t.editor.whiteout, icon: Eraser, keys: toolKey("whiteout") },
           { tool: "redact", label: t.editor.redact, icon: EyeOff },
