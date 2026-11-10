@@ -15,7 +15,8 @@ from edith.fonts import FontRegistry
 from edith.settings import Settings
 from tests.pdfs import (SCAN_BODY, SCAN_ROWS, SCAN_TABLE, SCAN_TABLE_RECT, SCAN_TITLE, make_raster_text_pdf,
                         make_scan_form_pdf, make_pdf, scan_form_words,
-                        make_lshape_scan_pdf, LSHAPE_CORNER)
+                        make_lshape_scan_pdf, LSHAPE_CORNER, SMALL_FOOT, SMALL_ITEMS, SMALL_ROWS, make_small_form_pdf,
+                        small_form_words)
 from tests.test_documents import upload
 
 HAVE_TESSERACT = ocr.available()
@@ -411,3 +412,107 @@ def test_covers_are_per_line_and_leave_other_text_alone():
             for i, w in enumerate(words):
                 if i not in own:
                     assert not c.intersects(w[2]), (text(p), w[0])
+
+
+# --- the second reading (_reread) ---------------------------------------------------------------------------------------
+
+def test_unsure_stretches_end_at_wide_gaps_and_least_sure_come_first():
+    """A form row "Nama  :  ……  Opsi:" is one Tesseract line; only its unsure stretch is read again, alone."""
+    w = ocr.Word
+    words = [(w("Nama", 96, (10, 10, 50, 22), (1, 1, 1)), 0), (w("ORTU", 80, (55, 10, 90, 22), (1, 1, 1)), 0),
+             (w("Opsi:", 49, (300, 10, 340, 22), (1, 1, 1)), 0),
+             (w("Alamat", 97, (10, 40, 60, 52), (1, 1, 2)), 0), (w(":", 20, (100, 40, 102, 52), (1, 1, 2)), 0)]
+    assert [[v.text for v in ws] for _, ws in ocr._unsure(words)] == [["Opsi:"], ["Nama", "ORTU"]]
+
+
+def _form_row() -> tuple[np.ndarray, list[tuple[ocr.Word, int]]]:
+    """A word's strokes (x 20–80) between leader dots, and a second, sure word further down."""
+    grey = np.full((120, 300), 250, dtype=np.uint8)
+    for x in range(20, 80, 8):
+        grey[20:40, x:x + 3] = 10
+    for x in list(range(0, 18, 6)) + list(range(84, 296, 6)):
+        grey[37:40, x:x + 2] = 10
+    grey[80:100, 20:60] = 10
+    return grey, [(ocr.Word("OPSI", 49, (19, 19, 81, 41), (1, 1, 1)), 0),
+                  (ocr.Word("Nama", 96, (19, 79, 61, 101), (1, 1, 2)), 0)]
+
+
+def test_a_stretch_is_read_again_without_the_ink_around_it(monkeypatch):
+    grey, words = _form_row()
+    seen = []
+
+    def fake(png, dpi, timeout, cmd, psm=3):
+        sheet = pymupdf.Pixmap(png)
+        ink = np.frombuffer(sheet.samples, dtype=np.uint8).reshape(sheet.height, sheet.width) < 128
+        seen.append((psm, int(ink.sum())))
+        ys, xs = np.nonzero(ink)
+        return [ocr.Word("Opsi:", 96, (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1), (1, 1, 1))]
+    monkeypatch.setattr(ocr, "run_tesseract", fake)
+    out = ocr._reread(words, [_region(grey)], "tesseract", lambda: 20.0)
+    assert seen == [(6, int((grey[19:41, 19:81] < 128).sum()))]  # one sheet, the word's strokes only: no dots
+    assert [(v.text, v.conf, v.box, v.line) for v, _ in out] == [("Opsi:", 96, (20, 20, 79, 40), (1, 1, 1)),
+                                                                ("Nama", 96, (19, 79, 61, 101), (1, 1, 2))]
+
+
+def test_the_first_reading_stays_unless_the_second_is_surer_and_junk_that_reads_as_nothing_goes(monkeypatch):
+    grey, words = _form_row()
+    junk = (ocr.Word("ANN", 12, (200, 30, 210, 41), (1, 1, 3)), 0)
+    unsure = (ocr.Word("Ijin", 60, (100, 80, 130, 101), (1, 1, 4)), 0)
+    answers = {}
+
+    def fake(png, dpi, timeout, cmd, psm=3):
+        return answers["sheet"]
+    monkeypatch.setattr(ocr, "run_tesseract", fake)
+    answers["sheet"] = []  # nothing read at all: the junk goes, the words that hold something stay
+    out = ocr._reread(words + [junk, unsure], [_region(grey)], "tesseract", lambda: 20.0)
+    assert [v.text for v, _ in out] == ["OPSI", "Nama", "Ijin"]
+    answers["sheet"] = [ocr.Word("0PSI", 30, (8, 8, 70, 30), (1, 1, 1))]  # less sure than the first reading
+    assert [v.text for v, _ in ocr._reread(words, [_region(grey)], "tesseract", lambda: 20.0)] == ["OPSI", "Nama"]
+
+
+def test_the_second_reading_needs_time_and_its_failure_keeps_the_first(monkeypatch):
+    grey, words = _form_row()
+    calls = []
+
+    def failing(png, dpi, timeout, cmd, psm=3):
+        calls.append(timeout)
+        raise OcrTimeout("slow")
+    monkeypatch.setattr(ocr, "run_tesseract", failing)
+    assert ocr._reread(words, [_region(grey)], "tesseract", lambda: ocr.REREAD_TIME - 0.1) == words and not calls
+    assert ocr._reread(words, [_region(grey)], "tesseract", lambda: 25.0) == words
+    assert calls == [ocr.REREAD_SECONDS]  # bounded on its own, whatever the page has left
+    assert ocr._reread(words, [_region(grey)], "tesseract", lambda: 3.0) == words
+    assert calls[-1] == pytest.approx(3.0 - ocr.REREAD_SPARE)
+
+
+def _small_form_truth() -> set[str]:
+    rows = [label for label, _ in SMALL_ROWS] + [extra.replace("…", "...") for _, extra in SMALL_ROWS if extra]
+    return set(rows + [item for row in SMALL_ITEMS for item in row] + list(SMALL_FOOT) + ["Mohon dibuatkan:"])
+
+
+@needs_tesseract
+@pytest.mark.parametrize("family", ["Caladea", "Tinos"])
+def test_small_print_between_leaders_and_checkboxes_is_read_right_and_only_doubtful_text_is_flagged(family):
+    """Small print between dot leaders and after checkboxes (as on scanned office forms): Tesseract's first reading of
+    "Opsi:", "Lain-lain:", "Ijin …" is unsure or wrong there; the second, alone, is right. A paragraph is as sure as its
+    least sure word, and "kurang yakin" (< 0.75) is never shown on a paragraph read right (measured: 0 of 308)."""
+    page = pymupdf.open(stream=make_small_form_pdf(family), filetype="pdf")[0]
+    words: list = []
+    ps = ocr.ocr_page(page, registry(), ocr.tesseract_cmd(), words_out=words)["paragraphs"]
+    texts = {text(p): p for p in ps}
+    for must in ("Opsi:", "Lain-lain:", "Ijin keramaian acara warga", "Surat Keterangan Domisili",
+                 "(...) Aktif atau (...) Pensiun"):
+        assert must in texts and texts[must]["confidence"] >= 0.75, (must, sorted(texts))
+    right = _small_form_truth()
+    assert all(p["confidence"] >= 0.75 for t, p in texts.items() if t in right)
+    truth = [(t.replace("…", "..."), b) for t, b in small_form_words(family) if t != ":"]  # lone colons: see README
+    hits = sum(any(w[0] == t and b.contains((w[2].tl + w[2].br) / 2) for w in words) for t, b in truth)
+    assert hits / len(truth) >= 0.9
+
+    def inside(w, p):
+        return any(pymupdf.Rect(ln["rect"]["x"], ln["rect"]["y"], ln["rect"]["x"] + ln["rect"]["w"],
+                                ln["rect"]["y"] + ln["rect"]["h"]).contains((w[2].tl + w[2].br) / 2) for ln in p["lines"])
+    for p in ps:
+        own = [w[1] for w in words if inside(w, p) and any(c.isalnum() for c in w[0])]
+        if own:
+            assert p["confidence"] == round(min(own) / 100, 2)

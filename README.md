@@ -24,12 +24,14 @@ Mengedit paragraf hasil OCR membuat objek `text.ocr_edit`: area tulisan lama (ti
 
 Batasnya: halaman yang diputar di dalam PDF-nya, hasil pindai yang miring lebih dari 1,5°, dan gambar yang terlalu buram dilaporkan, bukan dibaca. Font hasil OCR ditebak (Arimo untuk sans, Tinos untuk serif, tebal dari ketebalan garis huruf), ukuran dari tinggi huruf, warna dari tinta. Kualitas pada formulir sintetis (`scripts/ocr_accuracy.py`): 93–95 % kata tepat, tepi kotak kata meleset 0,3–0,7 pt, ukuran huruf tepat.
 
+**Kurang yakin.** Tesseract ragu pada kata yang tepat bila di sebelahnya ada titik-titik isian, kotak centang atau "(…)" (pada formulir pindaian: "Aktif" 7 %, "Ijin" 37 %; "Opsi:" terbaca "OPSI", "Lain-lain:" terbaca "RAFT A"). Karena itu bagian baris yang punya kata di bawah 85 % dibaca sekali lagi tanpa apa pun di sekitarnya (titik-titik, kotak dan garis dihapus dari potongannya; satu kali jalan Tesseract untuk semua potongan, +0,2–0,5 detik per halaman) dan bacaan yang lebih yakin dipakai. Keyakinan paragraf = keyakinan katanya yang paling ragu, jadi label kuning "kurang yakin" (< 75 %) berarti ada kata yang perlu dicek: setelah dibaca ulang, kata di bawah 75 % selalu salah dan paragraf yang terbaca benar tidak pernah kuning pada semua formulir uji. Yang tetap lolos tanpa tanda: tanda baca yang tidak terbaca sama sekali (garis miring di "Tlp / HP", titik dua yang berdiri sendiri).
+
 Catatan perilaku (review M5d):
 
 - **Tutupan per baris.** Setiap baris paragraf OCR punya persegi tutupannya sendiri (`covers`), dari tinta kata-kata baris itu: di samping baris terakhir yang pendek tidak ada yang ditutup, jadi teks lain, kotak centang atau stempel di pojok itu tetap terlihat. Tutupan berhenti sebelum tinta paragraf lain dan kotak centang; baris yang di dalam tintanya ada kata paragraf lain tidak ditutup sama sekali.
 - **Tutupan buram, bukan penghapus.** Persegi tutupan menutupi gambar lama; piksel aslinya tetap ada di dalam gambar PDF (bisa diekstrak). Untuk benar-benar menghapus, pakai Redaksi. Teks tak terlihat di bawah tutupan (lapisan OCR lama hasil pemindai) dihapus saat ekspor, jadi kata lama tidak ikut tersalin atau ditemukan.
 - **Batas server.** Halaman dengan lebih dari 64 gambar atau lebih dari 4000 kata ditolak (`ocr_too_complex`). Batas waktu (bawaan 30 detik) berlaku untuk seluruh halaman, termasuk mencari gambarnya. Menutup tab tidak membatalkan OCR yang sedang berjalan: slotnya baru lepas saat OCR selesai atau batas waktu habis.
-- **Hasil bisa sedikit berbeda antar-jalan.** Kata yang dibaca ulang (di dalam atau sesudah titik-titik isian) hanya dibaca bila waktu masih cukup, jadi pada server yang sibuk hasilnya bisa kurang satu dua kata dan nomor `ocrN` bisa bergeser.
+- **Hasil bisa sedikit berbeda antar-jalan.** Kata yang dibaca ulang (di dalam atau sesudah titik-titik isian, dan bacaan kedua kata yang ragu) hanya dibaca bila waktu masih cukup, jadi pada server yang sibuk hasilnya bisa kurang satu dua kata, lebih banyak yang kuning, dan nomor `ocrN` bisa bergeser.
 
 ## Struktur
 
@@ -74,10 +76,10 @@ Melihat pembagian paragraf sebuah PDF (kotak + id per paragraf, PNG per halaman)
 
     cd apps/api && uv run python -m scripts.paragraph_overlay file.pdf /tmp/overlay
 
-Kualitas OCR (tabel varian formulir pindaian sintetis, atau overlay hasil OCR sebuah PDF):
+Kualitas OCR (tabel varian formulir pindaian sintetis, termasuk formulir huruf kecil dengan titik-titik dan kotak centang, dengan paragraf kuning yang benar dan paragraf salah yang tidak kuning; atau overlay hasil OCR sebuah PDF, dibandingkan dengan kata-kata yang dicek tangan bila ada `--truth`, JSON `[[teks, x, y], …]` titik tengah tiap kata dalam pt):
 
     cd apps/api && uv run python -m scripts.ocr_accuracy [/tmp/ocr]
-    cd apps/api && uv run python -m scripts.ocr_accuracy --pdf file.pdf /tmp/ocr
+    cd apps/api && uv run python -m scripts.ocr_accuracy --pdf file.pdf /tmp/ocr [--truth kata.json]
 
 Setelah mengubah `apps/api/edith/ops.py`:
 

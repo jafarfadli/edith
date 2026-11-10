@@ -1055,3 +1055,81 @@ def make_lshape_scan_pdf(dpi: int = 200) -> bytes:
     q = out.new_page(width=595, height=842)
     q.insert_image(q.rect, stream=pix.tobytes("png"))
     return out.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+# A small-print form (invented content): 7.5–10 pt labels between dot leaders ("NIK : ……… Opsi: ………"), checkboxes drawn
+# before list items, rasterised coarsely (218 dpi, grey) as a scanned office form often is. What makes Tesseract unsure
+# there is the leaders' and boxes' ink next to the words, not the words. small_form_words() gives the ground truth.
+SMALL_ROWS = (("Nama Lengkap", None), ("NIK", "Opsi:"), ("Tempat/ Tgl. Lahir", None), ("Nomor Tlp / HP", None),
+              ("E-mail", None), ("Pekerjaan & Status", "(…) Aktif atau (…) Pensiun"), ("Alamat Kantor", None))
+SMALL_ITEMS = (("Surat Keterangan Domisili", "Rekomendasi dari Ketua RT"), ("Ijin keramaian acara warga", "Pengantar SKCK"),
+               ("Keterangan Tidak Mampu", "Lain-lain:"))
+SMALL_FOOT = ("Untuk Keperluan:", "Ditujukan kepada:")
+SMALL_RECT = (60, 90, 545, 335)  # the picture (pt)
+
+
+def _small_form(doc: pymupdf.Document, family: str) -> tuple[pymupdf.Page, list[tuple[str, pymupdf.Rect]]]:
+    page = doc.new_page(width=612, height=792)
+    fonts = {}
+    for name, style in (("R", "Regular"), ("B", "Bold")):
+        page.insert_font(fontname=name, fontfile=str(FONT_FILES / f"{family}-{style}.ttf"))
+        fonts[name] = pymupdf.Font(fontfile=str(FONT_FILES / f"{family}-{style}.ttf"))
+    words: list[tuple[str, pymupdf.Rect]] = []
+
+    def text(x: float, y: float, s: str, size: float, name: str = "R") -> float:
+        """Writes `s` with its baseline at y; its words (not leader dots) go into the truth. Returns its end."""
+        page.insert_text((x, y), s, fontname=name, fontsize=size)
+        font, at = fonts[name], x
+        for part in s.split(" "):
+            w = font.text_length(part, size)
+            if part and part.strip("."):
+                words.append((part, pymupdf.Rect(at, y - 0.8 * size, at + w, y + 0.2 * size)))
+            at += w + font.text_length(" ", size)
+        return x + font.text_length(s, size)
+
+    def leader(x0: float, x1: float, y: float, size: float) -> None:
+        n = int((x1 - x0) / fonts["R"].text_length(".", size))
+        text(x0, y, "." * n, size)
+
+    for k, (label, extra) in enumerate(SMALL_ROWS):
+        y = 110 + 17 * k
+        text(90, y, label, 10)
+        text(205, y, ":", 10)
+        if extra is None:
+            leader(218, 520, y, 10)
+        elif extra.startswith("("):
+            leader(218, 330, y, 10)
+            text(372, y, extra, 10)
+        else:
+            leader(218, 320, y, 10)
+            end = text(321, y, extra, 10)
+            leader(end + 1, 520, y, 10)
+    text(75, 240, "Mohon dibuatkan:", 10, "B")
+    for k, row in enumerate(SMALL_ITEMS):
+        y = 256 + 10 * k
+        for x, item in zip((120, 330), row):
+            page.draw_rect(pymupdf.Rect(x, y - 5.6, x + 5.2, y - 0.4), color=(0, 0, 0), width=0.5)
+            end = text(x + 14, y, item, 7.5)
+            if item.endswith(":"):
+                leader(end + 2, 520, y, 7.5)
+    for k, label in enumerate(SMALL_FOOT):
+        y = 310 + 17 * k
+        end = text(75, y, label, 10)
+        leader(end + 2, 525, y, 10)
+    return page, words
+
+
+def small_form_words(family: str = "Caladea") -> list[tuple[str, pymupdf.Rect]]:
+    """The words of the small-print form (make_small_form_pdf) and their boxes (pt): not its leaders nor checkboxes."""
+    return _small_form(pymupdf.open(), family)[1]
+
+
+def make_small_form_pdf(family: str = "Caladea", dpi: int = 218) -> bytes:
+    """The small-print form as an image-only page: rasterised in grey at `dpi`, in SMALL_RECT."""
+    doc = pymupdf.open()
+    page, _ = _small_form(doc, family)
+    pix = page.get_pixmap(dpi=dpi, clip=SMALL_RECT, colorspace=pymupdf.csGRAY, alpha=False)
+    scan = pymupdf.open()
+    target = scan.new_page(width=612, height=792)
+    target.insert_image(pymupdf.Rect(SMALL_RECT), stream=pix.tobytes("png"))
+    return scan.tobytes(garbage=3, deflate=True, no_new_id=True)
