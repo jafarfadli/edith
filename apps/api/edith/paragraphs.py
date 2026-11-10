@@ -611,7 +611,8 @@ def _finish_decor(run: dict) -> None:
         geo = run.pop(f"_{kind}", None)
         if geo is not None:
             run[f"{kind}Top"] = round(geo[0] / size, 3)
-            thickness = thickness if thickness is not None else round(geo[1] / size, 3)
+            # Never 0 (Run.decorThickness > 0): a thin bar under huge text rounds to the thinnest one we keep.
+            thickness = thickness if thickness is not None else max(0.001, round(geo[1] / size, 3))
     if thickness is not None:
         run["decorThickness"] = thickness
     color = run.pop("_decorColor", None)

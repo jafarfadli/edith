@@ -166,6 +166,31 @@ def test_an_unsafe_mark_stays(ctx):
     assert has(page, G3_BAR) and has(page, (100.0, 241.4, 100.4, 241.7))
 
 
+@pytest.mark.parametrize("height", [0.0, 0.004, 0.05])
+def test_a_hairline_fill_under_text_is_no_underline_and_the_runs_stay_valid(ctx, client, height):
+    """A zero-height (or hairline) bar under a word: no decoration of thickness 0 (Run.decorThickness > 0), so GET /text
+    gives runs the export accepts."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 100), "Garis tipis sekali", fontname="helv", fontsize=12)
+    x1 = 72 + HELV.text_length("Garis", 12)
+    page.draw_rect(pymupdf.Rect(72, 101.2, x1, 101.2 + height), color=None, fill=(0, 0, 0))
+    data = doc.tobytes()
+    doc_id = client.post("/documents", files={"file": ("h.pdf", data, "application/pdf")}).json()["doc_id"]
+    r = client.get(f"/documents/{doc_id}/text")
+    assert r.status_code == 200
+    g0 = r.json()["pages"][0]["paragraphs"][0]
+    for run_ in g0["runs"]:
+        Run.model_validate(run_)
+        assert not run_.get("underline")
+    op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+          "box": {"rect": {"x": 72, "y": 88, "w": 300, "h": 16}, "align": "left", "lineHeight": 14,
+                  "paragraphs": [g0["runs"]], "layout": [{"baseline": 12.0, "segments": [
+                      {"x": 0, "text": "Garis tipis", "runIndex": 0}]}]}}
+    out = client.post(f"/documents/{doc_id}/export", json={"ops": [op], "paragraphs_version": r.json()["paragraphsVersion"]})
+    assert out.status_code == 200, out.text
+
+
 def test_a_link_over_underlined_text_survives_an_edit_of_it(ctx):
     """The decoration pass and the text pass both apply redactions (which delete the links they touch) and put the links
     back: the second must see the links the first restored (an underlined mailto link: Surat Keterangan Magang)."""

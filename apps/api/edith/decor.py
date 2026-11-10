@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import pymupdf
 
+LINE_MIN = 0.1        # pt: thinner paint (a zero-height fill, a hairline) is no decoration …
 LINE_MAX = 3.0        # pt: an underline or strike is at most this thick …
 LINE_EM = 0.15        # … and this share of the text size
 AXIS_TOL = 0.1        # pt: how far a stroked decoration's ends may differ in y
@@ -96,9 +97,9 @@ class PageMarks:
                 color = _hex(path.get("fill"))
                 for it in items:
                     r = _rect_of(it)
-                    if color and r is not None and r.width > 0.5:
+                    if color and r is not None and r.width > 0.5 and r.height >= LINE_MIN:
                         self.marks.append(Mark(r, r.height <= LINE_MAX, color, r + (-PAD, -PAD, PAD, PAD)))
-            elif kind == "s" and path.get("stroke_opacity", 1) > 0 and 0 < (path.get("width") or 0) <= LINE_MAX:
+            elif kind == "s" and path.get("stroke_opacity", 1) > 0 and LINE_MIN <= (path.get("width") or 0) <= LINE_MAX:
                 color, w = _hex(path.get("color")), path["width"]
                 for x0, x1, y in _strokes(items) or []:
                     if color and x1 - x0 > 0.5:
