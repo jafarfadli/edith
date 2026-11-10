@@ -166,6 +166,35 @@ def make_decor_pdf(extra: bool = False) -> bytes:
     return doc.tobytes(garbage=3, deflate=True)
 
 
+FORMAT_PIECES = (("Peserta ", "Regular", False), ("Budi Santoso", "BoldItalic", True), (" wajib ", "Regular", False),
+                 ("hadir", "Italic", False), (" tepat waktu.", "Regular", False))
+FORMAT_NOTE = "Catatan ini tetap bergaris bawah"
+
+
+def make_formatting_pdf() -> bytes:
+    """apps/web/e2e/fixtures/formatting.pdf: one 14 pt line at baseline 120 from x 56 in embedded Arimo styles,
+    FORMAT_PIECES (text, style, underlined: a Word-like bar at baseline + 1.4, 0.9 thick, under "Budi Santoso"); a table
+    border just below it (y 127, x 40 … 555); FORMAT_NOTE (baseline 170) underlined whole, to stay as it is."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    fonts = {}
+    for style in ("Regular", "Bold", "Italic", "BoldItalic"):
+        fonts[style] = pymupdf.Font(fontfile=str(FONT_FILES / f"Arimo-{style}.ttf"))
+        page.insert_font(fontname=f"A{style}", fontfile=str(FONT_FILES / f"Arimo-{style}.ttf"))
+    x = 56.0
+    for text, style, underlined in FORMAT_PIECES:
+        page.insert_text((x, 120), text, fontname=f"A{style}", fontsize=14)
+        w = fonts[style].text_length(text, 14)
+        if underlined:
+            page.draw_rect(pymupdf.Rect(x, 121.4, x + w, 122.3), color=None, fill=(0, 0, 0))
+        x += w
+    page.draw_line((40, 127), (555, 127), color=(0.3, 0.3, 0.3), width=0.5)
+    page.insert_text((56, 170), FORMAT_NOTE, fontname="ARegular", fontsize=14)
+    page.draw_rect(pymupdf.Rect(56, 171.4, 56 + fonts["Regular"].text_length(FORMAT_NOTE, 14), 172.3), color=None, fill=(0, 0, 0))
+    doc.subset_fonts()  # as Word embeds them: what the page uses (typed letters a subset lacks fall back)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
 def make_layout_pdf() -> bytes:
     """Wrapped paragraphs (standard Helvetica/Times/Courier, every alignment) plus hand-broken lines."""
     doc = pymupdf.open()

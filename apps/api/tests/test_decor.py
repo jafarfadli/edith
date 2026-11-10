@@ -166,6 +166,20 @@ def test_an_unsafe_mark_stays(ctx):
     assert has(page, G3_BAR) and has(page, (100.0, 241.4, 100.4, 241.7))
 
 
+def test_a_page_with_its_own_pending_redactions_keeps_its_marks(ctx):
+    """The decoration pass would apply the PDF's own unapplied redaction annotations in its mode (line art they cover
+    goes): on such a page it does not run, the marks stay (as before decorations were moved)."""
+    doc = pymupdf.open(stream=make_decor_pdf(), filetype="pdf")
+    doc[0].add_redact_annot(pymupdf.Rect(400, 500, 450, 520))
+    op = g0_edit([run("Alpha "), run("underlined ", **UL)],
+                 [{"x": 0, "text": "Alpha ", "runIndex": 0}, {"x": HELV.text_length("Alpha ", 12), "text": "underlined", "runIndex": 1}],
+                 run(DECOR_G0[1], **UL))
+    page = reload(bake(doc.tobytes(), ops(op), ctx))[0]
+    assert has(page, G0_LINE1) and has(page, G0_LINE2)
+    for r in NEIGHBOURS:
+        assert has(page, r), r
+
+
 def test_a_line_kept_with_its_underline_keeps_it_and_is_not_redrawn(ctx):
     data = make_decor_pdf()
     p = extract_paragraphs(pymupdf.open(stream=data, filetype="pdf")[0], lambda s: {"name": s["font"]})[0]
@@ -208,6 +222,14 @@ def test_decor_bands_use_the_originals_geometry_and_colour():
     assert bands["bg"][1] == "#00ff00"
     plain = {k: rect for k, rect, _ in decor_bands(10, 100, 50, Run.model_validate(run("x", underline=True)))}
     assert plain["underline"] == pymupdf.Rect(10, 100.9, 60, 101.62)  # the defaults: 0.075 / 0.06 × size
+
+
+def test_decor_fixture_is_current():
+    """apps/web/src/lib/fixtures/decor.json (regenerate: cd apps/api && uv run python -m scripts.decor_fixture)."""
+    import json
+
+    from scripts.decor_fixture import OUT, build
+    assert json.loads(OUT.read_text()) == json.loads(json.dumps(build()))
 
 
 def test_a_cropped_page_moves_the_right_marks(ctx):

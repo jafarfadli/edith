@@ -76,6 +76,7 @@ class PageMarks:
 
     def __init__(self, page: pymupdf.Page):
         self.marks: list[Mark] = []
+        self.claimed: set[int] = set()  # id() of the marks a line's text already has (see decorate): one owner each
         self._extents: list[pymupdf.Rect] = []  # every drawn piece (a subpath's bounds, without its stroke)
         for path in page.get_cdrawings():
             items = path["items"]
@@ -103,6 +104,13 @@ class PageMarks:
                     if color and x1 - x0 > 0.5:
                         r = pymupdf.Rect(x0, y - w / 2, x1, y + w / 2)
                         self.marks.append(Mark(r, True, color, r + (-w / 2 - PAD, -PAD, w / 2 + PAD, PAD)))
+        # get_cdrawings() also gives the appearances of annotations (a highlight, a square, a widget's border): no
+        # redaction removes those, they stay drawings (in _extents) but are no marks.
+        # (Not every page has them: OCR extracts paragraphs from a stand-in page of its own.)
+        annots = [pymupdf.Rect(a.rect) + (-1, -1, 1, 1) for a in (page.annots() if hasattr(page, "annots") else [])]
+        annots += [pymupdf.Rect(w.rect) + (-1, -1, 1, 1) for w in (page.widgets() if hasattr(page, "widgets") else [])]
+        if annots:
+            self.marks = [m for m in self.marks if not any(m.rect in a for a in annots)]
 
     def removable(self, mark: Mark) -> bool:
         """Removing `mark` removes nothing else: every drawn piece inside its removal rect is the mark itself (or the
@@ -145,7 +153,8 @@ def _edge(xs: list[float], x: float, tol: float) -> int | None:
 def decorate(chars: list[tuple[dict, float, float]], marks: list[Mark], page: PageMarks) -> dict[int, list[Decor]]:
     """Index of a character of one line → the decorations over it. `chars`: (rawdict char, its baseline y, its size).
     A mark decorates the characters whose middle it spans when both its ends sit on character edges of the line, it
-    covers ink, runs at most SPILL_EM past that ink and removing it is safe (PageMarks.removable)."""
+    covers ink, runs at most SPILL_EM past that ink and removing it is safe (PageMarks.removable). A mark decorates one
+    line only (the first that claims it: a duplicate of the text drawn again does not make it another line's)."""
     if not chars or not marks:
         return {}
     x0s = [c["bbox"][0] for c, _, _ in chars]
@@ -155,7 +164,7 @@ def decorate(chars: list[tuple[dict, float, float]], marks: list[Mark], page: Pa
     out: dict[int, list[Decor]] = {}
     for m in marks:
         r = m.rect
-        if r.y1 < top - 1 or r.y0 > bottom + 1 or r.x1 < x0s[0] - 1 or r.x0 > max(x1s) + 1:
+        if id(m) in page.claimed or r.y1 < top - 1 or r.y0 > bottom + 1 or r.x1 < x0s[0] - 1 or r.x0 > max(x1s) + 1:
             continue
         size = max(s for _, _, s in chars)
         tol = max(EDGE_TOL, EDGE_EM * size)
@@ -180,6 +189,7 @@ def decorate(chars: list[tuple[dict, float, float]], marks: list[Mark], page: Pa
                 kind = "bg"
         if kind is None or not page.removable(m):
             continue
+        page.claimed.add(id(m))
         for i in covered:
             out.setdefault(i, []).append(Decor(kind, m, r.y0 - chars[i][1], r.height))
     return out

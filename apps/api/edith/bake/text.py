@@ -93,7 +93,7 @@ def _joined(bands: list[tuple[pymupdf.Rect, str]]) -> list[tuple[pymupdf.Rect, s
     for rect, color in bands:
         last = out[-1] if out else None
         if (last and last[1] == color and abs(last[0].y0 - rect.y0) < 1e-3 and abs(last[0].y1 - rect.y1) < 1e-3
-                and -JOIN_GAP <= rect.x0 - last[0].x1 <= JOIN_GAP):
+                and last[0].x0 <= rect.x0 <= last[0].x1 + JOIN_GAP):  # touching, a small gap or overlapping (Tc < 0)
             out[-1] = (pymupdf.Rect(last[0].x0, rect.y0, max(last[0].x1, rect.x1), rect.y1), color)
         else:
             out.append((rect, color))
