@@ -123,6 +123,12 @@ test("any picture can be read: a picture's menu, its 'maybe' button and an area 
   const maybe = page.getByTestId("ocr-maybe");
   await expect(maybe).toHaveCount(2);
   await expect(maybe.first()).toHaveAttribute("aria-label", /mungkin berisi teks/);
+  // In the thin address picture ((140, 92)–(520, 106)) its button stays on the picture's height: the rule below shows.
+  const boxes = await maybe.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect));
+  const address = boxes.find((b) => b.top - box.y < 110 && b.left - box.x > 400)!;
+  expect(address.top - box.y).toBeGreaterThanOrEqual(90);
+  expect(address.bottom - box.y).toBeLessThanOrEqual(108);
+  expect(address.right - box.x).toBeLessThanOrEqual(520);
   await expect(page.getByTestId("ocr-button")).toHaveCount(0); // no picture of print: no page OCR
 
   // Right-click on the address picture: its menu reads it.

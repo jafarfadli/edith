@@ -20,13 +20,31 @@ const INSET = 8;
 const SMALL_INSET = 2;
 const NONE: ImageTextRect[] = [];
 
-/** The top-right corner of `rects` as shown (the page may be turned), as CSS for a box placed inside it. */
-function corner(rects: Rect[], geom: PageGeom, scale: number, inset: number) {
+/** The box of `rects` as shown (the page may be turned), in screen pixels. */
+function shown(rects: Rect[], geom: PageGeom, scale: number) {
   const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
   const x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
   const corners = ([[x0, y0], [x1, y0], [x0, y1], [x1, y1]] as Pt[]).map((p) => toScreen(p, geom, scale));
-  const right = Math.max(...corners.map((c) => c[0])), top = Math.min(...corners.map((c) => c[1]));
+  return { right: Math.max(...corners.map((c) => c[0])), top: Math.min(...corners.map((c) => c[1])), bottom: Math.max(...corners.map((c) => c[1])) };
+}
+
+/** The top-right corner of `rects` as shown, as CSS for a box placed inside it. */
+function corner(rects: Rect[], geom: PageGeom, scale: number, inset: number) {
+  const { right, top } = shown(rects, geom, scale);
   return { right: `calc(100% - ${right - inset}px)`, top: top + inset } as const;
+}
+
+/** Size (px) of the small button of a picture that may hold text, and the least it shrinks to in a thin picture. */
+const SMALL = 24, SMALLEST = 16;
+
+/** The small button inside the picture's top-right corner; in a picture too thin for it (one pictured line) smaller
+ *  and centred on the picture's height, so it covers neither what lies above nor below (a rule under a letterhead). */
+function smallPlace(r: Rect, geom: PageGeom, scale: number) {
+  const { right, top, bottom } = shown([r], geom, scale);
+  const h = bottom - top;
+  const size = Math.round(Math.min(SMALL, Math.max(SMALLEST, h - 2 * SMALL_INSET)));
+  const y = h >= size + 2 * SMALL_INSET ? top + SMALL_INSET : top + (h - size) / 2;
+  return { right: `calc(100% - ${right - SMALL_INSET}px)`, top: y, width: size, height: size } as const;
 }
 
 /** Over the top-right corner of a page's pictures of print (M5d): "Kenali teks (OCR)" until OCR of the page ran (again
@@ -94,8 +112,8 @@ export function OcrButton({ pageKey, geom, scale }: { pageKey: string; geom: Pag
         return (
           <button key={areaKey(r)} type="button" data-testid="ocr-maybe" aria-label={t.ocr.maybe} title={t.ocr.maybe}
             disabled={loading || busy} aria-busy={running}
-            className={`absolute z-[12] grid h-6 w-6 place-items-center ${POPOVER} transition-colors hover:bg-line disabled:cursor-default disabled:hover:bg-raised`}
-            style={corner([r], geom, scale, SMALL_INSET)}
+            className={`absolute z-[12] grid place-items-center ${POPOVER} transition-colors hover:bg-line disabled:cursor-default disabled:hover:bg-raised`}
+            style={smallPlace(r, geom, scale)}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => { void runPageOcr(src.doc, src.index, { x: r.x, y: r.y, w: r.w, h: r.h }); }}>
             {running ? <Loader2 {...ICON_SM} className="animate-spin text-accent-text" /> : <ScanText {...ICON_SM} className="text-accent-text" />}

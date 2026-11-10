@@ -103,6 +103,9 @@ test("in the editor: select all, Delete, click away deletes the text (not discar
     await expect(editor).toBeVisible({ timeout: 1000 });
   }).toPass();
   await expect(editor).toContainText("Paragraf kedua");
+  // The editor takes focus a frame or two after it shows (Tiptap focuses after attaching, in requestAnimationFrame):
+  // keys pressed before that went to the page (select all selected the page, Delete did nothing, nothing landed).
+  await expect(editor).toBeFocused();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Delete");
   await shot(page, "3-editor-empty");
@@ -180,9 +183,15 @@ test("Delete on a paragraph OCR read covers its picture and draws nothing", asyn
   test.skip(!hasTesseract() && process.env.EDITH_REQUIRE_TESSERACT !== "1", "tesseract with ind+eng is not installed");
   // apps/api/scripts/e2e_scan_pdf.py: the body paragraph's three lines start at (72, 300), 15 pt apart.
   const SCAN = path.join(__dirname, "fixtures", "scan.pdf");
+  test.setTimeout(180_000); // may wait for a free OCR slot
   const box = await open(page, SCAN);
-  await page.getByTestId("ocr-button").click();
-  await expect(page.getByTestId("ocr-status")).toContainText(/Hasil OCR: \d+ paragraf/, { timeout: 45_000 });
+  // The server reads two pages at once (EDITH_OCR_SLOTS): with more tests reading in parallel it answers "ocr_busy" and
+  // the button comes back, as it does for a user, who tries again.
+  const button = page.getByTestId("ocr-button");
+  await expect(async () => {
+    if (await button.isVisible() && await button.isEnabled()) await button.click();
+    await expect(page.getByTestId("ocr-status")).toContainText(/Hasil OCR: \d+ paragraf/, { timeout: 15_000 });
+  }).toPass({ timeout: 120_000 });
   await page.getByTestId("ocr-status-close").click();
   await selectParagraph(page, box.x + 150, box.y + 300);
   await page.keyboard.press("Delete");
