@@ -101,7 +101,7 @@ def g0_edit(line1_runs: list[dict], line1_segments: list[dict], line2_run: dict,
     line2 = {"baseline": 26.0, "segments": [{"x": 0, "text": line2_run["text"].strip(), "runIndex": len(runs) - 1}]}
     if source2 is not None:
         line2["source"] = source2
-    return {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+    return {"id": "e", "type": "text.edit", "decorV": 1, "pageKey": "o0", "paragraphId": "g0",
             "box": {"rect": {"x": rect_x, "y": 88.0, "w": 300, "h": 30}, "align": "left", "lineHeight": 14,
                     "paragraphs": [runs], "layout": [{"baseline": 12.0, "segments": line1_segments}, line2]}}
 
@@ -134,6 +134,26 @@ def test_an_edit_moves_the_underline_with_its_word_and_leaves_every_other_line_a
     assert not dark(72 + w + HELV.text_length("underlined", 12) + 3)
 
 
+def test_an_edit_from_a_client_before_decorations_leaves_them_alone(ctx):
+    """No `decorV` (an old draft or tab): its runs never carry decorations. The marks stay, and a line it keeps
+    unchanged is kept although the original's runs are underlined (as before decorations were reported)."""
+    w = HELV.text_length("Alpha ", 12)
+    op = g0_edit([run("Alpha "), run("underlined ")],
+                 [{"x": 0, "text": "Alpha ", "runIndex": 0}, {"x": w, "text": "underlined", "runIndex": 1}],
+                 run(DECOR_G0[1]))
+    del op["decorV"]
+    data = make_decor_pdf()
+    page = reload(bake(data, ops(op), ctx))[0]
+    assert has(page, G0_LINE1) and has(page, G0_LINE2)
+    for r in NEIGHBOURS:
+        assert has(page, r), r
+    # Line 2 kept: its original glyphs stay (one "second" on the page, at its original place).
+    assert [w_[0] for w_ in page.get_text("words") if w_[4] == "second"] == pytest.approx([72.0], abs=0.01)
+    stamped = {**op, "decorV": 1}
+    page2 = reload(bake(data, ops(stamped), ctx))[0]
+    assert not has(page2, G0_LINE1) and not has(page2, G0_LINE2)  # stamped: the plain runs drop the underlines
+
+
 def test_an_edit_that_drops_the_underline_removes_it(ctx):
     w = HELV.text_length("Alpha ", 12)
     op = g0_edit([run("Alpha "), run("underlined ")],
@@ -147,7 +167,7 @@ def test_an_edit_that_drops_the_underline_removes_it(ctx):
 
 
 def test_deleting_a_paragraph_removes_its_decorations_only(ctx):
-    op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g1",
+    op = {"id": "e", "type": "text.edit", "decorV": 1, "pageKey": "o0", "paragraphId": "g1",
           "box": {"rect": {"x": 72, "y": 148, "w": 200, "h": 16}, "align": "left", "lineHeight": 14,
                   "paragraphs": [[run("")]], "layout": [{"baseline": 12.0, "segments": []}]}}
     page = reload(bake(make_decor_pdf(), ops(op), ctx))[0]
@@ -158,7 +178,7 @@ def test_deleting_a_paragraph_removes_its_decorations_only(ctx):
 
 
 def test_an_unsafe_mark_stays(ctx):
-    op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g3",
+    op = {"id": "e", "type": "text.edit", "decorV": 1, "pageKey": "o0", "paragraphId": "g3",
           "box": {"rect": {"x": 72, "y": 228, "w": 200, "h": 16}, "align": "left", "lineHeight": 14,
                   "paragraphs": [[run("")]], "layout": [{"baseline": 12.0, "segments": []}]}}
     page = reload(bake(make_decor_pdf(extra=True), ops(op), ctx))[0]
@@ -183,7 +203,7 @@ def test_a_hairline_fill_under_text_is_no_underline_and_the_runs_stay_valid(ctx,
     for run_ in g0["runs"]:
         Run.model_validate(run_)
         assert not run_.get("underline")
-    op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+    op = {"id": "e", "type": "text.edit", "decorV": 1, "pageKey": "o0", "paragraphId": "g0",
           "box": {"rect": {"x": 72, "y": 88, "w": 300, "h": 16}, "align": "left", "lineHeight": 14,
                   "paragraphs": [g0["runs"]], "layout": [{"baseline": 12.0, "segments": [
                       {"x": 0, "text": "Garis tipis", "runIndex": 0}]}]}}
@@ -239,7 +259,7 @@ def test_a_kept_prefix_loses_its_mark_but_gets_its_decoration_drawn_again(ctx):
     line1 = [{"x": 0, "text": "Alpha beta ", "runIndex": 0}, {"x": HELV.text_length("Alpha beta ", 12), "text": "underlined", "runIndex": 1},
              {"x": HELV.text_length("Alpha beta underlined", 12), "text": " gamma delta", "runIndex": 2}]
     line2 = [{"x": 0, "text": "second line ", "runIndex": 3}, {"x": rest_x, "text": "changed", "runIndex": 4}]
-    op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+    op = {"id": "e", "type": "text.edit", "decorV": 1, "pageKey": "o0", "paragraphId": "g0",
           "box": {"rect": {"x": 72, "y": 88, "w": 300, "h": 30}, "align": "left", "lineHeight": 14, "paragraphs": [runs],
                   "layout": [{"baseline": 12.0, "segments": line1, "source": 0},
                              {"baseline": 26.0, "segments": line2, "prefix": {"source": 1, "segments": 1}}]}}
@@ -281,7 +301,7 @@ def test_a_cropped_page_moves_the_right_marks(ctx):
     g0 = ps[0]
     bar = g0["lines"][0]["decor"][0]
     assert bar["x"] == pytest.approx(132.71 - 20, abs=0.05) and bar["y"] == pytest.approx(101.2 - 30, abs=0.05)
-    op = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0",
+    op = {"id": "e", "type": "text.edit", "decorV": 1, "pageKey": "o0", "paragraphId": "g0",
           "box": {"rect": {"x": 52, "y": 58, "w": 300, "h": 30}, "align": "left", "lineHeight": 14,
                   "paragraphs": [[run("")]], "layout": [{"baseline": 12.0, "segments": []}]}}
     page = reload(bake(data, ops(op), ctx))[0]

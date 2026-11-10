@@ -59,7 +59,7 @@ describe("applyReplacements", () => {
     const matches = findMatches(buildTargets(st.doc, textStore.getState().pages), "kata lama di sini", true);
     await applyReplacements(matches, "");
     const edit = Object.values(editorStore.getState().doc.objects)[0] as TextEdit;
-    expect(edit).toMatchObject({ type: "text.edit", paragraphId: "g0" });
+    expect(edit).toMatchObject({ type: "text.edit", paragraphId: "g0", decorV: 1 });
     expect(edit.box.paragraphs).toEqual([[expect.objectContaining({ text: "" })]]);
     expect(edit.box.layout).toEqual([{ baseline: expect.any(Number), segments: [] }]);
     expect(edit.box.rect.y + edit.box.layout[0].baseline).toBeCloseTo(100);

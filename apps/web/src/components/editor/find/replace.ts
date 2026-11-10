@@ -11,7 +11,7 @@ import { relayout } from "@/lib/textbox";
 import { editorStore, textEditFor } from "@/store/editor";
 import { paragraphsOf, textStore } from "@/store/text";
 import { markupUnderEdits, noteMarkupRemoved, originalParagraph } from "../text/textEdit";
-import { editedBox } from "@/lib/keepLines";
+import { DECOR_V, editedBox } from "@/lib/keepLines";
 
 const metrics = (f: Parameters<typeof fontStore.get>[0]) => fontStore.get(f);
 
@@ -63,7 +63,7 @@ export async function applyReplacements(matches: Match[], text: string): Promise
         return replaceMatches(ps, ranges, text);
       });
       const paragraphs = await prepareRuns(box.paragraphs, fonts); // the new text may lack glyphs in the original font
-      out.push({ op: { id: newId(), type: "text.edit", pageKey, paragraphId: id, box: editedBox(start, paragraphs, { ...p, runs }, metrics) } as TextEdit, base: null, ends });
+      out.push({ op: { id: newId(), type: "text.edit", decorV: DECOR_V, pageKey, paragraphId: id, box: editedBox(start, paragraphs, { ...p, runs }, metrics) } as TextEdit, base: null, ends });
     }
   }
   const now = editorStore.getState().doc;

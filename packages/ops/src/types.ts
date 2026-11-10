@@ -46,6 +46,7 @@ export type Id1 = string;
 export type Pagekey1 = string;
 export type Type1 = "text.edit";
 export type Paragraphid = string;
+export type Decorv = 1 | null;
 export type Id2 = string;
 export type Pagekey2 = string;
 export type Type2 = "text.ocr_edit";
@@ -366,7 +367,10 @@ export interface LinePrefix {
   segments: Segments1;
 }
 /**
- * Replaces original paragraph `paragraphId` of the page's source page with `box`.
+ * Replaces original paragraph `paragraphId` of the page's source page with `box`. `decorV` 1: the box's runs carry
+ * the original's drawn decorations as GET /text reports them (Run.underline / strike / bgColor and their geometry):
+ * the bake removes the decoration marks of the lines it redraws and keeps a line only with the same decorations.
+ * Absent (a client or draft from before): the marks stay where they are and decorations are not compared.
  *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "TextEdit".
@@ -377,6 +381,7 @@ export interface TextEdit {
   type: Type1;
   paragraphId: Paragraphid;
   box: TextBox;
+  decorV?: Decorv;
 }
 /**
  * Replaces a paragraph OCR read in a picture of text (POST /documents/{id}/pages/{n}/ocr, M5d). `cover` is painted

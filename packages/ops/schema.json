@@ -1566,7 +1566,7 @@
     },
     "TextEdit": {
       "additionalProperties": false,
-      "description": "Replaces original paragraph `paragraphId` of the page's source page with `box`.",
+      "description": "Replaces original paragraph `paragraphId` of the page's source page with `box`. `decorV` 1: the box's runs carry\nthe original's drawn decorations as GET /text reports them (Run.underline / strike / bgColor and their geometry):\nthe bake removes the decoration marks of the lines it redraws and keeps a line only with the same decorations.\nAbsent (a client or draft from before): the marks stay where they are and decorations are not compared.",
       "properties": {
         "id": {
           "maxLength": 64,
@@ -1591,6 +1591,19 @@
         },
         "box": {
           "$ref": "#/$defs/TextBox"
+        },
+        "decorV": {
+          "anyOf": [
+            {
+              "const": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decorv"
         }
       },
       "required": [

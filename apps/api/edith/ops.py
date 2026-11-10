@@ -139,10 +139,14 @@ class TextAdd(_Rotatable):
 
 
 class TextEdit(_Content):
-    """Replaces original paragraph `paragraphId` of the page's source page with `box`."""
+    """Replaces original paragraph `paragraphId` of the page's source page with `box`. `decorV` 1: the box's runs carry
+    the original's drawn decorations as GET /text reports them (Run.underline / strike / bgColor and their geometry):
+    the bake removes the decoration marks of the lines it redraws and keeps a line only with the same decorations.
+    Absent (a client or draft from before): the marks stay where they are and decorations are not compared."""
     type: Literal["text.edit"]
     paragraphId: str = Field(pattern=r"^g\d+$")
     box: TextBox
+    decorV: Literal[1] | None = None
 
 
 MAX_SIDE = 14400  # pt: the largest page side PDF allows
