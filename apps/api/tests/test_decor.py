@@ -236,6 +236,8 @@ def test_a_page_with_its_own_pending_redactions_keeps_its_marks(ctx):
                  run(DECOR_G0[1], **UL))
     page = reload(bake(doc.tobytes(), ops(op), ctx))[0]
     assert has(page, G0_LINE1) and has(page, G0_LINE2)
+    w = HELV.text_length("Alpha ", 12)
+    assert not any(abs(r[1] - 101.2) < 0.2 for r in drawn(page) if abs(r[0] - (72 + w)) < 0.3)  # no second underline
     for r in NEIGHBOURS:
         assert has(page, r), r
 

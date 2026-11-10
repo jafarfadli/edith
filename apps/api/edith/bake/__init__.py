@@ -177,7 +177,7 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
 
         key_to_index, base_rotation = build_pages(doc, layout, layout_index, ctx, import_forms)
         fonts_before = _font_xrefs(doc) if subset_fonts else set()
-        ctx = replace(ctx, page_index=key_to_index)
+        ctx = replace(ctx, page_index=key_to_index, marks_stay=set())
         crops = [_crop_rect(doc[i], entry.crop, layout_index) if entry.crop else None for i, entry in enumerate(layout.pages)]
 
         by_page: dict[int, list] = defaultdict(list)
@@ -194,7 +194,10 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                 marked = [op for op in page_ops if op.type in handlers]
                 pending = _redactions(page)
                 if mode is DECOR_ONLY and pending:
-                    continue  # the page's own unapplied redactions would be applied in this mode too: decorations stay
+                    # The page's own unapplied redactions would be applied in this mode too: decorations stay, and its
+                    # edits draw none of the original's again (see bake/text.py _aware).
+                    ctx.marks_stay.update(op.pageKey for op in marked)
+                    continue
                 for op in marked:
                     _run(handlers[op.type], page, op, ctx)
                 # The decoration pass only runs when it marked something (most edits have no decoration).

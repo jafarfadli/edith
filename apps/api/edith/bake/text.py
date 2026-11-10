@@ -315,9 +315,29 @@ def _undecorated(paragraph: dict) -> dict:
     return {**paragraph, "runs": [{k: v for k, v in r.items() if k not in DECOR_FIELDS} for r in paragraph["runs"]]}
 
 
+def _aware(op: TextEdit, ctx) -> bool:
+    """The edit moves the original's drawn decorations: its client knows them (TextEdit.decorV) and its page has no
+    unapplied redactions of its own (no decoration pass there, see bake())."""
+    return op.decorV is not None and op.pageKey not in (ctx.marks_stay or ())
+
+
+def _without_original_decor(box: TextBox, paragraph: dict) -> TextBox:
+    """`box` without the decorations its runs took from the original (which stay on the page): an underline or strike
+    with the original's geometry (only GET /text gives runs that), a highlight in one of the original's colours."""
+    bgs = {(r.get("bgColor") or "").lower() for r in paragraph["runs"] if r.get("bgColor")}
+
+    def plain(r: Run) -> Run:
+        return r.model_copy(update={
+            **({"underline": False} if r.underline and r.underlineTop is not None else {}),
+            **({"strike": False} if r.strike and r.strikeTop is not None else {}),
+            **({"bgColor": None} if r.bgColor and r.bgColor.lower() in bgs else {}),
+        })
+    return box.model_copy(update={"paragraphs": [[plain(r) for r in p] for p in box.paragraphs]})
+
+
 def _kept(op: TextEdit, ctx) -> tuple[dict[int, int], dict[int, KeptPrefix]]:
     paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
-    if op.decorV is None:  # a client from before decorations: its runs never carry the original's (see TextEdit)
+    if not _aware(op, ctx):  # a client from before decorations: its runs never carry the original's (see TextEdit)
         paragraph = _undecorated(paragraph)
     font_keys = lambda f: ctx.source.font_keys(f.ref, f.doc)  # noqa: E731
     kept = kept_lines(op.box, paragraph, font_keys)
@@ -353,8 +373,8 @@ def decor_redactions(page: pymupdf.Page, paragraph: dict, keep: set[int] | froze
 
 @register("text.edit", phase="redact_decor")
 def text_edit_decor(page: pymupdf.Page, op: TextEdit, ctx) -> None:
-    if op.decorV is None:
-        return  # its runs know no decorations: the marks stay where they are (as before decorations were moved)
+    if not _aware(op, ctx):
+        return  # the marks stay where they are (as before decorations were moved)
     paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
     kept, _prefixes = _kept(op, ctx)
     for rect in decor_redactions(page, paragraph, set(kept.values())):
@@ -364,8 +384,9 @@ def text_edit_decor(page: pymupdf.Page, op: TextEdit, ctx) -> None:
 @register("text.edit")
 def text_edit(page: pymupdf.Page, op: TextEdit, ctx) -> None:
     kept, prefixes = _kept(op, ctx)
-    draw_text_box(page, op.box, ctx, skip=set(kept), heads={k: p.segments for k, p in prefixes.items()},
-                  head_decor=op.decorV is not None)
+    aware = _aware(op, ctx)
+    box = op.box if aware else _without_original_decor(op.box, ctx.source.paragraph(op.pageKey, op.paragraphId))
+    draw_text_box(page, box, ctx, skip=set(kept), heads={k: p.segments for k, p in prefixes.items()}, head_decor=aware)
 
 
 def links_under_redactions(page: pymupdf.Page) -> list[str]:
