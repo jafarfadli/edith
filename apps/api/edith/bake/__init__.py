@@ -7,7 +7,7 @@ import pymupdf
 from edith.bake.context import BakeContext
 from edith.bake.formfonts import protect as form_font_programs, restore as restore_form_fonts
 from edith.bake.pages import build_pages
-from edith.bake.registry import COVERS, HANDLERS, PHASE, TEXT_REDACTIONS
+from edith.bake.registry import COVERS, DECOR_REDACTIONS, HANDLERS, PHASE, TEXT_REDACTIONS
 from edith.bake.scrub import scrub_outside, scrub_page, under_redaction
 from edith.bake.source import SourcePages
 from edith.bake.text import links_under_redactions, restore_links
@@ -25,6 +25,11 @@ from edith.bake.ocr import cover_rects, keep_redactions  # noqa: E402
 # text.edit removes only the glyphs of the edited lines; images and vector art stay.
 TEXT_ONLY = dict(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
                  text=pymupdf.PDF_REDACT_TEXT_REMOVE)
+# text.edit also removes the drawn decorations (underline, strike, highlight) of the lines it redraws: only line art
+# lying wholly inside a redaction rect, which is drawn tight around one such mark (edith/decor.py checks that nothing
+# else lies inside it); text and images stay.
+DECOR_ONLY = dict(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED,
+                  text=pymupdf.PDF_REDACT_TEXT_NONE)
 # redact.add removes everything under the box.
 EVERYTHING = dict(images=pymupdf.PDF_REDACT_IMAGE_PIXELS, graphics=pymupdf.PDF_REDACT_LINE_ART_REMOVE_IF_TOUCHED,
                   text=pymupdf.PDF_REDACT_TEXT_REMOVE)
@@ -43,6 +48,10 @@ def _run(handler, page, op, ctx) -> None:
         raise BakeFailed(exc.message, op_id=op.id) from exc
     except Exception as exc:  # noqa: BLE001
         raise BakeFailed(str(exc), op_id=op.id) from exc
+
+
+def _redactions(page: pymupdf.Page) -> int:
+    return sum(1 for _ in page.annots(types=[pymupdf.PDF_ANNOT_REDACT]))
 
 
 MAX_IMPORT_DOCS = 20  # distinct imported PDFs one export may reference
@@ -179,15 +188,20 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
         redact_handlers = {t: HANDLERS[t] for t, phase in PHASE.items() if phase == "redact"}
         for page_index, page_ops in by_page.items():
             page = doc[page_index]
-            # Two passes: one apply_redactions() call has a single images/graphics mode.
-            for handlers, mode in ((TEXT_REDACTIONS, TEXT_ONLY), (redact_handlers, EVERYTHING)):
+            # Three passes: one apply_redactions() call has a single images/graphics/text mode.
+            for handlers, mode in ((DECOR_REDACTIONS, DECOR_ONLY), (TEXT_REDACTIONS, TEXT_ONLY),
+                                   (redact_handlers, EVERYTHING)):
                 marked = [op for op in page_ops if op.type in handlers]
+                pending = _redactions(page)
+                if mode is DECOR_ONLY and pending:
+                    continue  # the page's own unapplied redactions would be applied in this mode too: decorations stay
                 for op in marked:
                     _run(handlers[op.type], page, op, ctx)
-                if marked:
-                    kept = links_under_redactions(page) if mode is TEXT_ONLY else []
+                # The decoration pass only runs when it marked something (most edits have no decoration).
+                if marked and (mode is not DECOR_ONLY or _redactions(page) > pending):
+                    kept = links_under_redactions(page) if mode is not EVERYTHING else []
                     page.apply_redactions(**mode)
-                    restore_links(page, kept)  # text.edit replaces glyphs, not the links over them
+                    restore_links(page, kept)  # text.edit replaces glyphs and decorations, not the links over them
             # What apply_redactions() leaves under a redaction box: annotations, links, form fields.
             boxes = [to_rect(op.rect) for op in page_ops if op.type == "redact.add"]
             if boxes:

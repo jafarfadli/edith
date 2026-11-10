@@ -915,7 +915,7 @@
     },
     "Run": {
       "additionalProperties": false,
-      "description": "`hScale`, `charSpacing`, `wordSpacing`: the original PDF's horizontal scaling (Tz), character spacing (Tc,\nTJ condensing) and word spacing (Tw, per-word placement), measured by GET /text for original text. The pen\nadvance of a character is `hScale \u00b7 advance \u00b7 size + charSpacing (+ wordSpacing for \" \")`, in pt; the glyph\nis drawn `hScale` times as wide. Clients split a run with spacing into one segment per character\n(`charSpacing`) or per word and space (`wordSpacing`), so a segment's own glyphs only need `hScale`.",
+      "description": "`hScale`, `charSpacing`, `wordSpacing`: the original PDF's horizontal scaling (Tz), character spacing (Tc,\nTJ condensing) and word spacing (Tw, per-word placement), measured by GET /text for original text. The pen\nadvance of a character is `hScale \u00b7 advance \u00b7 size + charSpacing (+ wordSpacing for \" \")`, in pt; the glyph\nis drawn `hScale` times as wide. Clients split a run with spacing into one segment per character\n(`charSpacing`) or per word and space (`wordSpacing`), so a segment's own glyphs only need `hScale`.\n`underlineTop`, `strikeTop`, `decorThickness` (\u00d7 size; top edge relative to the baseline, down positive) and\n`decorColor`: where, how thick and in which colour the original PDF drew a run's underline / strikethrough (GET\n/text, original text); absent = the defaults of bake/text.py (UNDERLINE_TOP, STRIKE_TOP, DECOR_THICKNESS, the\ntext colour).",
       "properties": {
         "text": {
           "title": "Text",
@@ -965,6 +965,61 @@
           "default": false,
           "title": "Strike",
           "type": "boolean"
+        },
+        "underlineTop": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": -2,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Underlinetop"
+        },
+        "strikeTop": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": -2,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Striketop"
+        },
+        "decorThickness": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decorthickness"
+        },
+        "decorColor": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9a-fA-F]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decorcolor"
         },
         "hScale": {
           "default": 1,

@@ -49,7 +49,11 @@ class Run(Model):
     TJ condensing) and word spacing (Tw, per-word placement), measured by GET /text for original text. The pen
     advance of a character is `hScale · advance · size + charSpacing (+ wordSpacing for " ")`, in pt; the glyph
     is drawn `hScale` times as wide. Clients split a run with spacing into one segment per character
-    (`charSpacing`) or per word and space (`wordSpacing`), so a segment's own glyphs only need `hScale`."""
+    (`charSpacing`) or per word and space (`wordSpacing`), so a segment's own glyphs only need `hScale`.
+    `underlineTop`, `strikeTop`, `decorThickness` (× size; top edge relative to the baseline, down positive) and
+    `decorColor`: where, how thick and in which colour the original PDF drew a run's underline / strikethrough (GET
+    /text, original text); absent = the defaults of bake/text.py (UNDERLINE_TOP, STRIKE_TOP, DECOR_THICKNESS, the
+    text colour)."""
     text: str
     font: FontRef
     size: float = Field(gt=0, le=500)
@@ -57,6 +61,10 @@ class Run(Model):
     bgColor: HexColor | None = None
     underline: bool = False
     strike: bool = False
+    underlineTop: float | None = Field(default=None, ge=-2, le=2)
+    strikeTop: float | None = Field(default=None, ge=-2, le=2)
+    decorThickness: float | None = Field(default=None, gt=0, le=1)
+    decorColor: HexColor | None = None
     hScale: float = Field(default=1, ge=0.25, le=4)
     charSpacing: float = Field(default=0, ge=-100, le=100)
     wordSpacing: float = Field(default=0, ge=-100, le=100)

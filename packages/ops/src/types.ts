@@ -25,6 +25,10 @@ export type Color = string;
 export type Bgcolor = string | null;
 export type Underline = boolean;
 export type Strike = boolean;
+export type Underlinetop = number | null;
+export type Striketop = number | null;
+export type Decorthickness = number | null;
+export type Decorcolor = string | null;
 export type Hscale = number;
 export type Charspacing = number;
 export type Wordspacing = number;
@@ -278,6 +282,10 @@ export interface Rect {
  * advance of a character is `hScale · advance · size + charSpacing (+ wordSpacing for " ")`, in pt; the glyph
  * is drawn `hScale` times as wide. Clients split a run with spacing into one segment per character
  * (`charSpacing`) or per word and space (`wordSpacing`), so a segment's own glyphs only need `hScale`.
+ * `underlineTop`, `strikeTop`, `decorThickness` (× size; top edge relative to the baseline, down positive) and
+ * `decorColor`: where, how thick and in which colour the original PDF drew a run's underline / strikethrough (GET
+ * /text, original text); absent = the defaults of bake/text.py (UNDERLINE_TOP, STRIKE_TOP, DECOR_THICKNESS, the
+ * text colour).
  *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "Run".
@@ -290,6 +298,10 @@ export interface Run {
   bgColor?: Bgcolor;
   underline?: Underline;
   strike?: Strike;
+  underlineTop?: Underlinetop;
+  strikeTop?: Striketop;
+  decorThickness?: Decorthickness;
+  decorColor?: Decorcolor;
   hScale?: Hscale;
   charSpacing?: Charspacing;
   wordSpacing?: Wordspacing;
