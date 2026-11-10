@@ -1,12 +1,17 @@
-"""OCR quality on the synthetic scanned form (tests.pdfs.make_scan_form_pdf), or overlays of a PDF's OCR.
+"""OCR quality on the synthetic scanned forms (tests.pdfs.make_scan_form_pdf, make_small_form_pdf), or overlays of a
+PDF's OCR.
 
     cd apps/api && uv run python -m scripts.ocr_accuracy [OUT_DIR]          # table of variants (+ overlay PNGs)
-    cd apps/api && uv run python -m scripts.ocr_accuracy --pdf file.pdf OUT_DIR
+    cd apps/api && uv run python -m scripts.ocr_accuracy --pdf file.pdf OUT_DIR [--truth words.json]
 
-Word accuracy: share of ground-truth words read exactly by the OCR word whose box overlaps it most (IoU ≥ 0.3).
-Box error: mean distance (pt) between the left and right edges of matched boxes (the ground truth's
-heights are font boxes, the OCR's ink: not comparable). Overlays: paragraph rects blue, covers green
-(filled with their colour), words red, low-confidence paragraphs orange."""
+Word accuracy: share of ground-truth words read exactly by the OCR word whose box overlaps it most (IoU ≥ 0.3; the
+small form: whose box holds its centre). Box error: mean distance (pt) between the left and right edges of matched boxes
+(the ground truth's heights are font boxes, the OCR's ink: not comparable). "Kurang yakin" (confidence < LOW, as the web
+app flags it) against the truth, per paragraph (its text against the truth words whose centres its lines hold):
+flagged-but-right and wrong-but-unflagged. `--truth`: a hand-checked page, a JSON list of [text, x, y] (each word's
+centre, pt; leaders and checkboxes left out), e.g. for a scan that must not be committed. Overlays: paragraph rects blue,
+covers green (filled with their colour), words red, low-confidence paragraphs orange."""
+import json
 import sys
 import time
 from difflib import SequenceMatcher
@@ -18,7 +23,7 @@ import pymupdf
 from edith import ocr
 from edith.fonts import FontRegistry
 from edith.settings import Settings
-from tests.pdfs import SCAN_SIZE, make_scan_form_pdf, scan_form_words
+from tests.pdfs import SCAN_SIZE, make_scan_form_pdf, make_small_form_pdf, scan_form_words, small_form_words
 
 VARIANTS = [
     ("clean Tinos 300 dpi", dict(family="Tinos")),
@@ -32,7 +37,32 @@ VARIANTS = [
     ("Arimo 200 dpi blur noise10 jpeg70", dict(family="Arimo", dpi=200, blur=True, noise=10, jpeg=70)),
     ("Tinos 3° (skewed)", dict(family="Tinos", angle=3.0)),
 ]
+SMALL = [  # the small-print form: labels between dot leaders, items after checkboxes
+    ("small Caladea 218 dpi", dict(family="Caladea")),
+    ("small Tinos 218 dpi", dict(family="Tinos")),
+    ("small Caladea 150 dpi", dict(family="Caladea", dpi=150)),
+    ("small Arimo 200 dpi", dict(family="Arimo", dpi=200)),
+]
 LOW = 0.75
+
+
+def flags(result: dict, truth: list[tuple[str, float, float]]) -> dict:
+    """Paragraphs flagged (confidence < LOW) and wrong, against `truth` words (text, centre x, centre y): a paragraph
+    is right when its words are the truth words its lines hold ("…" read as "..." is right)."""
+    out = {"right": 0, "wrong": 0, "flagged_right": 0, "flagged_wrong": 0, "unflagged_wrong": []}
+    for p in result["paragraphs"]:
+        rects = [pymupdf.Rect(ln["rect"]["x"] - 0.5, ln["rect"]["y"] - 0.5, ln["rect"]["x"] + ln["rect"]["w"] + 0.5,
+                              ln["rect"]["y"] + ln["rect"]["h"] + 0.5) for ln in p["lines"]]
+        want = [t.replace("…", "...") for t, x, y in truth if any(r.contains(pymupdf.Point(x, y)) for r in rects)]
+        got = "".join(r["text"] for r in p["runs"]).replace("…", "...").split()
+        right = sorted(got) == sorted(want)
+        low = p["confidence"] < LOW
+        out["right" if right else "wrong"] += 1
+        if low:
+            out["flagged_right" if right else "flagged_wrong"] += 1
+        elif not right:
+            out["unflagged_wrong"].append(f'{" ".join(got)!r} ≠ {" ".join(want)!r}')
+    return out
 
 
 def iou(a: pymupdf.Rect, b: pymupdf.Rect) -> float:
@@ -65,17 +95,24 @@ def overlay(page: pymupdf.Page, result: dict, words: list, out: Path) -> None:
 
 
 def measure(name: str, kw: dict, registry: FontRegistry, cmd: str, out: Path | None) -> dict:
-    data = make_scan_form_pdf(**kw)
+    small = name.startswith("small")
+    data = make_small_form_pdf(**kw) if small else make_scan_form_pdf(**kw)
     page = pymupdf.open(stream=data, filetype="pdf")[0]
     words: list = []
     t = time.monotonic()
     result = ocr.ocr_page(page, registry, cmd, words_out=words)
     took = time.monotonic() - t
-    truth = scan_form_words(kw.get("family", "Tinos"), kw.get("angle", 0.0))
+    if small:
+        truth = [(t.replace("…", "..."), b) for t, b in small_form_words(kw.get("family", "Caladea"))]
+    else:
+        truth = scan_form_words(kw.get("family", "Tinos"), kw.get("angle", 0.0))
+
+    def matches(w, box):  # the small form's truth boxes are font boxes of small print: its centre in the word's ink
+        return w[2].contains((box.tl + box.br) / 2) if small else iou(w[2], box) >= 0.3
     hits, errs, wrong = 0, [], 0.0
     for text, box in truth:
-        best = max(words, key=lambda w: iou(w[2], box), default=None)
-        if best is not None and iou(best[2], box) >= 0.3:
+        best = max(words, key=lambda w: (matches(w, box), iou(w[2], box)), default=None)
+        if best is not None and matches(best, box):
             errs.append((abs(best[2].x0 - box.x0) + abs(best[2].x1 - box.x1)) / 2)
             hits += best[0] == text
             m = SequenceMatcher(None, text, best[0], autojunk=False)
@@ -88,7 +125,8 @@ def measure(name: str, kw: dict, registry: FontRegistry, cmd: str, out: Path | N
     sizes = [r["size"] for p in paras for r in p["runs"]]
     if out:
         overlay(page, result, words, out / f"{name.split()[0]}-{abs(hash(name)) % 1000}.png")
-    return {"name": name, "quality": result["quality"], "angle": result["angle"], "words": len(truth),
+    flagged = flags(result, [(t, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2) for t, b in truth])
+    return {"flags": flagged, "name": name, "quality": result["quality"], "angle": result["angle"], "words": len(truth),
             "accuracy": hits / len(truth), "char_err": cer, "box_err": mean(errs) if errs else None,
             "paragraphs": len(paras), "low": sum(p["confidence"] < LOW for p in paras), "fonts": sorted(fams),
             "size_body": sorted(sizes)[len(sizes) // 2] if sizes else None, "seconds": took,
@@ -104,6 +142,7 @@ def main() -> None:
     args = sys.argv[1:]
     if args and args[0] == "--pdf":
         src, out = Path(args[1]), Path(args[2])
+        truth = json.loads(Path(args[4]).read_text()) if len(args) > 4 and args[3] == "--truth" else None
         out.mkdir(parents=True, exist_ok=True)
         doc = pymupdf.open(src)
         for page in doc:
@@ -118,6 +157,10 @@ def main() -> None:
                 print(f"  {p['id']:6s} {p['confidence']:.2f} {r0['font']['family']}{'-B' if r0['font']['bold'] else ''}"
                       f" {r0['size']}pt {r0['color']} cover {p['coverColor']}{'' if p['coverUniform'] else ' (uneven)'}"
                       f" {p['align']}: {text[:90]}")
+            if truth is not None and page.number == 0:
+                f = flags(result, [tuple(w) for w in truth])
+                print(f"  truth: {f['right']} paragraphs right, {f['wrong']} wrong; flagged: {f['flagged_wrong']} wrong,"
+                      f" {f['flagged_right']} right; wrong but not flagged: {f['unflagged_wrong']}")
             if result["regions"]:
                 overlay(page, result, words, out / f"page-{page.number}.png")
         return
@@ -125,13 +168,17 @@ def main() -> None:
     if out:
         out.mkdir(parents=True, exist_ok=True)
     print(f"ground truth body size {SCAN_SIZE} pt; low confidence < {LOW}")
-    for name, kw in VARIANTS:
+    for name, kw in VARIANTS + SMALL:
         m = measure(name, kw, registry, cmd, out)
         box = f"{m['box_err']:.2f}" if m["box_err"] is not None else "-"
+        f = m["flags"]
         print(f"{m['name']:40s} {m['quality']:10s} angle {m['angle']:+.2f}  words {m['accuracy']:.1%} of {m['words']}"
-              f"  CER {m['char_err']:.1%}  box ±{box} pt  {m['paragraphs']} paragraphs ({m['low']} low)"
+              f"  CER {m['char_err']:.1%}  box ±{box} pt  {m['paragraphs']} paragraphs ({m['low']} low:"
+              f" {f['flagged_right']} right; {f['wrong']} wrong, {len(f['unflagged_wrong'])} not flagged)"
               f"  {','.join(m['fonts'])} body {m['size_body']} pt  ink {','.join(m['colours'])}"
               f"  cover {','.join(m['covers'])} uneven {m['uneven']}  {m['seconds']:.1f} s")
+        for miss in f["unflagged_wrong"]:
+            print(f"    wrong, not flagged: {miss}")
 
 
 if __name__ == "__main__":

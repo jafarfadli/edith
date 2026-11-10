@@ -4,8 +4,9 @@ The images GET /text reports as `imageText` (a scanned form, a pasted screenshot
 and read by the `tesseract` command (word boxes and confidences, TSV). The words become paragraphs in the same JSON
 shape as GET /text's, grouped by the same code: they are handed to `extract_paragraphs` as the text of a stand-in page
 (`_OcrPage`), with the straight lines found in the picture as its rules. Each run gets a bundled font (sans or serif,
-bold, from the strokes' thickness), a size from the words' heights in that font, and the colour of the ink. Each
-paragraph adds `ocr`, `confidence` (0–1, mean of its words) and what an edit paints over the old picture of it:
+bold, from the strokes' thickness), a size from the words' heights in that font, and the colour of the ink. What
+Tesseract is unsure of is read a second time without the leader dots, checkboxes and rules around it (_reread). Each
+paragraph adds `ocr`, `confidence` (0–1, its least sure word's) and what an edit paints over the old picture of it:
 `cover` (the words' ink, padded a little, never across a line of the picture or out of the image) and `coverColor`
 (the picture's own background there; `coverUniform` false when it is not plain: a photo, a gradient).
 
@@ -59,6 +60,13 @@ MAX_IMAGES = 64           # pictures on one page OCR looks at: judging each rend
 MAX_WORDS = 4000          # words one page may hold (a dense A4 page: ~600); more is noise or a crafted image
 FIND_SECONDS = 5.0        # of the page's time, at most this long to find its pictures of print
 MAX_RESCUES, RESCUE_TIME = 40, 3.0  # stretches read again (_rescue) at most, and only with this many seconds left
+REREAD_BELOW = 85         # a stretch of a line with a word less sure than this (0–100) is read again alone (_reread)
+REREAD_GAP = 1.5          # … a stretch ends at a gap this wide (× its words' median height)
+REREAD_SLACK = 5.0        # … and takes the new reading when surer of its least sure word and at most this much less sure
+                          # of the rest (_surer)
+MAX_REREADS, REREAD_PIXELS = 200, 4_000_000  # stretches, and pixels of the sheet they are read on, at most
+REREAD_TIME, REREAD_SPARE = 2.0, 1.0  # read again only with this many seconds left, and leave this many after it …
+REREAD_SECONDS = 8.0      # … taking at most this long (measured: 0.2 s on a scanned form, 1 s for 200 stretches)
 
 
 @dataclass
@@ -571,6 +579,117 @@ def _rescue(leaders: list[tuple[Word, int]], regions: list[_Region], usual: floa
     return out
 
 
+def _has_text(word: Word) -> bool:
+    return any(c.isalnum() for c in word.text)
+
+
+def _sureness(words: list[Word]) -> tuple[float, float]:
+    """How sure Tesseract is of a stretch: (its least sure word's confidence, its words' confidence weighted by their
+    length), of the words with letters or digits (all of them when none has)."""
+    ws = [w for w in words if _has_text(w)] or words
+    return min(w.conf for w in ws), sum(w.conf * len(w.text) for w in ws) / max(sum(len(w.text) for w in ws), 1)
+
+
+def _surer(new: list[Word], old: list[Word]) -> bool:
+    """`new` is a better reading of a stretch than `old`: its least sure word is surer, and on the whole it is not
+    much less sure (REREAD_SLACK: a sheet of short stretches reads a few points lower than a page)."""
+    (new_min, new_mean), (old_min, old_mean) = _sureness(new), _sureness(old)
+    return new_min > old_min and new_mean >= old_mean - REREAD_SLACK
+
+
+def _unsure(words: list[tuple[Word, int]]) -> list[tuple[int, list[Word]]]:
+    """(region, words left to right) of the stretches of each Tesseract line, split at gaps wider than REREAD_GAP × the
+    words' median height (a label, then a field's value far right), that hold a word with letters or digits read with
+    less than REREAD_BELOW confidence: least sure first."""
+    lines: dict[tuple, list[Word]] = {}
+    for w, i in words:
+        lines.setdefault((i, *w.line), []).append(w)
+    out = []
+    for (i, *_), ws in lines.items():
+        ws = sorted(ws, key=lambda w: w.box[0])
+        gap = REREAD_GAP * median(w.box[3] - w.box[1] for w in ws)
+        piece = [ws[0]]
+        for w in ws[1:] + [None]:
+            if w is not None and w.box[0] - piece[-1].box[2] <= gap:
+                piece.append(w)
+                continue
+            if any(_has_text(v) and v.conf < REREAD_BELOW for v in piece):
+                out.append((i, piece))
+            piece = [w]
+    return sorted(out, key=lambda p: min(w.conf for w in p[1]))
+
+
+def _reread(words: list[tuple[Word, int]], regions: list[_Region], cmd: str, time_left) -> list[tuple[Word, int]]:
+    """The unsure stretches (_unsure) read again with nothing around them: leader dots, a checkbox, a "(…)" next to a
+    word are what makes Tesseract unsure of it (measured on a scanned form: "Aktif" 7 %, "Ijin" 37 %, "Opsi:" read as
+    "OPSI" 49 %, "Lain-lain:" as "RAFT A" 29 %; alone: 95–97 %, all right). Each stretch is cut out of its picture, every
+    pixel outside its words' boxes painted paper, and the cuts are stacked on one sheet read as a block of text (one
+    Tesseract run for the page). A stretch takes the new reading when that is surer; one that reads as nothing at all
+    alone and was hardly sure of anything (a colon or a box edge read as "ANN") is dropped. Bounded: MAX_REREADS
+    stretches, REREAD_PIXELS of sheet, only with REREAD_TIME seconds left; a failure keeps the first reading."""
+    if time_left() < REREAD_TIME:
+        return words
+    slots, papers = [], []
+    width = height = 0
+    for i, ws in _unsure(words)[:MAX_REREADS]:
+        region = regions[i]
+        h_img, w_img = region.grey.shape
+        tall = max(int(w.box[3] - w.box[1]) for w in ws)
+        pad = max(tall // 2, 2)
+        x0, y0 = max(int(min(w.box[0] for w in ws)) - pad, 0), max(int(min(w.box[1] for w in ws)) - pad, 0)
+        x1, y1 = min(int(max(w.box[2] for w in ws)) + pad, w_img), min(int(max(w.box[3] for w in ws)) + pad, h_img)
+        if x1 - x0 < 2 or y1 - y0 < 2:
+            continue
+        gap = max(tall, 8)
+        if (max(width, x1 - x0 + 2 * gap)) * (height + gap + y1 - y0 + gap) > REREAD_PIXELS:
+            continue  # the sheet is full: this stretch keeps its first reading
+        crop = region.grey[y0:y1, x0:x1].copy()
+        keep = np.zeros(crop.shape, dtype=bool)
+        for w in ws:
+            a, b, c, d = (int(v) for v in w.box)
+            keep[max(b - y0 - 2, 0):max(d - y0 + 2, 0), max(a - x0 - 2, 0):max(c - x0 + 2, 0)] = True
+        paper = crop[keep & (crop >= region.threshold)]
+        papers.append(float(np.median(paper)) if paper.size else 255.0)
+        crop[~keep] = int(papers[-1])
+        height += gap
+        slots.append((i, ws, x0, y0, gap, height, crop))
+        height += crop.shape[0]
+        width = max(width, crop.shape[1] + 2 * gap)
+    if not slots:
+        return words
+    height += slots[-1][4]
+    sheet = np.full((height, width), int(median(papers)), dtype=np.uint8)
+    for _i, _ws, _x0, _y0, gap, top, crop in slots:
+        sheet[top:top + crop.shape[0], gap:gap + crop.shape[1]] = crop
+    dpi = regions[slots[0][0]].dpi
+    pix = pymupdf.Pixmap(pymupdf.csGRAY, width, height, sheet.tobytes(), False)
+    pix.set_dpi(dpi, dpi)
+    try:
+        got = run_tesseract(pix.tobytes("png"), dpi, min(time_left() - REREAD_SPARE, REREAD_SECONDS), cmd, psm=6)
+    except (OcrTimeout, OcrFailed):
+        logger.warning("OCR's second reading failed: the first one is kept")
+        return words
+    replaced: dict[int, list[Word]] = {}  # id of each first-reading word → what takes the stretch's place (or nothing)
+    for i, ws, x0, y0, gap, top, crop in slots:
+        new = sorted((v for v in got if v.text.strip() and top <= (v.box[1] + v.box[3]) / 2 < top + crop.shape[0]),
+                     key=lambda v: v.box[0])
+        new = [Word(v.text, v.conf, (v.box[0] - gap + x0, v.box[1] - top + y0, v.box[2] - gap + x0, v.box[3] - top + y0),
+                    ws[0].line) for v in new]
+        if new and _surer(new, ws):
+            replacement = new
+        elif not new and max(w.conf for w in ws) < JUNK_CONFIDENCE * 100:
+            replacement = []
+        else:
+            continue
+        replaced[id(ws[0])] = replacement
+        for w in ws[1:]:
+            replaced[id(w)] = []
+    out = []
+    for w, i in words:
+        out += [(v, i) for v in replaced.get(id(w), [w])]
+    return out
+
+
 def _chains(pieces: list[tuple[_Line, list[int]]]) -> list[list[tuple[_Line, list[int]]]]:
     """Pieces of lines in columns: each joins the column whose last piece sits right above it (within CHAIN_EM × size,
     overlapping it), as MuPDF puts a column of text in a block of its own; Tesseract may interleave two columns'
@@ -930,6 +1049,9 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
                 words.append((w, i))
         boxes += more_boxes
         in_time()
+        # What Tesseract was unsure of, read again without the dots, boxes and rules around it.
+        words = _reread(words, regions, cmd, lambda: deadline - clock())
+        in_time()
     if words_out is not None:
         words_out.extend((w.text, w.conf, regions[i].to_page(w.box)) for w, i in words)
     if not words:
@@ -1036,7 +1158,10 @@ def ocr_page(page: pymupdf.Page, registry: FontRegistry, cmd: str, *, timeout: f
     for p, ws in zip(paragraphs, placed):
         if not ws:
             continue
-        confidence = sum(w.conf for w, _, _ in ws) / len(ws) / 100
+        # As sure as its least sure word (with letters or digits): one doubtful word is what a reader must check, and a
+        # mean hides it in a long paragraph. After _reread, a word under 75 % was wrong on every page measured
+        # (scripts/ocr_accuracy.py) and one over it nearly always right: LOW_CONFIDENCE in the web app.
+        confidence = min(w.conf for w in [w for w, _, _ in ws if _has_text(w)] or [w for w, _, _ in ws]) / 100
         text = "".join(r["text"] for r in p["runs"])
         if confidence < JUNK_CONFIDENCE and len(text.replace(" ", "")) <= 2:
             continue
