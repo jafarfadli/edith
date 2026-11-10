@@ -5,8 +5,9 @@ import { runCss, type RunAttrs } from "@/lib/richtext";
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     run: {
-      /** Restyles every text in the selection with `fn` (or the style typed next, when the selection is empty). */
-      updateRuns: (fn: (a: RunAttrs) => RunAttrs) => ReturnType;
+      /** Restyles every text in the selection with `fn` (or the style typed next, when the selection is empty), given
+       *  each piece's text ("" for the style typed next). */
+      updateRuns: (fn: (a: RunAttrs, text: string) => RunAttrs) => ReturnType;
     };
   }
 }
@@ -51,13 +52,14 @@ export function createRunMark(fallback: () => RunAttrs, standIn: (f: FontRef) =>
           if (empty) {
             const marks = state.storedMarks ?? state.selection.$from.marks();
             const cur = marks.find((m) => m.type === type)?.attrs as RunAttrs | undefined;
-            tr.addStoredMark(type.create(fn(cur ?? fallback())));
+            tr.addStoredMark(type.create(fn(cur ?? fallback(), "")));
             return true;
           }
           state.doc.nodesBetween(from, to, (node, pos) => {
             if (!node.isText) return;
             const cur = node.marks.find((m) => m.type === type)?.attrs as RunAttrs | undefined;
-            tr.addMark(Math.max(from, pos), Math.min(to, pos + node.nodeSize), type.create(fn(cur ?? fallback())));
+            const a = Math.max(from, pos), b = Math.min(to, pos + node.nodeSize);
+            tr.addMark(a, b, type.create(fn(cur ?? fallback(), node.text!.slice(a - pos, b - pos))));
           });
           return true;
         },

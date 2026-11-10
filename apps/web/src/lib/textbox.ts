@@ -41,8 +41,10 @@ export function withText(box: TextBox, text: string): TextBox {
 export type BoxPatch = StylePatch & { align?: TextBox["align"] };
 
 /** `patch` applied to every run (and the box alignment); a size change resets the line height to 1.2 × size. */
-export function withStyle(box: TextBox, patch: BoxPatch, fonts: FontTable = {}): TextBox {
-  const paragraphs = box.paragraphs.map((p) => p.map((r) => runOf(r.text, applyPatch(attrsOf(r), patch, fonts))));
+export function withStyle(box: TextBox, patch: BoxPatch, fonts: FontTable = {},
+  peek?: (f: FontRef) => FontMetrics | null): TextBox {
+  // `peek` (the loaded fonts): an embedded bold/italic variant only for a run it draws whole (see patchFont).
+  const paragraphs = box.paragraphs.map((p) => p.map((r) => runOf(r.text, applyPatch(attrsOf(r), patch, fonts, peek ? { text: r.text, peek } : undefined))));
   return {
     ...box,
     paragraphs,

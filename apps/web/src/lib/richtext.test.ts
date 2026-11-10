@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Run } from "@edith/ops";
+import type { FontRef, Run } from "@edith/ops";
 import type { DocFont } from "@/lib/api";
-import { fontKey } from "@/lib/fonts";
+import { fontKey, type FontMetrics } from "@/lib/fonts";
 import { applyPatch, attrsOf, docToRuns, fontStyle, patchFont, runCss, runOf, runsToDoc } from "@/lib/richtext";
 
 const arimo = { kind: "bundled" as const, family: "Arimo", bold: false, italic: false };
@@ -118,6 +118,21 @@ describe("formatting of original text", () => {
     expect(patchFont(orig("f11"), { italic: true }, word)).toEqual({ kind: "bundled", family: "Tinos", bold: true, italic: true });
     expect(patchFont(orig("f20"), { italic: true }, word)).toEqual({ kind: "bundled", family: "Carlito", bold: true, italic: true });
     expect(patchFont(orig("f40"), { bold: true }, word)).toEqual({ kind: "bundled", family: "Noto Sans KR", bold: true, italic: false });
+  });
+
+  it("toggles a word to the embedded variant only when it draws the whole word, else the whole word to the substitute", () => {
+    // The bold subset has only "Bab I": a word it lacks a letter of goes to the bundled Tinos Bold as a whole.
+    const boldSubset = { hasGlyph: (cp: number) => "Bab I".includes(String.fromCodePoint(cp)) } as FontMetrics;
+    const peek = (f: FontRef) => (fontKey(f) === fontKey(orig("f11")) ? boldSubset : null);
+    expect(patchFont(orig("f10"), { bold: true }, word, { text: "Bab I", peek })).toEqual(orig("f11"));
+    expect(patchFont(orig("f10"), { bold: true }, word, { text: "Bab II", peek })).toEqual(orig("f11"));
+    expect(patchFont(orig("f10"), { bold: true }, word, { text: "Pendahuluan", peek }))
+      .toEqual({ kind: "bundled", family: "Tinos", bold: true, italic: false });
+    // The variant not loaded yet: its glyphs are unknown, the substitute draws the word.
+    expect(patchFont(orig("f10"), { bold: true }, word, { text: "Bab", peek: () => null }))
+      .toEqual({ kind: "bundled", family: "Tinos", bold: true, italic: false });
+    expect(applyPatch({ ...attrsOf(r("")), font: orig("f10") }, { bold: true }, word, { text: "Pendahuluan", peek }).font)
+      .toEqual({ kind: "bundled", family: "Tinos", bold: true, italic: false });
   });
 
   const underlined = r("garis", { underline: true, underlineTop: 0.116, decorThickness: 0.064, decorColor: "#0000ff" });

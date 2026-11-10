@@ -1,6 +1,6 @@
 import type { FontRef, Run } from "@edith/ops";
 import type { DocFont } from "@/lib/api";
-import { cssFamily, fontId, fontKey, isOriginal } from "@/lib/fonts";
+import { covers, cssFamily, fontId, fontKey, isOriginal, type FontMetrics } from "@/lib/fonts";
 import { normalizeRuns } from "@/lib/runs";
 
 /** Embedded fonts by `fontId`. */
@@ -71,9 +71,15 @@ export function fontStyle(f: FontRef, fonts: FontTable): { family: string; bold:
   return { family: f.family, bold: f.bold ?? false, italic: f.italic ?? false, original: null };
 }
 
+/** The text a style change applies to and the loaded fonts (`peek`): an embedded variant is only taken when it draws
+ *  every character of that text. */
+export interface PatchText { text: string; peek: (f: FontRef) => FontMetrics | null }
+
 /** `f` with a family/bold/italic change. An original font keeps being original when the document
- *  embeds a reusable variant of its family with the wanted style; otherwise it becomes its substitute. */
-export function patchFont(f: FontRef, patch: StylePatch, fonts: FontTable): FontRef {
+ *  embeds a reusable variant of its family with the wanted style — with `at`, only when that variant (loaded) draws the
+ *  whole text: a subset lacking a letter would leave a word in two fonts, so the substitute draws all of it instead.
+ *  Otherwise it becomes its substitute. */
+export function patchFont(f: FontRef, patch: StylePatch, fonts: FontTable, at?: PatchText): FontRef {
   if (patch.family === undefined && patch.bold === undefined && patch.italic === undefined) return f;
   const cur = fontStyle(f, fonts);
   const bold = patch.bold ?? cur.bold;
@@ -82,15 +88,20 @@ export function patchFont(f: FontRef, patch: StylePatch, fonts: FontTable): Font
     const info = fonts[fontId(f)];
     // A variant from the same PDF only.
     const variant = info && Object.values(fonts).find((x) => x.reusable && x.doc === info.doc && x.family === info.family && x.bold === bold && x.italic === italic);
-    if (variant) return variant.doc ? { kind: "original", ref: variant.ref, doc: variant.doc } : { kind: "original", ref: variant.ref };
+    if (variant) {
+      const ref: FontRef = variant.doc ? { kind: "original", ref: variant.ref, doc: variant.doc } : { kind: "original", ref: variant.ref };
+      const ink = at?.text.replace(/\s/g, "") ?? "";
+      const m = ink ? at!.peek(ref) : null;
+      if (!ink || (m && covers(m, ink))) return ref;
+    }
   }
   return { kind: "bundled", family: patch.family ?? cur.family, bold, italic };
 }
 
 /** `a` with the patch applied. The original's measured scale and spacing (hScale / charSpacing / wordSpacing) stay
- *  only while the font and size do: they were measured against that font program at that size. */
-export function applyPatch(a: RunAttrs, p: StylePatch, fonts: FontTable): RunAttrs {
-  const font = patchFont(a.font, p, fonts);
+ *  only while the font and size do: they were measured against that font program at that size. `at`: see patchFont. */
+export function applyPatch(a: RunAttrs, p: StylePatch, fonts: FontTable, at?: PatchText): RunAttrs {
+  const font = patchFont(a.font, p, fonts, at);
   const size = p.size ?? a.size;
   return {
     font, size,

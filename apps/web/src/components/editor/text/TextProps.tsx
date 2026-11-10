@@ -29,7 +29,7 @@ async function applyToSelected(patch: BoxPatch) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const cur = editorStore.getState().doc.objects[id];
       if (!isTextOp(cur)) return; // deleted while fonts loaded
-      const styled = withStyle(cur.box, patch, fonts);
+      const styled = withStyle(cur.box, patch, fonts, (f) => fontStore.peek(f));
       const paragraphs = await prepareRuns(styled.paragraphs, fonts);
       if (editorStore.getState().doc.objects[id] !== cur) continue;
       const box = relayout({ ...styled, paragraphs }, (f) => fontStore.get(f));
@@ -59,7 +59,8 @@ function applyToSession(patch: BoxPatch) {
   // The style at the caret before the change: with an empty selection the new font only lives in a
   // stored mark (no run uses it yet), so load it now — text typed next shows in it right away.
   const caret = applyPatch(textEditStore.getState().current ?? fallback, runPatch, fonts);
-  chain.updateRuns((a) => applyPatch(a, runPatch, fonts)).run();
+  // Bold/italic on original text: the embedded variant only for a piece it draws whole (no word in two fonts).
+  chain.updateRuns((a, text) => applyPatch(a, runPatch, fonts, { text, peek: (f) => fontStore.peek(f) })).run();
   const runs = docToRuns(editor.getJSON(), fallback);
   [caret.font, ...boxFonts({ ...e.box, paragraphs: runs })].forEach((f) => { fontStore.load(f).catch(() => {}); });
 }
