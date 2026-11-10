@@ -103,8 +103,12 @@ test("in the editor: select all, Delete, click away deletes the text (not discar
     await expect(editor).toBeVisible({ timeout: 1000 });
   }).toPass();
   await expect(editor).toContainText("Paragraf kedua");
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.press("Delete");
+  // `next dev` (StrictMode) may create the rich editor twice: the second one's caret-at-end can land after the keys.
+  await expect(async () => {
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Delete");
+    await expect(editor).not.toContainText("Paragraf kedua", { timeout: 500 });
+  }).toPass();
   await shot(page, "3-editor-empty");
   await page.mouse.click(box.x + 500, box.y + 700);
   await expect(editor).toHaveCount(0);
