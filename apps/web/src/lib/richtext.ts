@@ -12,6 +12,9 @@ export interface RunAttrs {
   /** The original PDF's horizontal scale and spacing (Run.hScale / charSpacing / wordSpacing): carried unchanged, so
    *  edited original text keeps the original's widths. Absent = 1 / 0 / 0. */
   hScale?: number; charSpacing?: number; wordSpacing?: number;
+  /** Where, how thick and in which colour the original PDF drew the underline / strikethrough (Run.underlineTop,
+   *  strikeTop, decorThickness, decorColor): carried with the run, so an edit draws them as the original did. */
+  underlineTop?: number; strikeTop?: number; decorThickness?: number; decorColor?: string;
 }
 /** A style change from the properties bar; only the given fields change. */
 export interface StylePatch {
@@ -20,7 +23,22 @@ export interface StylePatch {
 }
 
 export function attrsOf(r: Run): RunAttrs {
-  return { font: r.font, size: r.size, color: r.color, bgColor: r.bgColor ?? null, underline: !!r.underline, strike: !!r.strike, ...spacingOf(r) };
+  return { font: r.font, size: r.size, color: r.color, bgColor: r.bgColor ?? null, underline: !!r.underline, strike: !!r.strike, ...spacingOf(r), ...decorOf(r) };
+}
+
+type DecorFields = Pick<Run, "underlineTop" | "strikeTop" | "decorThickness" | "decorColor">;
+
+/** The decoration geometry and colour fields of `a` that apply (Run.underlineTop / strikeTop / decorThickness /
+ *  decorColor): an underline's only while it is underlined, a strikethrough's while struck through. */
+export function decorOf(a: { underline?: boolean | null; strike?: boolean | null; underlineTop?: number | null; strikeTop?: number | null;
+  decorThickness?: number | null; decorColor?: string | null }): { underlineTop?: number; strikeTop?: number; decorThickness?: number; decorColor?: string } {
+  const some = !!a.underline || !!a.strike;
+  const out: DecorFields = {};
+  if (a.underline && a.underlineTop != null) out.underlineTop = a.underlineTop;
+  if (a.strike && a.strikeTop != null) out.strikeTop = a.strikeTop;
+  if (some && a.decorThickness != null) out.decorThickness = a.decorThickness;
+  if (some && a.decorColor) out.decorColor = a.decorColor;
+  return out as { underlineTop?: number; strikeTop?: number; decorThickness?: number; decorColor?: string };
 }
 
 /** The non-default spacing fields of `a` (Run.hScale / charSpacing / wordSpacing). */
@@ -40,6 +58,7 @@ export function runOf(text: string, a: RunAttrs): Run {
     ...(a.underline ? { underline: true } : {}),
     ...(a.strike ? { strike: true } : {}),
     ...spacingOf(a),
+    ...decorOf(a),
   };
 }
 
@@ -80,18 +99,26 @@ export function applyPatch(a: RunAttrs, p: StylePatch, fonts: FontTable): RunAtt
     underline: p.underline ?? a.underline,
     strike: p.strike ?? a.strike,
     ...(fontKey(font) === fontKey(a.font) && size === a.size ? spacingOf(a) : {}),
+    // The original's decoration geometry stays (in ems: it follows a size change); turned off, it goes.
+    ...decorOf({ ...a, underline: p.underline ?? a.underline, strike: p.strike ?? a.strike }),
   };
 }
 
 /** Inline CSS of a run in the rich editor; sizes scale with the `--edith-scale` variable (zoom). */
-export function runCss(a: RunAttrs): string {
+export function runCss(a: RunAttrs, standIn?: FontRef | null): string {
   const deco = [a.underline && "underline", a.strike && "line-through"].filter(Boolean).join(" ") || "none";
+  const decorated = a.underline || a.strike;
   return [
-    `font-family:"${cssFamily(a.font)}"`,
+    // `standIn`: an original font's bundled substitute, for the letters its subset lacks (the export draws them in it):
+    // typed into a bold italic name, they show bold italic, not in the browser's default face.
+    `font-family:"${cssFamily(a.font)}"${standIn ? `,"${cssFamily(standIn)}"` : ""}`,
     `font-size:calc(var(--edith-scale, 1) * ${a.size}px)`,
     `color:${a.color}`,
     a.bgColor ? `background-color:${a.bgColor}` : "",
     `text-decoration-line:${deco}`,
+    // The original's line colour and thickness (its position is the browser's: CSS has no baseline-relative offset).
+    decorated && a.decorColor ? `text-decoration-color:${a.decorColor}` : "",
+    decorated && a.decorThickness ? `text-decoration-thickness:calc(var(--edith-scale, 1) * ${a.decorThickness * a.size}px)` : "",
   ].filter(Boolean).join(";");
 }
 
@@ -127,6 +154,8 @@ export function docToRuns(doc: RichNode, fallback: RunAttrs): Run[][] {
           underline: "underline" in a ? a.underline ?? false : last.underline,
           strike: "strike" in a ? a.strike ?? false : last.strike,
           ...spacingOf("hScale" in a || "charSpacing" in a || "wordSpacing" in a ? a : last),
+          ...decorOf("underlineTop" in a || "strikeTop" in a || "decorThickness" in a || "decorColor" in a
+            ? { ...a, underline: "underline" in a ? a.underline : last.underline, strike: "strike" in a ? a.strike : last.strike } : last),
         };
       }
       return runOf(n.text!, last);

@@ -62,7 +62,8 @@ export function blankBox(prev: TextBox, area: { y: number; h: number }): TextBox
  *  measured scale and spacing (Run.hScale / charSpacing / wordSpacing). */
 function styleKey(r: Run): string {
   return JSON.stringify([fontKey(r.font), r.size, r.color, r.bgColor ?? null, !!r.underline, !!r.strike,
-    r.hScale ?? 1, r.charSpacing ?? 0, r.wordSpacing ?? 0]);
+    r.hScale ?? 1, r.charSpacing ?? 0, r.wordSpacing ?? 0,
+    r.underlineTop ?? null, r.strikeTop ?? null, r.decorThickness ?? null, r.decorColor ?? null]);
 }
 
 /** The box text (paragraphs joined by "\n") and the style of each of its characters. */

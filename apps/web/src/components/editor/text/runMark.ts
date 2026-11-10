@@ -1,4 +1,5 @@
 import { Mark } from "@tiptap/core";
+import type { FontRef } from "@edith/ops";
 import { runCss, type RunAttrs } from "@/lib/richtext";
 
 declare module "@tiptap/core" {
@@ -10,19 +11,25 @@ declare module "@tiptap/core" {
   }
 }
 
-const KEYS = ["font", "size", "color", "bgColor", "underline", "strike", "hScale", "charSpacing", "wordSpacing"] as const;
+const KEYS = ["font", "size", "color", "bgColor", "underline", "strike", "hScale", "charSpacing", "wordSpacing",
+  "underlineTop", "strikeTop", "decorThickness", "decorColor"] as const;
 
 function readRun(el: HTMLElement): Partial<RunAttrs> {
   try { return JSON.parse(el.getAttribute("data-run") || "{}") as Partial<RunAttrs>; } catch { return {}; }
 }
 
-/** The one mark of the rich editor: a run's whole character style. `fallback` styles text that has none yet. */
-export function createRunMark(fallback: () => RunAttrs) {
+/** The one mark of the rich editor: a run's whole character style. `fallback` styles text that has none yet;
+ *  `standIn(font)`: the font that draws what an original font lacks (its bundled substitute), shown after it. */
+export function createRunMark(fallback: () => RunAttrs, standIn: (f: FontRef) => FontRef | null = () => null) {
   return Mark.create({
     name: "run",
     inclusive: true,
     addAttributes() {
-      const defaults: RunAttrs = { font: { kind: "bundled", family: "Arimo", bold: false, italic: false }, size: 12, color: "#000000", bgColor: null, underline: false, strike: false, hScale: 1, charSpacing: 0, wordSpacing: 0 };
+      const defaults: Record<(typeof KEYS)[number], unknown> = {
+        font: { kind: "bundled", family: "Arimo", bold: false, italic: false }, size: 12, color: "#000000", bgColor: null,
+        underline: false, strike: false, hScale: 1, charSpacing: 0, wordSpacing: 0,
+        underlineTop: null, strikeTop: null, decorThickness: null, decorColor: null,
+      };
       return Object.fromEntries(KEYS.map((k) => [k, {
         default: defaults[k],
         rendered: false,
@@ -33,7 +40,7 @@ export function createRunMark(fallback: () => RunAttrs) {
     parseHTML() { return [{ tag: "span[data-run]" }]; },
     renderHTML({ mark }) {
       const a = mark.attrs as RunAttrs;
-      return ["span", { "data-run": JSON.stringify(a), style: runCss(a) }, 0];
+      return ["span", { "data-run": JSON.stringify(a), style: runCss(a, standIn(a.font)) }, 0];
     },
     addCommands() {
       return {

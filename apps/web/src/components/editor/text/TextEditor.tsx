@@ -9,11 +9,13 @@ import Text from "@tiptap/extension-text";
 import { UndoRedo } from "@tiptap/extensions";
 import type { Editor } from "@tiptap/core";
 import { toScreen, type PageGeom } from "@/lib/coords";
-import { cssFamily, fontKey, fontStore } from "@/lib/fonts";
+import { substituteOf } from "@/lib/fallback";
+import { cssFamily, fontKey, fontStore, isOriginal } from "@/lib/fonts";
 import { attrsOf, docToRuns, runsToDoc, type RunAttrs } from "@/lib/richtext";
 import { rotationOf } from "@/lib/objects";
 import { boxFonts, boxLineHeight } from "@/lib/textbox";
 import { useEditor as useEditorStore } from "@/store/editor";
+import { textStore } from "@/store/text";
 import { isFindKey } from "../useShortcuts";
 import { createRunMark } from "./runMark";
 import { commitOpenSession, preloadSessionFonts, session, textEditStore, type Editing } from "./textEdit";
@@ -42,10 +44,13 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
   const turn = useEditorStore((s) => rotationOf(s.doc.objects[editing.id]));
   // Fonts this session asked for (a failing original is not re-fetched on every keystroke).
   const [requested] = useState(() => new Set<string>());
+  // An original font's letters its subset lacks show in its bundled substitute (as the export draws them).
+  const [runMark] = useState(() => createRunMark(() => fallback,
+    (f) => (isOriginal(f) ? substituteOf(f, textStore.getState().fonts) : null)));
 
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [Document, Paragraph, Text, UndoRedo, createRunMark(() => fallback)],
+    extensions: [Document, Paragraph, Text, UndoRedo, runMark],
     content: runsToDoc(editing.box.paragraphs) as never,
     // pre-wrap, not Tiptap's break-spaces: a space at a wrap hangs past the edge, as in the layout
     // (lines are measured without their trailing spaces), so a line that just fits wraps the same way.

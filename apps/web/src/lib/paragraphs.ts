@@ -228,7 +228,13 @@ export function maskRects(p: Paragraph, box?: TextBox): Rect[] {
     if (!rest) return [];
     // A kept prefix shows up to its next word: the cover starts there (that word's glyph starts at its x).
     const x0 = cuts.has(i) ? rest.rect.x : l.rect.x - 0.5;
-    return [{ x: x0, y: top, w: l.rect.x + l.rect.w + 0.5 - x0, h: bottom - top }];
+    // The line's drawn decorations go with it (the bake removes them): covered where they reach past the band (an
+    // underlined trailing space, a highlight taller than the line); a kept prefix's stay in view.
+    const decor = (l.decor ?? []).flatMap((d) => {
+      const a = Math.max(d.x - 0.5, x0), b = d.x + d.w + 0.5;
+      return b > a ? [{ x: a, y: d.y - 0.5, w: b - a, h: d.h + 1 }] : [];
+    });
+    return [{ x: x0, y: top, w: l.rect.x + l.rect.w + 0.5 - x0, h: bottom - top }, ...decor];
   });
 }
 
