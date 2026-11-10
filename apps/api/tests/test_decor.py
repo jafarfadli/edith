@@ -166,6 +166,21 @@ def test_an_unsafe_mark_stays(ctx):
     assert has(page, G3_BAR) and has(page, (100.0, 241.4, 100.4, 241.7))
 
 
+def test_a_link_over_underlined_text_survives_an_edit_of_it(ctx):
+    """The decoration pass and the text pass both apply redactions (which delete the links they touch) and put the links
+    back: the second must see the links the first restored (an underlined mailto link: Surat Keterangan Magang)."""
+    doc = pymupdf.open(stream=make_decor_pdf(), filetype="pdf")
+    doc[0].insert_link({"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(132.71, 90, 188.74, 102), "uri": "mailto:a@b.id"})
+    w = HELV.text_length("Alpha ", 12)
+    op = g0_edit([run("Alpha "), run("underlined ", **UL)],
+                 [{"x": 0, "text": "Alpha ", "runIndex": 0}, {"x": w, "text": "underlined", "runIndex": 1}],
+                 run(DECOR_G0[1], **UL))
+    page = reload(bake(doc.tobytes(), ops(op), ctx))[0]
+    assert not has(page, G0_LINE1)  # the decoration pass ran
+    links = page.get_links()
+    assert [ln.get("uri") for ln in links] == ["mailto:a@b.id"]
+
+
 def test_a_page_with_its_own_pending_redactions_keeps_its_marks(ctx):
     """The decoration pass would apply the PDF's own unapplied redaction annotations in its mode (line art they cover
     goes): on such a page it does not run, the marks stay (as before decorations were moved)."""

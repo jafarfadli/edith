@@ -202,6 +202,10 @@ def bake(source: bytes, ops: list, ctx: BakeContext, flatten_forms: bool = False
                     kept = links_under_redactions(page) if mode is not EVERYTHING else []
                     page.apply_redactions(**mode)
                     restore_links(page, kept)  # text.edit replaces glyphs and decorations, not the links over them
+                    if kept:
+                        # restore_links() edits /Annots behind the page object: the next pass must see those links
+                        # (else its apply_redactions() deletes them unseen).
+                        page = doc.reload_page(page)
             # What apply_redactions() leaves under a redaction box: annotations, links, form fields.
             boxes = [to_rect(op.rect) for op in page_ops if op.type == "redact.add"]
             if boxes:
