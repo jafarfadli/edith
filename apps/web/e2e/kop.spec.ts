@@ -132,8 +132,8 @@ test("any picture can be read: a picture's menu, its 'maybe' button and an area 
   await menu.getByRole("menuitem", { name: "Kenali teks di gambar ini (OCR)" }).click();
   await expect(page.getByRole("status").filter({ hasText: /Hasil OCR: 1 paragraf/ })).toBeVisible({ timeout: 45_000 });
   await expect(maybe).toHaveCount(1); // read: its button goes
-  // Its menu now says so.
-  await page.mouse.click(box.x + 300, box.y + 99, { button: "right" });
+  // Its menu now says so (right of the paragraph read: on the paragraph its own menu opens).
+  await page.mouse.click(box.x + 505, box.y + 99, { button: "right" });
   await expect(page.getByTestId("picture-menu").getByRole("menuitem")).toHaveText("Teks di gambar ini sudah dikenali");
   await page.keyboard.press("Escape");
 
