@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TextBox } from "@edith/ops";
 import type { OcrParagraph } from "@/lib/api";
-import { coverRects, isLowConfidence, LOW_CONFIDENCE, ocrBadge, ocrEditOp, ocrEditsOn, ocrOverflows, ocrQualityMessage, unedited } from "@/lib/ocr";
+import { AREA_IDS, areaKey, coverRects, replacedIds, isLowConfidence, LOW_CONFIDENCE, mergeOcr, ocrBadge, ocrEditOp, ocrEditsOn, ocrOverflows, ocrQualityMessage, unedited } from "@/lib/ocr";
 import { objectLabel } from "@/lib/objectLabels";
 import { hasOpacity, isCopyable, isRotatable, isTextOp, moveOp } from "@/lib/objects";
 import { zStage } from "@/lib/zorder";
@@ -63,6 +63,34 @@ describe("OCR paragraphs", () => {
     expect(isCopyable(op)).toBe(false);
     expect(hasOpacity(op)).toBe(false);
     expect(isRotatable(op)).toBe(false);
+  });
+
+  it("a hidden paragraph's text is known: its badge says so, its edit is listed apart", () => {
+    const p = { ...para("hg1", 140, 30, 1), source: "hidden" as const, replaces: "g1" };
+    expect(ocrBadge(p)).toBe(t.ocr.badgeHidden);
+    expect(isLowConfidence(p)).toBe(false);
+    const op = ocrEditOp("e", "o0", p, box(30, [12]));
+    expect(op.paragraphId).toBe("hg1");
+    expect(objectLabel(op).label).toBe(t.objectKinds.textHidden);
+  });
+
+  it("a hidden paragraph measured or already rewritten shows no locked target", () => {
+    const ids = replacedIds([{ replaces: "g1" }, {}], [{ paragraphId: "hg4" }, { paragraphId: "ocr3" }]);
+    expect([...ids].sort()).toEqual(["g1", "g4"]); // g4: a restored draft's rewrite, even when not measured now
+  });
+
+  it("adds the paragraphs of another OCR run: never twice the same text, ids unique, areas numbered apart", () => {
+    const a = para("ocr0", 90, 166), b = para("ocr1", 90, 188);
+    // The page's own OCR keeps its ids (an earlier session's edits name them so).
+    expect(mergeOcr([], [a, b], ["ocr0"], false).map((p) => p.id)).toEqual(["ocr0", "ocr1"]);
+    // An area's: from AREA_IDS on, never an edit's, never one shown.
+    const area = mergeOcr([a], [para("ocr0", 300, 400), para("ocr1", 300, 420)], [`ocr${AREA_IDS}`], true);
+    expect(area.map((p) => p.id)).toEqual(["ocr0", `ocr${AREA_IDS + 1}`, `ocr${AREA_IDS + 2}`]);
+    // Read again (its middle inside a paragraph shown): left out; the page's ids clash with an area's: renumbered.
+    expect(mergeOcr([a], [para("ocr5", 92, 167)], [], true)).toEqual([a]);
+    const shown = [{ ...a, id: "ocr1" }];
+    expect(mergeOcr(shown, [para("ocr1", 300, 400)], [], false).map((p) => p.id)).toEqual(["ocr1", "ocr2"]);
+    expect(areaKey({ x: 1.234, y: 2, w: 3.05, h: 4 })).toBe("1.2,2,3.1,4");
   });
 
   it("says why OCR found nothing, and why it failed", () => {

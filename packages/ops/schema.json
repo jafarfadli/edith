@@ -1618,7 +1618,7 @@
     },
     "TextOcrEdit": {
       "additionalProperties": false,
-      "description": "Replaces a paragraph OCR read in a picture of text (POST /documents/{id}/pages/{n}/ocr, M5d). `cover` is painted\nwith `coverColor` (the picture's own background there) over the page's original content, under every drawn object\n\u2014 as a text.edit's original glyphs go \u2014 and `box` is drawn in the op's stacking order. Self-contained: the bake\nreads neither the OCR result nor the source page, so a draft restores and exports without OCR running again.\n`paragraphId` names the OCR paragraph (ocr0, ocr1, \u2026) for the client: one op per page and id. `covers`: one rect per\nline of the paragraph (its words' ink, padded): what is painted when given, so a short last line leaves the corner\nbeside it alone; `cover` is their bounding box (all that is painted without `covers`).",
+      "description": "Replaces a paragraph OCR read in a picture of text (POST /documents/{id}/pages/{n}/ocr, M5d). `cover` is painted\nwith `coverColor` (the picture's own background there) over the page's original content, under every drawn object\n\u2014 as a text.edit's original glyphs go \u2014 and `box` is drawn in the op's stacking order. Self-contained: the bake\nreads neither the OCR result nor the source page, so a draft restores and exports without OCR running again.\n`paragraphId` names the OCR paragraph (ocr0, ocr1, \u2026), or the hidden paragraph whose picture it rewrites (hg1 for\ng1: invisible text over a picture of it, its print measured by GET .../pages/{n}/hidden-text) for the client: one op\nper page and id. `covers`: one rect per line of the paragraph (its words' ink, padded): what is painted when given,\nso a short last line leaves the corner beside it alone; `cover` is their bounding box (all that is painted without\n`covers`).",
       "properties": {
         "id": {
           "maxLength": 64,
@@ -1637,7 +1637,7 @@
           "type": "string"
         },
         "paragraphId": {
-          "pattern": "^ocr\\d+$",
+          "pattern": "^(?:ocr|hg)\\d+$",
           "title": "Paragraphid",
           "type": "string"
         },

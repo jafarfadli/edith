@@ -6,6 +6,8 @@ from edith.chars import page_chars
 from edith.doc_fonts import font_bytes
 from edith.errors import DocExpired, FontNotFound, PageNotFound
 from edith.extract import extract_text, open_pdf
+from edith.hidden_cache import HiddenTextCache
+from edith.hiddentext import hidden_text
 from edith.paragraphs import PARAGRAPHS_VERSION
 
 router = APIRouter()
@@ -28,6 +30,32 @@ def get_text(request: Request, doc_id: str) -> dict:
         return {"doc_id": doc_id, "paragraphsVersion": PARAGRAPHS_VERSION, **extract_text(doc, request.app.state.fonts)}
     finally:
         doc.close()
+
+
+@router.get("/documents/{doc_id}/pages/{index}/hidden-text")
+def get_hidden_text(request: Request, doc_id: str, index: int) -> dict:
+    """The hidden paragraphs of page `index` (GET /text: lock "hidden") whose picture could be measured, as paragraphs
+    to edit like OCR ones (edith.hiddentext.hidden_text): ids `hg0`, `hg1`, … replacing `g0`, `g1`, … Asked per page
+    (the client asks for the pages it shows that have hidden text): measuring renders the pictures under the lines, so
+    it is done once per page (edith.hidden_cache) and a few at a time on the server: "hidden_text_busy" (429) when every
+    slot is taken."""
+    return {"doc_id": doc_id, "index": index, "paragraphs": hidden_paragraphs(request, doc_id, index)}
+
+
+def hidden_paragraphs(request: Request, doc_id: str, index: int, doc=None) -> list[dict]:
+    """GET .../hidden-text's paragraphs of page `index` (cached, see edith.hidden_cache). `doc`: the document when the
+    caller has it open (else it is opened: a stored document is checked first, so an expired one is never served)."""
+    cache: HiddenTextCache = request.app.state.hidden_text
+    own = doc is None
+    if own:
+        doc = _open_source(request, doc_id)
+    try:
+        if not 0 <= index < doc.page_count:
+            raise PageNotFound(f"no page {index}")
+        return cache.get(doc_id, index, lambda: hidden_text(doc[index], request.app.state.fonts))
+    finally:
+        if own:
+            doc.close()
 
 
 @router.get("/documents/{doc_id}/pages/{index}/chars")

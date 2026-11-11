@@ -71,11 +71,15 @@ export const t = {
       rotated: "Teks yang diputar belum bisa diedit.",
       imageText: "Bagian ini berupa gambar (mis. hasil pindai), bukan teks, jadi tidak bisa diedit langsung. Untuk menggantinya, tutup dengan Whiteout (menu Penghapus), lalu tambahkan Teks baru di atasnya.",
     },
+    /** Said instead of locked.hidden where OCR can still read the picture under it (its print could not be measured). */
+    hiddenOcr: "Teks ini sebenarnya gambar dan letaknya di gambar tidak bisa dipastikan. Coba Kenali teks (OCR) pada gambarnya, atau tutup dengan Whiteout lalu tambahkan Teks baru.",
     /** Said instead of locked.imageText where OCR can read the picture (M5d). */
-    imageTextOcr: "Bagian ini berupa gambar (mis. hasil pindai), bukan teks. Klik Kenali teks (OCR) agar teksnya bisa diedit, atau tutup dengan Whiteout lalu tambahkan Teks baru.",
+    imageTextOcr: "Bagian ini tampaknya gambar berisi teks (mis. hasil pindai), bukan teks yang bisa diedit. Klik Kenali teks (OCR) agar teksnya bisa diedit, atau tutup dengan Whiteout lalu tambahkan Teks baru.",
     lockedEditsDropped: "Suntingan pada teks yang ternyata gambar dihapus; pakai Whiteout lalu Teks baru.",
     pictureText: "Sebagian teks di dokumen ini berupa gambar (hasil pindai) dan tidak bisa diedit langsung. Klik bagian itu untuk melihat caranya.",
     pictureTextOcr: "Sebagian teks di dokumen ini berupa gambar (hasil pindai). Kenali teksnya dengan OCR agar bisa diedit.",
+    /** The document's text that is a picture all lies over its own words (invisible text), which could be measured. */
+    pictureTextHidden: "Sebagian teks di dokumen ini berupa gambar dengan teks tersembunyi di bawahnya. Klik dua kali untuk mengeditnya: gambar lamanya ditutup dan teks baru ditulis di tempatnya.",
     tools: "Alat",
     properties: "Properti",
     options: "pilihan",
@@ -166,11 +170,13 @@ export const t = {
     check: "Klik di halaman untuk menaruh tanda centang.",
     cross: "Klik di halaman untuk menaruh tanda silang.",
     pan: "Seret untuk menggeser halaman.",
+    ocr: "Seret di halaman untuk memilih bagian yang teksnya ingin dikenali (OCR).",
   },
   objectKinds: {
     text: "Teks", textEdit: "Teks diedit", image: "Gambar", signature: "Tanda tangan", ink: "Gambar bebas",
     whiteout: "Whiteout", redact: "Redaksi", stamp: "Stamp", check: "Centang", cross: "Silang", link: "Link", note: "Catatan",
     textOcr: "Teks OCR diedit",
+    textHidden: "Teks gambar diedit",
     shape: { rect: "Persegi", ellipse: "Elips", line: "Garis", arrow: "Panah", polygon: "Poligon", polyline: "Garis bersambung", cloud: "Awan" },
     markup: { highlight: "Stabilo", underline: "Garis bawah", strike: "Coret" },
   },
@@ -240,6 +246,16 @@ export const t = {
     hint: "Baca teks di gambar halaman ini agar bisa diedit. Hasilnya bisa keliru: periksa sebelum mengunduh.",
     badge: "hasil OCR",
     badgeLow: "hasil OCR · perlu dicek",
+    /** The badge of a hidden paragraph edited as its picture: its text is the invisible text's, not read. */
+    badgeHidden: "teks tersembunyi di bawah gambar",
+    /** A picture that may hold text (imageText tier "maybe"): its small button. */
+    maybe: "Gambar ini mungkin berisi teks. Kenali teks (OCR)",
+    /** The menu of any picture (right-click). */
+    pictureMenu: "Menu gambar",
+    runPicture: "Kenali teks di gambar ini (OCR)",
+    pictureRead: "Teks di gambar ini sudah dikenali",
+    areaEmpty: "OCR tidak menemukan teks di bagian ini.",
+    areaTool: "Kenali teks di area (OCR)",
     confidence: (pct: number) => `keyakinan ${pct}%`,
     found: (n: number) => `Hasil OCR: ${n} paragraf`,
     hideStatus: "Sembunyikan keterangan OCR",
@@ -247,10 +263,11 @@ export const t = {
     foundHint: "Teks bergaris putus-putus adalah hasil OCR: klik dua kali untuk mengedit. Yang berwarna kuning kurang yakin terbaca.",
     uneven: "Latar di bawah teks ini tidak polos, jadi tutupan warnanya bisa terlihat.",
     /** The page's OCR pill after OCR found nothing to edit (the notice says why in full). */
-    short: { none: "OCR: tidak ada gambar teks", empty: "OCR: tidak ada teks", rotated: "OCR: halaman diputar", skewed: "OCR: pindaian miring", unreadable: "OCR: tidak terbaca", too_large: "OCR: gambar terlalu besar" },
+    short: { none: "OCR: tidak ada gambar teks", empty: "OCR: tidak ada teks", known: "OCR: teks sudah bisa diedit", rotated: "OCR: halaman diputar", skewed: "OCR: pindaian miring", unreadable: "OCR: tidak terbaca", too_large: "OCR: gambar terlalu besar" },
     quality: {
       none: "Tidak ada teks bergambar di halaman ini.",
       empty: "OCR tidak menemukan teks di halaman ini.",
+      known: "Teks di area ini sudah bisa diedit.",
       rotated: "Halaman ini diputar di dalam PDF-nya; OCR belum mendukungnya.",
       skewed: (deg: number) => `Hasil pindai miring ${deg.toFixed(1)}°, terlalu miring untuk dikenali dengan rapi. Pindai ulang dengan posisi lurus.`,
       unreadable: "Teks di gambar ini terlalu buram atau kecil untuk dikenali.",

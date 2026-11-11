@@ -9,9 +9,48 @@ export function isLowConfidence(p: Pick<OcrParagraph, "confidence">): boolean {
   return p.confidence < LOW_CONFIDENCE;
 }
 
-/** The label shown on an OCR paragraph (badge and tooltip). */
-export function ocrBadge(p: Pick<OcrParagraph, "confidence">): string {
+/** The label shown on an OCR paragraph (badge and tooltip); a hidden paragraph's text is known, not read. */
+export function ocrBadge(p: Pick<OcrParagraph, "confidence" | "source">): string {
+  if (p.source === "hidden") return t.ocr.badgeHidden;
   return `${isLowConfidence(p) ? t.ocr.badgeLow : t.ocr.badge} · ${t.ocr.confidence(Math.round(p.confidence * 100))}`;
+}
+
+/** Ids of the locked hidden paragraphs (gN) a page shows no locked target for: those measured (`hidden`, replacing
+ *  them) and those rewritten already (an hgN edit, e.g. from a restored draft, whatever the measurement says now). */
+export function replacedIds(hidden: Pick<OcrParagraph, "replaces">[], edits: Pick<TextOcrEdit, "paragraphId">[]): Set<string> {
+  return new Set([
+    ...hidden.flatMap((p) => (p.replaces ? [p.replaces] : [])),
+    ...edits.filter((e) => e.paragraphId.startsWith("hg")).map((e) => e.paragraphId.slice(1)),
+  ]);
+}
+
+/** The key of an area OCR read on a page (a picture's rect, an area dragged), so it is read once. */
+export function areaKey(r: Rect): string {
+  return [r.x, r.y, r.w, r.h].map((v) => Math.round(v * 10) / 10).join(",");
+}
+
+const centre = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+const holds = (r: Rect, p: { x: number; y: number }) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+
+/** Ids of paragraphs read in an area start here: a page's own OCR numbers its paragraphs from 0, the same way each time
+ *  (an edit from an earlier session names one of them), so the two never meet. */
+export const AREA_IDS = 1000;
+
+/** `incoming` OCR paragraphs added to the `existing` ones of a page: one read already (its middle inside an existing
+ *  paragraph) is left out. A page's own OCR (`area` false) keeps the server's ids unless one is shown already; an area's
+ *  (true) are numbered from AREA_IDS on, never one already shown nor one of `taken` (the page's edits' ids). */
+export function mergeOcr(existing: OcrParagraph[], incoming: OcrParagraph[], taken: Iterable<string>, area: boolean): OcrParagraph[] {
+  const used = new Set([...existing.map((p) => p.id), ...taken]);
+  const num = (id: string) => (/^ocr\d+$/.test(id) ? Number(id.slice(3)) : -1);
+  let next = Math.max(area ? AREA_IDS : 0, ...[...used].map((id) => num(id) + 1));
+  const out = [...existing];
+  for (const p of incoming) {
+    if (existing.some((e) => holds(e.rect, centre(p.rect)))) continue;
+    const keep = !area && !out.some((e) => e.id === p.id);
+    const id = keep ? p.id : `ocr${next++}`;
+    out.push(keep ? p : { ...p, id });
+  }
+  return out;
 }
 
 /** What an OCR paragraph's edit paints over the old picture of it: one rect per line (`covers`; `cover` is their

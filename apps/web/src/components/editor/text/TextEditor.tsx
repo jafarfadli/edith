@@ -52,6 +52,10 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
     immediatelyRender: false,
     extensions: [Document, Paragraph, Text, UndoRedo, runMark],
     content: runsToDoc(editing.box.paragraphs) as never,
+    // The caret at the end once the editor is attached to the page: EditorContent attaches it in a microtask, which
+    // may come after this component's effect, where a focus command found no view and silently did nothing (the
+    // session then stood open without focus: keys went to the page, a click away committed nothing).
+    autofocus: "end",
     // pre-wrap, not Tiptap's break-spaces: a space at a wrap hangs past the edge, as in the layout
     // (lines are measured without their trailing spaces), so a line that just fits wraps the same way.
     editorProps: { attributes: { "data-testid": "text-editor", spellcheck: "false", style: "outline:none;white-space:pre-wrap" } },
@@ -81,7 +85,7 @@ function RichArea({ editing, geom, scale }: { editing: Editing; geom: PageGeom; 
   useEffect(() => {
     if (!editor) return;
     session.editor = editor;
-    editor.commands.focus("end");
+    if (editor.isInitialized) editor.commands.focus("end"); // attached already: its autofocus has run
     if (editor.isEmpty) editor.commands.updateRuns(() => fallback); // typed text gets the box style
     publish(editor, fallback);
     return () => { if (session.editor === editor) session.editor = null; };

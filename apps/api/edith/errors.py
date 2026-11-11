@@ -59,6 +59,11 @@ class InvalidOp(EdithError):
     status, code = 422, "invalid_op"
 
 
+class InvalidRequest(EdithError):
+    """A request body the API can't act on (as a validation error of it says, "invalid_request")."""
+    status, code = 422, "invalid_request"
+
+
 class TextLocked(InvalidOp):
     """A text.edit of a paragraph whose text is invisible over a picture of it (M5c): the edit would draw the new text
     over the old picture. Clients never offer it; a draft from before M5c may still hold one (`op_index`)."""
@@ -82,6 +87,11 @@ class OcrUnavailable(EdithError):
 class OcrBusy(EdithError):
     """OCR already runs for this document, or every OCR slot of the server is taken: try again shortly."""
     status, code = 429, "ocr_busy"
+
+
+class HiddenTextBusy(EdithError):
+    """Every slot measuring hidden text (GET .../hidden-text) is taken: try again shortly."""
+    status, code = 429, "hidden_text_busy"
 
 
 class OcrTooComplex(EdithError):

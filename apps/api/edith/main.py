@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from edith.errors import UnhandledErrors, install_error_handlers
 from edith.fonts import FontRegistry
+from edith.hidden_cache import HiddenTextCache
 from edith.routes import assets, documents, export, ocr, text
 from edith.settings import Settings
 from edith.storage import Storage
@@ -19,6 +20,7 @@ logger = logging.getLogger("edith")
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     storage = Storage(settings.data_dir, ttl=settings.ttl_seconds, tombstone_ttl=settings.tombstone_seconds)
+    hidden = HiddenTextCache(settings.ocr_slots)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -27,6 +29,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await asyncio.sleep(settings.cleanup_interval_seconds)
                 try:
                     await asyncio.to_thread(storage.cleanup)
+                    hidden.prune(storage.exists)
                 except Exception:  # noqa: BLE001 - the loop must survive any cleanup failure
                     logger.exception("storage cleanup failed")
 
@@ -41,6 +44,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.storage = storage
     app.state.fonts = FontRegistry(settings.fonts_dir)
     app.state.ocr_gate = ocr.OcrGate(settings.ocr_slots)
+    app.state.hidden_text = hidden
     # Added first = inside CORSMiddleware (the last added is outermost): its 500s carry the CORS headers.
     app.add_middleware(UnhandledErrors)
     app.add_middleware(

@@ -158,11 +158,13 @@ class TextOcrEdit(_Content):
     with `coverColor` (the picture's own background there) over the page's original content, under every drawn object
     — as a text.edit's original glyphs go — and `box` is drawn in the op's stacking order. Self-contained: the bake
     reads neither the OCR result nor the source page, so a draft restores and exports without OCR running again.
-    `paragraphId` names the OCR paragraph (ocr0, ocr1, …) for the client: one op per page and id. `covers`: one rect per
-    line of the paragraph (its words' ink, padded): what is painted when given, so a short last line leaves the corner
-    beside it alone; `cover` is their bounding box (all that is painted without `covers`)."""
+    `paragraphId` names the OCR paragraph (ocr0, ocr1, …), or the hidden paragraph whose picture it rewrites (hg1 for
+    g1: invisible text over a picture of it, its print measured by GET .../pages/{n}/hidden-text) for the client: one op
+    per page and id. `covers`: one rect per line of the paragraph (its words' ink, padded): what is painted when given,
+    so a short last line leaves the corner beside it alone; `cover` is their bounding box (all that is painted without
+    `covers`)."""
     type: Literal["text.ocr_edit"]
-    paragraphId: str = Field(pattern=r"^ocr\d+$")
+    paragraphId: str = Field(pattern=r"^(?:ocr|hg)\d+$")
     cover: Rect
     covers: list[Rect] | None = Field(default=None, min_length=1, max_length=MAX_COVERS)
     coverColor: HexColor

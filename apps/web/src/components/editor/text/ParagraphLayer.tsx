@@ -6,13 +6,13 @@ import { Label, Rect, Tag, Text, Transformer } from "react-konva";
 import { useStore } from "zustand";
 import type { Rect as Box, TextBox, TextEdit } from "@edith/ops";
 import type { OcrParagraph, Paragraph } from "@/lib/api";
-import { coverRects, isLowConfidence, ocrBadge, ocrEditsOn, unedited, type OcrCover } from "@/lib/ocr";
+import { areaKey, coverRects, isLowConfidence, ocrBadge, ocrEditsOn, replacedIds, unedited, type OcrCover } from "@/lib/ocr";
 import { noticeStore } from "@/lib/notices";
 import { maskRects } from "@/lib/paragraphs";
 import { srcKey } from "@/lib/sources";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
-import { imageTextOf, ocrParagraphsOf, paragraphsOf, textStore, useText } from "@/store/text";
+import { hiddenParagraphsOf, hiddenRetryIn, imagesOf, imageTextOf, isPrint, paragraphsOf, pictureParagraphsOf, textStore, useText } from "@/store/text";
 import { contextMenuStore } from "../objects/layering";
 import { runPageOcr } from "./ocrRun";
 import { materializeParagraph, startOcrEdit, startParagraphEdit, textEditStore } from "./textEdit";
@@ -27,8 +27,9 @@ function setCursor(e: Konva.KonvaEventObject<unknown>, cursor: string) {
   if (c) c.style.cursor = cursor;
 }
 
-/** Text that can't be edited (a locked paragraph, an image of print): its key and the notice that says why. */
-interface Locked { key: string; rect: Box; why: string }
+/** Text that can't be edited (a locked paragraph, an image of print): its key and the notice that says why, with OCR
+ *  to offer: of the page's pictures of print (`page`) or of the `picture` under it. */
+interface Locked { key: string; rect: Box; why: string; page?: boolean; picture?: Box }
 
 /** Badge text size (pt) over an OCR paragraph. */
 const BADGE_SIZE = 8;
@@ -52,6 +53,8 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   const pages = useText((s) => s.pages);
   const imageText = useText((s) => s.imageText);
   const ocr = useText((s) => s.ocr);
+  const hidden = useText((s) => s.hidden);
+  const images = useText((s) => s.images);
   const editing = useStore(textEditStore, (s) => s.editing);
   const selected = useStore(textEditStore, (s) => (s.paragraph?.pageKey === pageKey ? s.paragraph.id : null));
   const [hover, setHover] = useState<string | null>(null);
@@ -70,7 +73,14 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   if (editing?.kind === "text.ocr_edit" && editing.pageKey === pageKey && editing.ocr && !ocrEdits.some((e) => e.id === editing.id)) {
     ocrEdits.push({ id: editing.id, paragraphId: editing.paragraphId!, ...editing.ocr });
   }
-  const ocrShown = entry ? unedited(ocrParagraphsOf(entry.src, ocr), ocrEdits) : [];
+  // Paragraphs edited as a picture of text: hidden ones whose print was measured (their text known), and OCR's.
+  const ocrShown = entry ? unedited(pictureParagraphsOf(entry.src, { ocr, hidden }), ocrEdits) : [];
+  const src = entry && "doc" in entry.src ? entry.src : null;
+  const hiddenState = src ? hidden[srcKey(src.doc, src.index)] : undefined;
+  // Hidden paragraphs replaced: by a measured one, or by a rewrite already made (a restored draft's hgN edit: no
+  // locked target over its cover, whatever the measurement says now).
+  const replaced = replacedIds(entry ? hiddenParagraphsOf(entry.src, hidden) : [], ocrEdits);
+  const hasHidden = paragraphs.some((p) => p.lock === "hidden");
   const interactive = tool === "select" || tool === "text";
   // The selected paragraph only keeps its handles while it is still an original one under the select tool.
   const active = selected && tool === "select" && !edited.has(selected) ? selected : null;
@@ -81,11 +91,32 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
     trRef.current?.getLayer()?.batchDraw();
   }, [active, pages]);
 
-  // Images of print first, so a locked paragraph over one (invisible text over its picture) is the target hit.
+  // A page shown with hidden text asks once which of it can be edited as its picture (GET .../hidden-text); a failure
+  // (the server busy measuring other pages) is asked again a few times, later each time.
+  useEffect(() => {
+    if (!src || !hasHidden) return;
+    if (!hiddenState) { void textStore.getState().loadHidden(src.doc, src.index); return; }
+    const wait = hiddenRetryIn(hiddenState);
+    if (wait === null) return;
+    const timer = setTimeout(() => { void textStore.getState().loadHidden(src.doc, src.index); }, wait);
+    return () => clearTimeout(timer);
+  }, [src, hasHidden, hiddenState]);
+
+  // Images of print first, so a locked paragraph over one (invisible text over its picture) is the target hit. A picture
+  // that only maybe holds text is no target: it may be a logo (its own button offers OCR). A hidden paragraph whose
+  // print was measured is edited as an OCR one (it is in ocrShown), even once rewritten.
+  // Hidden text whose print could not be measured: OCR of the picture under it is the way left (when it was asked).
+  const pictureUnder = (r: Box): Box | undefined => {
+    if (hiddenState?.status !== "ready" || !entry) return undefined;
+    const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+    return imagesOf(entry.src, images).find((im) => c.x >= im.x && c.x <= im.x + im.w && c.y >= im.y && c.y <= im.y + im.h);
+  };
   const locked: Locked[] = [
-    ...(entry ? imageTextOf(entry.src, imageText) : []).map((r, i) => ({ key: `image-${i}`, rect: r, why: t.editor.imageTextOcr })),
-    ...paragraphs.filter((p) => !p.editable && p.lock && !edited.has(p.id))
-      .map((p) => ({ key: `lock-${p.id}`, rect: p.rect, why: t.editor.locked[p.lock!] })),
+    ...(entry ? imageTextOf(entry.src, imageText) : []).filter(isPrint).map((r, i) => ({ key: `image-${i}`, rect: r, why: t.editor.imageTextOcr, page: true })),
+    ...paragraphs.filter((p) => !p.editable && p.lock && !edited.has(p.id) && !replaced.has(p.id)).map((p) => {
+      const picture = p.lock === "hidden" ? pictureUnder(p.rect) : undefined;
+      return { key: `lock-${p.id}`, rect: p.rect, why: picture ? t.editor.hiddenOcr : t.editor.locked[p.lock!], picture };
+    }),
   ];
   if (!paragraphs.length && !locked.length && !ocrShown.length && !ocrEdits.length) return null;
 
@@ -93,11 +124,12 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
     editorStore.getState().select(null);
     textEditStore.getState().selectParagraph({ pageKey, id: p.id });
   };
-  // An image of print explains itself with a way out: read it (OCR), unless that ran already.
+  // An image of print explains itself with a way out: read it (OCR), unless that ran already; so does hidden text whose
+  // print could not be measured (OCR of the picture under it).
   const explain = (l: Locked) => {
-    const src = entry && "doc" in entry.src ? entry.src : null;
-    const offer = l.key.startsWith("image-") && src && !textStore.getState().ocr[srcKey(src.doc, src.index)];
-    noticeStore.getState().show({ kind: "info", text: l.why, ...(offer ? { action: { label: t.ocr.run, run: () => { void runPageOcr(src.doc, src.index); } } } : {}) });
+    const st = src ? textStore.getState().ocr[srcKey(src.doc, src.index)] : undefined;
+    const offer = src && ((l.page && !st?.full) || (l.picture && !st?.areas?.includes(areaKey(l.picture))));
+    noticeStore.getState().show({ kind: "info", text: l.why, ...(offer ? { action: { label: t.ocr.run, run: () => { void runPageOcr(src.doc, src.index, l.picture); } } } : {}) });
   };
   const selectOcr = (p: OcrParagraph) => {
     editorStore.getState().select(null);

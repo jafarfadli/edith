@@ -84,6 +84,10 @@ class Storage:
     def doc_dir(self, doc_id: str) -> Path:
         return self._alive_dir(doc_id)
 
+    def exists(self, doc_id: str) -> bool:
+        """Whether the document is still stored (not removed by cleanup or expiry); touches nothing."""
+        return bool(_ID.fullmatch(doc_id)) and (self._docs / doc_id).is_dir()
+
     def source_path(self, doc_id: str) -> Path:
         path = self._alive_dir(doc_id) / "source.pdf"
         if not path.is_file():  # removed between the TTL check and now

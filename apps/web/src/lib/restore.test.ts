@@ -119,6 +119,16 @@ describe("dropStaleTextEdits", () => {
     }
   });
 
+  it("drops a hidden paragraph's rewrite (named by the same ids) with them, never an OCR paragraph's", () => {
+    const ocr = { id: "o", type: "text.ocr_edit", pageKey: "o0", paragraphId: "ocr3", cover: box.rect, coverColor: "#ffffff", box };
+    const kop = { ...ocr, id: "k", paragraphId: "hg1" };
+    const withOcr = { ...doc, objects: { ...doc.objects, o: ocr, k: kop }, order: [...doc.order, "o", "k"] } as typeof doc;
+    const { doc: out, dropped } = dropStaleTextEdits({ ...withOcr, paragraphsVersion: 2 });
+    expect(dropped).toBe(2);
+    expect(out.order).toEqual(["w", "o"]);
+    expect(dropStaleTextEdits({ ...withOcr, paragraphsVersion: 3 }).dropped).toBe(0);
+  });
+
   it("keeps text edits of the current segmentation", () => {
     const { doc: out, dropped } = dropStaleTextEdits({ ...doc, paragraphsVersion: 3 });
     expect(dropped).toBe(0);

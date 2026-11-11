@@ -53,15 +53,18 @@ test("a pictured letterhead shows, its invisible text is locked, and a pictured 
   await expect.poll(() => inkIn(page, SCAN)).toBeGreaterThan(0.05);
   expect(await inkIn(page, RASTER)).toBeGreaterThan(0.03);
 
-  // The letterhead's invisible text: a double-click opens no editor; a notice says why and how to replace it.
-  const status = page.getByRole("status").filter({ hasText: "sebenarnya gambar" });
+  // The letterhead's invisible text lies over its picture: its print is measured, so a double-click opens it in place
+  // (its text the invisible text's); closed unchanged, nothing is added.
+  const kop = page.getByTestId("text-editor");
   await expect(async () => {
     await page.mouse.move(box.x + 150, box.y + 75);
     await page.mouse.dblclick(box.x + 150, box.y + 75);
-    await expect(status).toBeVisible({ timeout: 1000 });
+    await expect(kop).toBeVisible({ timeout: 1000 });
   }).toPass();
-  await expect(status).toContainText("Whiteout");
-  await expect(page.getByTestId("text-editor")).toHaveCount(0);
+  await expect(kop).toContainText("KEMENTERIAN CONTOH REPUBLIK");
+  await page.mouse.click(box.x + 540, box.y + 760);
+  await expect(kop).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Urungkan" })).toBeDisabled();
 
   // A single click on text that is a picture is a click on the empty page: it deselects, and explains nothing.
   const miniBar = page.getByTestId("mini-bar");

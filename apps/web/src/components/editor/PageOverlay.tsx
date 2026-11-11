@@ -13,11 +13,13 @@ import {
 } from "@/lib/objects";
 import { charsStore } from "@/store/chars";
 import { editorStore, useEditor, type MarkupTool } from "@/store/editor";
+import { imagesOf } from "@/store/text";
 import { linkStore } from "./marks/linkStore";
 import { MarkupShape } from "./marks/MarkupShape";
 import { markupFromDrag, onMarkableText } from "./marks/markupTool";
 import { ObjectShape } from "./ObjectShape";
 import { usePolyTool } from "./shapes/usePolyTool";
+import { runPageOcr } from "./text/ocrRun";
 import { textEditStore, updateTextOp } from "./text/textEdit";
 import { CANVAS } from "@/lib/theme";
 import { isMac } from "@/lib/keys";
@@ -84,6 +86,9 @@ const HIT_PAD = 12;
 
 /** Below this size (px) a box side gets no middle anchor: on a small object (a check mark) eight anchors hid it. */
 const MIDDLE_ANCHOR_MIN = 40;
+
+/** An area dragged with the OCR tool smaller than this (pt, either side) is a slip, not text to read. */
+const MIN_OCR_AREA = 8;
 
 /** The Transformer's anchors for a box: its corners, plus the middle of each side long enough to hold one. */
 function boxAnchors(op: ContentOp | undefined, scale: number): string[] {
@@ -158,11 +163,23 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   }
 
   /** Right-click: on an object, selects it (unless the selection is also under the pointer) and opens the object
-   *  menu; elsewhere (the empty page, original text) the browser keeps its own menu. */
+   *  menu; on a picture of the page (and nothing above it to edit), the picture's menu (Kenali teks (OCR) of it);
+   *  elsewhere (the empty page, original text) the browser keeps its own menu. */
   function onContextMenu(e: Konva.KonvaEventObject<MouseEvent>) {
     if (tool !== "select" || textEditStore.getState().editing) return;
     const stack = stackAt();
-    if (!stack.length) return;
+    if (!stack.length) {
+      const at = src ? pageRef.current?.getRelativePointerPosition() : null;
+      // The smallest picture under the pointer: a logo over a full-page scan is the one meant.
+      const picture = at && src ? imagesOf(src).filter((r) => at.x >= r.x && at.x <= r.x + r.w && at.y >= r.y && at.y <= r.y + r.h)
+        .sort((a, b) => a.w * a.h - b.w * b.h)[0] : undefined;
+      if (!picture || !src) return;
+      e.evt.preventDefault();
+      editorStore.getState().select(null);
+      textEditStore.getState().selectParagraph(null);
+      contextMenuStore.getState().open({ x: e.evt.clientX, y: e.evt.clientY, picture: { pageKey, doc: src.doc, index: src.index, rect: picture } });
+      return;
+    }
     e.evt.preventDefault();
     const sel = editorStore.getState().selection;
     openMenu(sel !== null && stack.includes(sel) ? sel : stack[0], stack, { x: e.evt.clientX, y: e.evt.clientY });
@@ -208,6 +225,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   useLayoutEffect(() => { stageRef.current?.getLayers().forEach((l) => l.draw()); });
 
   useEffect(() => () => drawing.current?.stop(), []);
+  // Another tool (Escape: Pilih) while dragging cancels the drag: its release must not still act as the old tool (an
+  // area read by OCR, a shape added).
+  useEffect(() => () => { if (drawing.current) { drawing.current.stop(); setDraft(null); } }, [tool]);
   const poly = usePolyTool(pageKey, POLY_TOOLS.has(tool) ? (tool as PolyTool) : null, scale);
 
   // Text markup needs the page's character boxes.
@@ -242,7 +262,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       if (cur.draft) setDrawDraft(extendInk(cur.draft, at));
     } else if (MARKUP_TOOLS.has(tool)) {
       setDrawDraft(markupFromDrag(tool as MarkupTool, pageKey, cur.start, at, "draft"));
-    } else if (tool === "link") {
+    } else if (tool === "link" || tool === "ocr") {
+      // An area to read (OCR) shows as a link's dashed box does while dragged.
       setDrawDraft({ id: "draft", type: "link.add", pageKey, rect: normalizeRect(cur.start, at), target: { url: "https://" } });
     } else if (DRAG_TOOLS.has(tool)) {
       setDrawDraft(createFromDrag(tool as DragTool, cur.start, at, editorStore.getState().style, pageKey, "draft"));
@@ -262,6 +283,10 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     } else if (tool === "link") {
       const rect = normalizeRect(cur.start, at);
       if (rect.w >= MIN_DRAG && rect.h >= MIN_DRAG) { s.setTool("select"); linkStore.getState().open({ pageKey, rect }); }
+    } else if (tool === "ocr") {
+      // Any part of the page read by OCR; its paragraphs join the page's OCR ones (one OCR of a document at a time).
+      const rect = normalizeRect(cur.start, at);
+      if (src && rect.w >= MIN_OCR_AREA && rect.h >= MIN_OCR_AREA) { s.setTool("select"); void runPageOcr(src.doc, src.index, rect); }
     } else if (DRAG_TOOLS.has(tool)) {
       const op = createFromDrag(tool as DragTool, cur.start, at, s.style, pageKey, newId());
       if (op) { s.addObject(op); s.setTool("select"); s.select(op.id); }
@@ -310,7 +335,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       linkStore.getState().setFocusNote(note.id); // the properties bar shows its text field
     } else if (POLY_TOOLS.has(tool)) {
       poly.click(at);
-    } else if (tool === "link" || DRAG_TOOLS.has(tool)) {
+    } else if (tool === "link" || tool === "ocr" || DRAG_TOOLS.has(tool)) {
       beginDraw(at, null);
     } else if (tool === "ink") {
       beginDraw(at, { id: "draft", type: "ink.add", pageKey, paths: [[at]], color: s.style.stroke, width: inkWidth(s.style.width) } as ContentOp);
