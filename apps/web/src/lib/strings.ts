@@ -263,10 +263,11 @@ export const t = {
     foundHint: "Teks bergaris putus-putus adalah hasil OCR: klik dua kali untuk mengedit. Yang berwarna kuning kurang yakin terbaca.",
     uneven: "Latar di bawah teks ini tidak polos, jadi tutupan warnanya bisa terlihat.",
     /** The page's OCR pill after OCR found nothing to edit (the notice says why in full). */
-    short: { none: "OCR: tidak ada gambar teks", empty: "OCR: tidak ada teks", rotated: "OCR: halaman diputar", skewed: "OCR: pindaian miring", unreadable: "OCR: tidak terbaca", too_large: "OCR: gambar terlalu besar" },
+    short: { none: "OCR: tidak ada gambar teks", empty: "OCR: tidak ada teks", known: "OCR: teks sudah bisa diedit", rotated: "OCR: halaman diputar", skewed: "OCR: pindaian miring", unreadable: "OCR: tidak terbaca", too_large: "OCR: gambar terlalu besar" },
     quality: {
       none: "Tidak ada teks bergambar di halaman ini.",
       empty: "OCR tidak menemukan teks di halaman ini.",
+      known: "Teks di area ini sudah bisa diedit.",
       rotated: "Halaman ini diputar di dalam PDF-nya; OCR belum mendukungnya.",
       skewed: (deg: number) => `Hasil pindai miring ${deg.toFixed(1)}°, terlalu miring untuk dikenali dengan rapi. Pindai ulang dengan posisi lurus.`,
       unreadable: "Teks di gambar ini terlalu buram atau kecil untuk dikenali.",

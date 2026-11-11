@@ -51,8 +51,9 @@ export interface OcrParagraph extends Paragraph {
 export type ImageTextTier = "print" | "maybe";
 export interface ImageTextRect extends Rect { tier?: ImageTextTier }
 /** "ok" (paragraphs found), "none" (no picture of print on the page), "empty" (nothing read), "rotated" (the page is
- *  turned in the PDF), "skewed" (`angle` degrees, too much to read into straight lines), "unreadable", "too_large". */
-export type OcrQuality = "ok" | "none" | "empty" | "rotated" | "skewed" | "unreadable" | "too_large";
+ *  turned in the PDF), "skewed" (`angle` degrees, too much to read into straight lines), "unreadable", "too_large";
+ *  "known": what was read is text the page already has editable (an area over it). */
+export type OcrQuality = "ok" | "none" | "empty" | "known" | "rotated" | "skewed" | "unreadable" | "too_large";
 export interface OcrResult { doc_id: string; index: number; quality: OcrQuality; angle: number; dpi: number; regions: Rect[]; paragraphs: OcrParagraph[] }
 /** Why an original paragraph can't be edited: "hidden", its text is invisible (an OCR layer over a picture of the text,
  *  which is what shows); "font", a symbol font nothing else can draw; "rotated", text that isn't horizontal. */

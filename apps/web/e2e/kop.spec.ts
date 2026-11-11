@@ -163,3 +163,19 @@ test("any picture can be read: a picture's menu, its 'maybe' button and an area 
   await expect(page.getByRole("status").filter({ hasText: /Hasil OCR: 1 paragraf|tidak menemukan teks/ })).toBeVisible({ timeout: 45_000 });
   await expect(page.getByRole("button", { name: "Pilih", exact: true })).toHaveAttribute("aria-pressed", "true"); // back to Pilih
 });
+
+test("Escape cancels an area being dragged with the OCR tool: nothing is read", async ({ page }) => {
+  const box = await open(page);
+  let ocrCalls = 0;
+  page.on("request", (r) => { if (/\/ocr$/.test(r.url())) ocrCalls++; });
+  await page.getByRole("button", { name: "Kenali teks di area (OCR)" }).click();
+  await page.mouse.move(box.x + 44, box.y + 88);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 110, box.y + 108, { steps: 4 });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Pilih", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.mouse.move(box.x + 120, box.y + 110, { steps: 2 });
+  await page.mouse.up();
+  await page.waitForTimeout(500);
+  expect(ocrCalls).toBe(0);
+});

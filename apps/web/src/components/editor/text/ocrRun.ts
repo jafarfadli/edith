@@ -35,7 +35,8 @@ export async function runPageOcr(doc: string, index: number, rect?: Rect): Promi
   const why = ocrQualityMessage(st.last.quality, st.last.angle);
   if (why) {
     const nothing = st.last.quality === "none" || st.last.quality === "empty";
-    show({ kind: nothing ? "info" : "error", text: rect && nothing ? t.ocr.areaEmpty : why });
+    // Text the page already has editable ("known") is no failure either: it is said as such.
+    show({ kind: nothing || st.last.quality === "known" ? "info" : "error", text: rect && nothing ? t.ocr.areaEmpty : why });
     return;
   }
   const added = st.paragraphs.slice(st.paragraphs.length - st.last.found);

@@ -78,6 +78,13 @@ def _known(request: Request, doc, doc_id: str, index: int) -> list[pymupdf.Rect]
     return out
 
 
+def _tidy(paragraphs: list[dict]) -> list[dict]:
+    """The OCR paragraphs without stray marks: one glyph that is no letter or digit (a "|" read off a box's edge, a
+    lone dash), which no one means to edit and whose cover would only paint over the picture."""
+    return [p for p in paragraphs if not (len(t := "".join(r["text"] for r in p["runs"]).strip()) == 1
+                                          and not t.isalnum())]
+
+
 def _unknown_only(paragraphs: list[dict], known: list[pymupdf.Rect]) -> list[dict]:
     """The OCR paragraphs that read no text the page already has editable: none whose covers hold a visible character
     or reach well into a measured hidden line (that text is edited as such; its OCR copy would be a second target over
@@ -114,8 +121,10 @@ def ocr_page(request: Request, doc_id: str, index: int, body: OcrRequest | None 
             result = ocr.ocr_page(page, request.app.state.fonts, cmd, timeout=s.ocr_timeout_seconds, area=area)
             if result["paragraphs"]:
                 # Still within the gate: what is known costs a measurement of the page's hidden text (cached).
-                kept = _unknown_only(result["paragraphs"], _known(request, doc, doc_id, index))
-                result = {**result, "paragraphs": kept, **({} if kept else {"quality": "empty"})}
+                read = _tidy(result["paragraphs"])
+                kept = _unknown_only(read, _known(request, doc, doc_id, index))
+                # Nothing left: "known" when what was read is text the page already has editable, else "empty".
+                result = {**result, "paragraphs": kept, **({} if kept else {"quality": "known" if read else "empty"})}
         except OcrTimeout:
             limit = s.ocr_timeout_seconds
             raise OcrTimeout(f"OCR took longer than {limit:g} s", seconds=limit) from None

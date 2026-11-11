@@ -19,6 +19,8 @@ const INSET = 8;
 /** Gap (px) for the small button of a picture that may hold text (it is often small: a logo, one line). */
 const SMALL_INSET = 2;
 const NONE: ImageTextRect[] = [];
+/** Pictures that may hold text one page shows a button on, at most. */
+const MAX_MAYBE = 6;
 
 /** The box of `rects` as shown (the page may be turned), in screen pixels. */
 function shown(rects: Rect[], geom: PageGeom, scale: number) {
@@ -63,7 +65,10 @@ export function OcrButton({ pageKey, geom, scale }: { pageKey: string; geom: Pag
   const [hidden, setHidden] = useState(false);
   if (!src || !rects.length) return null;
   const print = rects.filter(isPrint);
-  const maybe = rects.filter((r) => !isPrint(r) && !state?.areas?.includes(areaKey(r)));
+  // A page of many such pictures (icons, a gallery of logos) shows none of their buttons: the picture's menu and the
+  // area tool still read any of them.
+  const maybeAll = rects.filter((r) => !isPrint(r));
+  const maybe = maybeAll.length > MAX_MAYBE ? [] : maybeAll.filter((r) => !state?.areas?.includes(areaKey(r)));
   const loading = state?.status === "loading";
   const pill = `absolute z-[12] inline-flex h-7 max-w-[calc(100%-16px)] items-center gap-1.5 px-2.5 text-xs ${POPOVER}`;
 

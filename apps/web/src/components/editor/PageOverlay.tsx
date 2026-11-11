@@ -225,6 +225,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   useLayoutEffect(() => { stageRef.current?.getLayers().forEach((l) => l.draw()); });
 
   useEffect(() => () => drawing.current?.stop(), []);
+  // Another tool (Escape: Pilih) while dragging cancels the drag: its release must not still act as the old tool (an
+  // area read by OCR, a shape added).
+  useEffect(() => () => { if (drawing.current) { drawing.current.stop(); setDraft(null); } }, [tool]);
   const poly = usePolyTool(pageKey, POLY_TOOLS.has(tool) ? (tool as PolyTool) : null, scale);
 
   // Text markup needs the page's character boxes.

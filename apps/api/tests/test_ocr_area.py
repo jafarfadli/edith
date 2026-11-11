@@ -5,7 +5,7 @@ import pymupdf
 import pytest
 
 from edith import ocr
-from edith.routes.ocr import _unknown_only
+from edith.routes.ocr import _tidy, _unknown_only
 from tests.pdfs import KOP_ADDRESS, KOP_BODY, MAYBE_DARK, MAYBE_LINE, make_kop_pdf, make_maybe_text_pdf
 from tests.test_documents import upload
 from tests.test_ocr import needs_tesseract
@@ -95,3 +95,17 @@ def test_an_area_over_visible_and_hidden_text_reads_only_the_rest(client):
     assert not any(KOP_BODY[:10] in t for t in read), read
     address = pymupdf.Rect(*KOP_ADDRESS[2])
     assert all(address.contains(R(c)) for p in r["paragraphs"] for c in p["covers"])
+
+
+def test_stray_marks_are_no_paragraph():
+    mark = {"runs": [{"text": "|"}]}
+    word, digit = {"runs": [{"text": "RI"}]}, {"runs": [{"text": " 7 "}]}
+    assert _tidy([mark, word, digit, {"runs": [{"text": "–"}]}]) == [word, digit]
+
+
+@needs_tesseract
+def test_an_area_of_text_already_editable_says_so(client):
+    """Over the kop's measured hidden lines only: what OCR reads there is known, and the answer says so."""
+    doc = upload(client, make_kop_pdf()).json()["doc_id"]
+    r = client.post(f"/documents/{doc}/pages/0/ocr", json=area((138, 28, 522, 90))).json()
+    assert r["paragraphs"] == [] and r["quality"] == "known", r
