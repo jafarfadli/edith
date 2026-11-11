@@ -1217,3 +1217,13 @@ def make_small_form_pdf(family: str = "Caladea", dpi: int = 218) -> bytes:
     target = scan.new_page(width=612, height=792)
     target.insert_image(pymupdf.Rect(SMALL_RECT), stream=pix.tobytes("png"))
     return scan.tobytes(garbage=3, deflate=True, no_new_id=True)
+
+
+def make_tinted_cell_pdf() -> bytes:
+    """A table cell on a tinted fill (255, 235, 180) with a border, its text (Helvetica 12) close above the bottom
+    border: the editor's cover of edited text must be that tint, not white, and must leave the border."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.draw_rect(pymupdf.Rect(100, 100, 300, 130), color=(0, 0, 0), fill=(1.0, 235 / 255, 180 / 255), width=0.75)
+    page.insert_text((110, 126.5), "9 September 2026", fontname="helv", fontsize=12)
+    return doc.tobytes(garbage=3, deflate=True)

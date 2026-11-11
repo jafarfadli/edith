@@ -8,6 +8,7 @@ import type { Rect as Box, TextBox, TextEdit } from "@edith/ops";
 import type { OcrParagraph, Paragraph } from "@/lib/api";
 import { areaKey, coverRects, isLowConfidence, ocrBadge, ocrEditsOn, replacedIds, unedited, type OcrCover } from "@/lib/ocr";
 import { noticeStore } from "@/lib/notices";
+import { backgroundAround, useRendered } from "@/lib/pageBackground";
 import { maskRects } from "@/lib/paragraphs";
 import { srcKey } from "@/lib/sources";
 import { t } from "@/lib/strings";
@@ -58,6 +59,7 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   const images = useText((s) => s.images);
   const editing = useStore(textEditStore, (s) => s.editing);
   const selected = useStore(textEditStore, (s) => (s.paragraph?.pageKey === pageKey ? s.paragraph.id : null));
+  useRendered(pageKey); // the covers below are painted in the page's own background: read again when it has drawn
   const [hover, setHover] = useState<string | null>(null);
   const nodes = useRef(new Map<string, Konva.Rect>());
   const trRef = useRef<Konva.Transformer>(null);
@@ -177,13 +179,13 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   return (
     <>
       {paragraphs.filter((p) => edited.has(p.id)).flatMap((p) => maskRects(p, edits.get(p.id)).map((r, i) => (
-        <Rect key={`mask-${p.id}-${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="#ffffff" listening={false} />
+        <Rect key={`mask-${p.id}-${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill={backgroundAround(pageKey, r)} listening={false} />
       )))}
       {ocrEdits.flatMap((e) => coverRects(e).map((r, i) => (
         <Rect key={`cover-${e.id}-${i}`} name="ocr-cover" x={r.x} y={r.y} width={r.w} height={r.h} fill={e.coverColor} listening={false} />
       )))}
       {preview && maskRects(preview.p).map((r, i) => (
-        <Rect key={`resize-cover-${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="#ffffff" listening={false} />
+        <Rect key={`resize-cover-${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill={backgroundAround(pageKey, r)} listening={false} />
       ))}
       {preview && <TextNode op={preview.op} hidden={false} />}
       {locked.map((l) => (
