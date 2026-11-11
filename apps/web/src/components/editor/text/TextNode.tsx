@@ -7,6 +7,7 @@ import { decorBands, decorColor, joinBands } from "@/lib/textDecor";
 import { boxFonts } from "@/lib/textbox";
 import type { TextOp } from "@/lib/objects";
 import { fontsReady } from "./textEdit";
+import { useLiveText } from "./liveResize";
 import { useOverflow } from "./useOverflow";
 import { CANVAS } from "@/lib/theme";
 
@@ -14,7 +15,8 @@ const OVERFLOW = CANVAS.overflow;
 
 /** Draws a text box glyph-by-glyph at the PDF-quantized offsets — the same positions the API bakes —
  *  with backgrounds under and underline/strike over the glyphs, as the bake does. */
-export function TextNode({ op, hidden }: { op: TextOp; hidden: boolean }) {
+export function TextNode({ op: saved, hidden }: { op: TextOp; hidden: boolean }) {
+  const op = useLiveText(saved); // while its handle is dragged: the layout for the width at the pointer
   const { box } = op;
   const keys = boxFonts(box).map(fontKey).join("|");
   const [, setLoaded] = useState(0);

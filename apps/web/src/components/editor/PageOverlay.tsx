@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type Konva from "konva";
 import { Group, Layer, Stage, Transformer } from "react-konva";
 import { useStore } from "zustand";
@@ -19,6 +20,7 @@ import { MarkupShape } from "./marks/MarkupShape";
 import { markupFromDrag, onMarkableText } from "./marks/markupTool";
 import { ObjectShape } from "./ObjectShape";
 import { usePolyTool } from "./shapes/usePolyTool";
+import { liveResizeStore, setLiveResize } from "./text/liveResize";
 import { runPageOcr } from "./text/ocrRun";
 import { textEditStore, updateTextOp } from "./text/textEdit";
 import { CANVAS } from "@/lib/theme";
@@ -115,6 +117,20 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   useStore(textEditStore, (s) => s.editing?.id);
   const pageRef = useRef<Konva.Group>(null);
   const trRef = useRef<Konva.Transformer>(null);
+  // Escape while a handle is dragged: the object goes back as it was (set before the Transformer ends the drag), and
+  // stays selected (the capture phase comes before the shortcut that deselects).
+  const cancelled = useRef(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tr = trRef.current;
+      if (e.key !== "Escape" || !tr?.isTransforming()) return;
+      e.stopPropagation();
+      cancelled.current = true;
+      tr.stopTransform();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
   const stageRef = useRef<Konva.Stage>(null);
   const nodes = useRef(new Map<string, Konva.Group>());
   const [draft, setDraft] = useState<ContentOp | null>(null);
@@ -380,12 +396,27 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
                   g.position({ x: home.x, y: home.y });
                   if (cur && (dx || dy)) updateTextOp(op.id, moveOp(cur, dx, dy));
                 }}
+                // A text box re-wraps at every move of its handle (the Transformer only scales the group: it goes back to 1
+                // each time, so the glyphs are never stretched). Chrome delivers the moves once per frame.
+                onTransform={(e) => {
+                  const g = e.currentTarget as Konva.Group;
+                  const cur = editorStore.getState().doc.objects[op.id];
+                  if (!cur || !isTextOp(cur) || cancelled.current) return;
+                  const base = liveResizeStore.getState().live ?? cur;
+                  const next = transformed(base, g, pageRef.current!) as TextOp;
+                  flushSync(() => setLiveResize(next)); // the Transformer measures the group once this event is over
+                  g.setAttrs({ ...objectGroupAttrs(next), scaleX: 1, scaleY: 1 });
+                }}
                 onTransformEnd={(e) => {
                   const g = e.currentTarget as Konva.Group;
                   const cur = editorStore.getState().doc.objects[op.id];
-                  const next = cur ? transformed(cur, g, pageRef.current!) : null;
+                  const live = liveResizeStore.getState().live;
+                  setLiveResize(null);
+                  // Escape: back to the saved op. Release: the last live frame (a non-text object: its scaled group).
+                  const next = !cur || cancelled.current ? cur : live ?? transformed(cur, g, pageRef.current!);
+                  cancelled.current = false;
                   g.setAttrs({ ...objectGroupAttrs(next ?? op), scaleX: 1, scaleY: 1 });
-                  if (next) updateTextOp(op.id, next);
+                  if (next && next !== cur) updateTextOp(op.id, next);
                 }}
                 onDblClick={() => overlayHooks.onDoubleClick?.(op)}
               >
