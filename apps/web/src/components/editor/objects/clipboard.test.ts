@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
 import { visualBounds } from "@/lib/objects";
 import { editorStore, type DocInfo } from "@/store/editor";
-import { alignSelection, clearClipboard, copySelection, duplicateSelection, hasClipboard, pasteClipboard, PASTE_OFFSET } from "./clipboard";
+import { alignSelection, clearClipboard, copySelection, cutSelection, distributeSelection, duplicateSelection, hasClipboard, pasteClipboard, PASTE_OFFSET } from "./clipboard";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "s", fileName: "a.pdf",
@@ -70,5 +70,86 @@ describe("clipboard", () => {
     s().select("q");
     alignSelection("left"); // page turned 90°: the screen's left edge is the page's bottom (y = 800)
     expect(rectOf("q")).toMatchObject({ x: 100, y: 780 });
+  });
+});
+
+describe("clipboard with a group", () => {
+  const at = (id: string) => (s().doc.objects[id] as { rect: { x: number; y: number } }).rect;
+  beforeEach(() => {
+    s().addObject(box({ id: "r2", rect: { x: 300, y: 400, w: 50, h: 20 } }));
+    s().selectMany(["r", "r2"]);
+  });
+
+  it("copies and pastes the whole group, keeping how its objects lie, as one undo step and selects the copies", () => {
+    expect(copySelection()).toBe(true);
+    const before = Object.keys(s().doc.objects).length;
+    const id = pasteClipboard()!;
+    expect(s().selected.length).toBe(2);
+    expect(s().selection).toBe(id);
+    const [a, b] = s().selected;
+    expect(at(a)).toMatchObject({ x: 100 + PASTE_OFFSET, y: 200 + PASTE_OFFSET });
+    expect(at(b)).toMatchObject({ x: 300 + PASTE_OFFSET, y: 400 + PASTE_OFFSET });
+    s().undo();
+    expect(Object.keys(s().doc.objects).length).toBe(before);
+  });
+
+  it("duplicates the group", () => {
+    const id = duplicateSelection()!;
+    expect(s().selected.length).toBe(2);
+    expect(s().selection).toBe(id);
+    expect(Object.keys(s().doc.objects).length).toBe(4);
+  });
+
+  it("keeps a pasted group on the page as a group", () => {
+    s().updateObject("r2", { rect: { x: 545, y: 400, w: 50, h: 20 } } as Partial<ContentOp>);
+    copySelection();
+    pasteClipboard(); // 10 pt down-right would push r2's right edge to 605
+    const [a, b] = s().selected;
+    expect(at(b).x).toBe(550); // the group's right edge stops at 600
+    expect(at(b).x - at(a).x).toBe(445); // spacing kept
+  });
+
+  it("cuts: copies and removes the group in one step; the paste brings it back", () => {
+    expect(cutSelection()).toBe(true);
+    expect(Object.keys(s().doc.objects)).toEqual([]);
+    expect(s().selected).toEqual([]);
+    pasteClipboard();
+    expect(s().selected.length).toBe(2);
+    s().undo();
+    s().undo();
+    expect(Object.keys(s().doc.objects).sort()).toEqual(["r", "r2"]);
+  });
+
+  it("aligns a group to its bounding box", () => {
+    alignSelection("left");
+    expect(at("r").x).toBe(100);
+    expect(at("r2").x).toBe(100);
+    alignSelection("bottom"); // r2 is lower
+    expect(at("r").y).toBe(400);
+  });
+
+  it("aligns a group in one undo step", () => {
+    alignSelection("left");
+    s().undo();
+    expect(at("r2").x).toBe(300);
+  });
+
+  it("distributes three or more", () => {
+    s().addObject(box({ id: "r3", rect: { x: 120, y: 500, w: 50, h: 20 } }));
+    s().selectMany(["r", "r2", "r3"]);
+    distributeSelection("x"); // r 100..150, r3 120..170, r2 300..350
+    const xs = ["r", "r3", "r2"].map((id) => at(id).x);
+    const gap1 = xs[1] - (xs[0] + 50), gap2 = xs[2] - (xs[1] + 50);
+    expect(gap1).toBeCloseTo(gap2);
+    expect(at("r").x).toBe(100);
+    expect(at("r2").x).toBe(300);
+    s().undo();
+    expect(at("r3").x).toBe(120);
+  });
+
+  it("distribute does nothing for two", () => {
+    const n = s().past.length;
+    distributeSelection("x");
+    expect(s().past.length).toBe(n);
   });
 });

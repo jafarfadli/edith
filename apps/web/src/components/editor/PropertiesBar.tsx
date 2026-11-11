@@ -16,6 +16,7 @@ import { ICON, ICON_SM } from "../ui/icon";
 import { BTN_DANGER, BTN_QUIET, FIELD, PROP_LABEL, swatch } from "../ui/styles";
 import { Tip } from "../ui/Tooltip";
 import { ColorField } from "./ColorField";
+import { GroupBar } from "./objects/GroupBar";
 import { deleteObjectOrText, deleteSelectedParagraph, editSelectedParagraph, isDeletedText, isTextEdit, textEditStore } from "./text/textEdit";
 
 // Filled by the text tool once its (lazily loaded) module is installed. The bar can already be open by then (the text
@@ -53,6 +54,8 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
   if (tool === "text") return "text";
   return null;
 }
+
+const BAR = "absolute left-1/2 top-3 z-30 h-10 max-w-[calc(100%-1.5rem)] -translate-x-1/2 overflow-x-auto rounded-lg bg-panel px-3 text-sm shadow-pop [scrollbar-width:none]";
 
 const DRAG_SHAPES: ReadonlySet<string> = new Set(["rect", "ellipse", "line", "arrow"]);
 /** Room the bar loses inside the canvas: its `max-w-[calc(100%-1.5rem)]` margins and its `px-3` padding. */
@@ -95,7 +98,8 @@ function useHintFold(hint: string | null): [boolean, (row: HTMLDivElement | null
 export function PropertiesBar() {
   const renderTextProps = useSyncExternalStore(subscribeSlot, getSlot, getSlot);
   const selection = useEditor((s) => s.selection);
-  const op = useEditor((s) => (s.selection ? s.doc.objects[s.selection] : undefined));
+  const multi = useEditor((s) => s.selected.length > 1 && s.tool === "select");
+  const op =useEditor((s) => (s.selection ? s.doc.objects[s.selection] : undefined));
   const reverts = isTextEdit(op);
   const tool = useEditor((s) => s.tool);
   const style = useEditor((s) => s.style);
@@ -169,11 +173,18 @@ export function PropertiesBar() {
   // Hidden when it would be empty (Pilih with nothing selected).
   const empty = !hint && !selection && !showOpacity && !scanned && !noText
     && (kind === null || (kind === "redact" && !o) || (kind === "stamp" && !o) || (kind === "text" && !editingText && !renderTextProps));
+  if (multi) {
+    // A group: no one object's properties, but what applies to all of them.
+    return (
+      <div role="group" aria-label={t.editor.properties} data-testid="properties-bar" className={BAR}>
+        <div className="flex h-full w-max items-center gap-3 whitespace-nowrap"><GroupBar /></div>
+      </div>
+    );
+  }
   if (empty) return null;
 
   return (
-    <div role="group" aria-label={t.editor.properties} data-testid="properties-bar"
-      className="absolute left-1/2 top-3 z-30 h-10 max-w-[calc(100%-1.5rem)] -translate-x-1/2 overflow-x-auto rounded-lg bg-panel px-3 text-sm shadow-pop [scrollbar-width:none]">
+    <div role="group" aria-label={t.editor.properties} data-testid="properties-bar" className={BAR}>
       <div ref={observeRow} className="flex h-full w-max items-center gap-4 whitespace-nowrap">
         {hint && (
           // A long sentence wraps onto two lines rather than widening the bar; folded, it lives in the icon's tooltip.

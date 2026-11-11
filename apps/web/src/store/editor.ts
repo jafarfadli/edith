@@ -41,14 +41,21 @@ export interface ToolStyle {
 
 export interface EditorState {
   info: DocInfo | null; doc: EditorDoc; past: EditorDoc[]; future: EditorDoc[];
-  selection: string | null; tool: Tool; zoom: number; style: ToolStyle; currentPage: string | null;
+  /** The selected objects (ids, all on one page; the last is the primary) and the primary alone (`selection`: what the
+   *  properties bar, the mini-bar and the text properties are about). Always `selection === selected.at(-1) ?? null`. */
+  selected: string[]; selection: string | null;
+  tool: Tool; zoom: number; style: ToolStyle; currentPage: string | null;
   init(info: DocInfo, restored?: EditorDoc | null): void;
   addObject(op: ContentOp): void;
   /** `coalesce`: successive updates with the same key within COALESCE_MS are one undo step (slider drags, typing a size).
+   *  `within`: that window in ms (default COALESCE_MS).
    *  `remove`: objects deleted in the same step (marks on text a text.edit stops keeping, see updateTextOp). */
-  updateObject(id: string, patch: Partial<ContentOp>, opts?: { coalesce?: string; remove?: string[] }): void;
-  /** Adds or replaces several objects and deletes the objects `remove` as one undo step (Replace All). */
-  putObjects(ops: ContentOp[], remove?: string[]): void;
+  updateObject(id: string, patch: Partial<ContentOp>, opts?: { coalesce?: string; within?: number; remove?: string[] }): void;
+  /** Adds or replaces several objects and deletes the objects `remove` as one undo step (Replace All, a group's move,
+   *  paste, delete, align). `opts` as in updateObject: held arrow keys coalesce into one step. */
+  putObjects(ops: ContentOp[], remove?: string[], opts?: { coalesce?: string; within?: number }): void;
+  /** The next coalescing update starts a new undo step (an action that is not an update of the same object). */
+  breakCoalesce(): void;
   deleteObject(id: string): void;
   /** Moves objects `ids` in the stacking order of their page (lib/zorder.ts reorder) as one undo step; false when
    *  nothing changed (already at the front/back, unknown ids). */
@@ -70,7 +77,12 @@ export interface EditorState {
   /** Replaces the whole document as one undo step (the Manage Pages modal's Simpan). */
   replaceDoc(next: EditorDoc): void;
   undo(): void; redo(): void;
-  select(id: string | null): void; setTool(t: Tool): void; setZoom(z: number): void;
+  select(id: string | null): void;
+  /** Selects `ids` (known ones, once each); `primary` (default: the last) becomes the last. */
+  selectMany(ids: readonly string[], primary?: string): void;
+  /** Shift+click: adds `id` to the selection or removes it; an object of another page starts a new selection. */
+  toggleSelected(id: string): void;
+  setTool(t: Tool): void; setZoom(z: number): void;
   setStyle(p: Partial<ToolStyle>): void; setCurrentPage(k: string | null): void;
 }
 
@@ -99,13 +111,11 @@ export function pageGeom(entry: PageEntry, info: DocInfo): PageGeom {
 }
 
 /** Fields of `s` that must change so selection/currentPage stay valid for `doc`. */
-function reconcile(doc: EditorDoc, s: { selection: string | null; currentPage: string | null }) {
+function reconcile(doc: EditorDoc, s: { selected: string[]; currentPage: string | null }) {
   const keys = new Set(doc.pages.map((p) => p.pageKey));
-  const out: { selection?: null; currentPage?: string | null } = {};
-  if (s.selection !== null) {
-    const op = doc.objects[s.selection];
-    if (!op || !keys.has(op.pageKey)) out.selection = null;
-  }
+  const out: { selected?: string[]; selection?: string | null; currentPage?: string | null } = {};
+  const kept = s.selected.filter((id) => { const op = doc.objects[id]; return !!op && keys.has(op.pageKey); });
+  if (kept.length !== s.selected.length) { out.selected = kept; out.selection = kept.at(-1) ?? null; }
   if (s.currentPage === null || !keys.has(s.currentPage)) {
     const first = doc.pages[0]?.pageKey ?? null;
     if (first !== s.currentPage) out.currentPage = first;
@@ -134,12 +144,12 @@ export function ocrEditFor(doc: EditorDoc, pageKey: string, paragraphId: string)
 export function createEditorStore(now: () => number = Date.now): StoreApi<EditorState> {
   return createStore<EditorState>()((set, get) => {
     let last: { key: string; at: number } | null = null;
-    const commit = (fn: (d: EditorDoc) => EditorDoc, coalesce?: string) => {
+    const commit = (fn: (d: EditorDoc) => EditorDoc, coalesce?: string, within = COALESCE_MS) => {
       const prev = get().doc;
       const next = fn(prev);
       if (next === prev) return;
       const t = now();
-      if (coalesce !== undefined && last?.key === coalesce && t - last.at <= COALESCE_MS && get().past.length) {
+      if (coalesce !== undefined && last?.key === coalesce && t - last.at <= within && get().past.length) {
         set({ doc: next, future: [] }); // same undo step as the previous update
       } else {
         set({ doc: next, past: [...get().past, prev].slice(-HISTORY_LIMIT), future: [] });
@@ -149,12 +159,12 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
 
     return {
       info: null, doc: EMPTY, past: [], future: [],
-      selection: null, tool: "select", zoom: 1, style: DEFAULT_STYLE, currentPage: null,
+      selected: [], selection: null, tool: "select", zoom: 1, style: DEFAULT_STYLE, currentPage: null,
 
       init(info, restored) {
         const pages: PageEntry[] = info.pages.map((p) => ({ pageKey: `o${p.index}`, src: { doc: info.docId, index: p.index }, rotate: 0 }));
         const doc = restored ?? { pages, objects: {}, order: [] };
-        set({ info, doc, past: [], future: [], selection: null, currentPage: null });
+        set({ info, doc, past: [], future: [], selected: [], selection: null, currentPage: null });
         set(reconcile(doc, get()));
       },
 
@@ -174,12 +184,11 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
           const objects = { ...d.objects, [id]: { ...cur, ...patch, id: cur.id, type: cur.type } as ContentOp };
           for (const x of gone) delete objects[x];
           return { ...d, objects, order: gone.size ? d.order.filter((x) => !gone.has(x)) : d.order };
-        }, opts?.coalesce);
-        const sel = get().selection;
-        if (sel !== null && gone.has(sel)) set({ selection: null });
+        }, opts?.coalesce, opts?.within);
+        set(reconcile(get().doc, get()));
       },
 
-      putObjects(ops, remove = []) {
+      putObjects(ops, remove = [], opts) {
         const gone = new Set(remove.filter((id) => !ops.some((op) => op.id === id)));
         if (!ops.length && !gone.size) return;
         commit((d) => {
@@ -194,9 +203,12 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
             order = order.filter((id) => !gone.has(id));
           }
           return { ...d, objects, order };
-        });
-        const sel = get().selection;
-        if (sel !== null && gone.has(sel)) set({ selection: null });
+        }, opts?.coalesce, opts?.within);
+        set(reconcile(get().doc, get()));
+      },
+
+      breakCoalesce() {
+        last = null;
       },
 
       deleteObject(id) {
@@ -206,7 +218,7 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
           delete objects[id];
           return { ...d, objects, order: d.order.filter((x) => x !== id) };
         });
-        if (get().selection === id) set({ selection: null });
+        set(reconcile(get().doc, get()));
       },
 
       reorderObjects(ids, move) {
@@ -297,8 +309,22 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
         set(reconcile(next, get()));
       },
 
-      select: (id) => set({ selection: id }),
-      setTool: (tool) => set({ tool, selection: tool === "select" ? get().selection : null }),
+      select: (id) => set({ selected: id === null ? [] : [id], selection: id }),
+      selectMany(ids, primary) {
+        const doc = get().doc;
+        const known = [...new Set(ids)].filter((id) => doc.objects[id]);
+        const picked = primary !== undefined && known.includes(primary) ? [...known.filter((id) => id !== primary), primary] : known;
+        set({ selected: picked, selection: picked.at(-1) ?? null });
+      },
+      toggleSelected(id) {
+        const { doc, selected } = get();
+        const op = doc.objects[id];
+        if (!op) return;
+        const samePage = selected.every((x) => doc.objects[x]?.pageKey === op.pageKey);
+        const next = !samePage ? [id] : selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+        set({ selected: next, selection: next.at(-1) ?? null });
+      },
+      setTool: (tool) => set(tool === "select" ? { tool } : { tool, selected: [], selection: null }),
       setZoom: (z) => set({ zoom: Math.min(4, Math.max(0.25, z)) }),
       setStyle: (p) => set({ style: { ...get().style, ...p } }),
       setCurrentPage: (k) => set({ currentPage: k }),

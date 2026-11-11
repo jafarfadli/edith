@@ -22,6 +22,7 @@ import { useIsMac } from "../../ui/useIsMac";
 import { usePopupFocus } from "../../ui/usePopupFocus";
 import { OBJECT_ICONS } from "../objectIcons";
 import { copySelection, duplicateSelection } from "./clipboard";
+import { deleteObjects } from "./group";
 import { contextMenuStore, Z_COMMANDS, type ContextMenu, type ObjectMenu } from "./layering";
 import { deleteObjectOrText, deleteSelectedParagraph, editSelectedParagraph, isDeletedText, isTextEdit, textEditStore } from "../text/textEdit";
 
@@ -60,6 +61,7 @@ function Menu({ menu }: { menu: ContextMenu }) {
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const doc = useEditor((s) => s.doc);
   const selection = useEditor((s) => s.selection);
+  const selected = useEditor((s) => s.selected);
   const tool = useEditor((s) => s.tool);
   const mac = useIsMac();
   const paragraph = "paragraph" in menu ? menu.paragraph : null;
@@ -158,7 +160,9 @@ function Menu({ menu }: { menu: ContextMenu }) {
 
   // An edit of original text: Delete takes its text (once); bringing the original back is said as such.
   const textEdit = isTextEdit(op);
-  const moves = zMoves(doc, [op.id]);
+  // On a member of a group the commands act on the whole group (PageOverlay keeps the group selected for it).
+  const ids = selected.includes(op.id) ? selected : [op.id];
+  const moves = zMoves(doc, ids);
   const copyable = isCopyable(op);
   const stage = zStage(op);
   const pageHasMarkup = doc.order.some((id) => { const o = doc.objects[id]; return !!o && o.pageKey === op.pageKey && zStage(o) === "annot"; });
@@ -168,14 +172,14 @@ function Menu({ menu }: { menu: ContextMenu }) {
   const stack = (menu as ObjectMenu).stack;
 
   return shell(t.layers.contextMenu, "object-menu", <>
-      {Z_COMMANDS.map((c) => item(c.move, c.label, c.icon, () => s.reorderObjects([op.id], c.move), { keys: zKeys(mac)[c.move], disabled: !moves[c.move] }))}
+      {Z_COMMANDS.map((c) => item(c.move, c.label, c.icon, () => s.reorderObjects(ids, c.move), { keys: zKeys(mac)[c.move], disabled: !moves[c.move] }))}
       <div role="separator" className="mx-1 my-1 h-px bg-line" />
-      {copyable && item("duplicate", t.objects.duplicate, Copy, () => { s.select(op.id); duplicateSelection(); }, { keys: "Mod+D" })}
-      {copyable && item("copy", t.objects.copy, ClipboardCopy, () => { s.select(op.id); copySelection(); }, { keys: "Mod+C" })}
-      {textEdit && item("revert", t.text.revert, Undo2, () => s.deleteObject(op.id))}
-      {textEdit
+      {copyable && item("duplicate", t.objects.duplicate, Copy, () => { if (!selected.includes(op.id)) s.select(op.id); duplicateSelection(); }, { keys: "Mod+D" })}
+      {copyable && item("copy", t.objects.copy, ClipboardCopy, () => { if (!selected.includes(op.id)) s.select(op.id); copySelection(); }, { keys: "Mod+C" })}
+      {textEdit && ids.length === 1 && item("revert", t.text.revert, Undo2, () => s.deleteObject(op.id))}
+      {textEdit && ids.length === 1
         ? item("delete", t.text.delete, Trash2, () => deleteObjectOrText(op.id), { keys: "Delete", danger: true, disabled: isDeletedText(op) })
-        : item("delete", t.editor.delete, Trash2, () => s.deleteObject(op.id), { keys: "Delete", danger: true })}
+        : item("delete", t.editor.delete, Trash2, () => deleteObjects(ids), { keys: "Delete", danger: true })}
       {stack.length > 1 && (
         <div role="group" aria-label={t.layers.pickBelow} className="flex flex-col">
           <div role="separator" className="mx-1 my-1 h-px bg-line" />

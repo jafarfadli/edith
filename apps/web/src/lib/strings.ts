@@ -200,6 +200,19 @@ export const t = {
     alignTop: "Ratakan ke atas halaman",
     alignMiddle: "Ratakan ke tengah (vertikal)",
     alignBottom: "Ratakan ke bawah halaman",
+    /** Several objects selected (Shift+klik, seret di halaman kosong, Ctrl/Cmd+A): the properties bar's group controls. */
+    selected: (n: number) => `${n} objek dipilih`,
+    group: "Objek terpilih",
+    groupAlignLeft: "Rata kiri",
+    groupAlignCenter: "Rata tengah (horizontal)",
+    groupAlignRight: "Rata kanan",
+    groupAlignTop: "Rata atas",
+    groupAlignMiddle: "Rata tengah (vertikal)",
+    groupAlignBottom: "Rata bawah",
+    distributeX: "Bagi rata jarak horizontal",
+    distributeY: "Bagi rata jarak vertikal",
+    /** Why distributing is off. */
+    distributeNeedsThree: "Pilih minimal tiga objek",
   },
   /** Stacking order of overlapping objects (z-order): context menu, mini-bar menu, Alt+click. */
   layers: {

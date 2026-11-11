@@ -3,6 +3,10 @@
 export const CANVAS = {
   /** --accent: selection outlines, transformer handles, the crop rectangle, editable-paragraph outlines. */
   accent: "#246bf6",
+  /** Smart guides, spacing labels and the Alt distances while dragging or resizing (Figma's red-pink). */
+  guide: "#f5316f",
+  /** The marquee's fill: --accent at 8 %. */
+  marqueeFill: "rgba(36, 107, 246, 0.08)",
   /** Shade outside a crop: --base at 55 %. */
   cropShade: "rgba(14, 15, 18, 0.55)",
   /** --warn on paper: the outline of a text box that runs past its original paragraph. */
