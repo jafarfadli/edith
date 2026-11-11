@@ -132,9 +132,13 @@ test("any picture can be read: a picture's menu, its 'maybe' button and an area 
   await expect(page.getByTestId("ocr-button")).toHaveCount(0); // no picture of print: no page OCR
 
   // Right-click on the address picture: its menu reads it.
-  await page.mouse.click(box.x + 300, box.y + 99, { button: "right" });
+  // (Retried as the double-clicks elsewhere: on a slow runner the page's canvas may not take events yet.)
   const menu = page.getByTestId("picture-menu");
-  await expect(menu).toBeVisible();
+  await expect(async () => {
+    await page.mouse.move(box.x + 300, box.y + 99);
+    await page.mouse.click(box.x + 300, box.y + 99, { button: "right" });
+    await expect(menu).toBeVisible({ timeout: 1000 });
+  }).toPass();
   await menu.getByRole("menuitem", { name: "Kenali teks di gambar ini (OCR)" }).click();
   await expect(page.getByRole("status").filter({ hasText: /Hasil OCR: 1 paragraf/ })).toBeVisible({ timeout: 45_000 });
   await expect(maybe).toHaveCount(1); // read: its button goes
