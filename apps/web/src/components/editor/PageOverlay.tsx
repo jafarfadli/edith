@@ -29,6 +29,7 @@ import { boundsOf, stacked } from "@/lib/zorder";
 import { snapStore } from "@/store/snap";
 import { useSpaceHeld } from "@/store/view";
 import { contextMenuStore, menuOpeners } from "./objects/layering";
+import { resizeGroup } from "./objects/groupResize";
 import { SnapGuides } from "./objects/SnapGuides";
 import { sizeBadge, snapTargets } from "./objects/snapTargets";
 import { useAltMeasure } from "./objects/useAltMeasure";
@@ -137,6 +138,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   useStore(textEditStore, (s) => s.editing?.id);
   const pageRef = useRef<Konva.Group>(null);
   const trRef = useRef<Konva.Transformer>(null);
+  const groupTrRef = useRef<Konva.Transformer>(null);
+  const groupRef = useRef<Konva.Rect>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const nodes = useRef(new Map<string, Konva.Group>());
   const [draft, setDraft] = useState<ContentOp | null>(null);
@@ -243,6 +246,13 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     }
     trRef.current?.getLayer()?.batchDraw();
   }, [selection, selected, mine, objects]);
+
+  const groupKey = groupBox ? `${groupBox.x},${groupBox.y},${groupBox.w},${groupBox.h}` : "";
+  useEffect(() => {
+    const tr = groupTrRef.current;
+    tr?.nodes(groupBox && groupRef.current ? [groupRef.current] : []);
+    tr?.getLayer()?.batchDraw();
+  }, [groupKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Konva rebuilds a layer's hit graph in a batched draw (requestAnimationFrame, which can lag by hundreds of ms
   // in a busy or background tab). A pointer event in between is hit-tested against the stale graph: right after a
@@ -455,7 +465,19 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
               const b = boundsOf(op);
               return <Rect key={`pick-${op.id}`} name="pick" x={b.x} y={b.y} width={b.w} height={b.h} stroke={CANVAS.accent} strokeWidth={1} strokeScaleEnabled={false} listening={false} />;
             })}
-            {groupBox && <Rect name="group-box" x={groupBox.x} y={groupBox.y} width={groupBox.w} height={groupBox.h} stroke={CANVAS.accent} strokeWidth={1} strokeScaleEnabled={false} listening={false} />}
+            {/* The group's box: the node its own Transformer (below) holds, to resize every member at once. */}
+            {groupBox && (
+              <Rect
+                ref={groupRef} name="group-box" x={groupBox.x} y={groupBox.y} width={groupBox.w} height={groupBox.h} listening={false}
+                onTransformEnd={(e) => {
+                  const node = e.currentTarget;
+                  const c = node.getClientRect({ relativeTo: pageRef.current!, skipStroke: true });
+                  const to = { x: c.x, y: c.y, w: c.width, h: c.height };
+                  node.setAttrs({ x: to.x, y: to.y, width: to.w, height: to.h, scaleX: 1, scaleY: 1 });
+                  resizeGroup(picked.map((o) => o.id), groupBox, to, overlayHooks.resizeText);
+                }}
+              />
+            )}
             {marquee.rect && (
               <Rect name="marquee" x={marquee.rect.x} y={marquee.rect.y} width={marquee.rect.w} height={marquee.rect.h}
                 fill={CANVAS.marqueeFill} stroke={CANVAS.accent} strokeWidth={1} strokeScaleEnabled={false} listening={false} />
@@ -478,6 +500,18 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
             enabledAnchors={selection && isTextOp(objects[selection])
               ? ["middle-left", "middle-right"]
               : boxAnchors(selection ? objects[selection] : undefined, tr.scale)}
+            borderStroke={CANVAS.accent}
+            anchorStroke={CANVAS.accent}
+            anchorSize={8}
+          />
+          {/* A group: handles around its box scale every member; text boxes by their width only. */}
+          <Transformer
+            ref={groupTrRef}
+            rotateEnabled={false}
+            flipEnabled={false}
+            ignoreStroke
+            keepRatio={false}
+            enabledAnchors={groupBox ? boxAnchors({ type: "whiteout.add", rect: { x: 0, y: 0, w: groupBox.w, h: groupBox.h } } as unknown as ContentOp, tr.scale) : []}
             borderStroke={CANVAS.accent}
             anchorStroke={CANVAS.accent}
             anchorSize={8}

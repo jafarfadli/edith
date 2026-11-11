@@ -169,6 +169,24 @@ test("dragging one object of a selection moves them all, and one undo puts them 
   await settled(page, async () => (await draftRects(page)).map((r) => [r.x, r.y]), [[100, 150], [240, 250], [400, 350]]);
 });
 
+test("the group's handles scale every member with its box; one undo puts them back", async ({ page }) => {
+  const box = await open(page);
+  await rect(page, box, ...A);
+  await rect(page, box, ...B);
+  await page.mouse.click(box.x + 560, box.y + 700);
+  await drag(page, box, [60, 120], [320, 300]);
+  await expect(groupCount(page)).toHaveText("2 objek dipilih");
+  // The group's box is (100, 150) – (300, 290); its bottom-right handle to (400, 390).
+  await drag(page, box, [300, 290], [400, 390]);
+  const [a, b] = await rects(page, 2);
+  expect(a.x).toBeCloseTo(100, 0);
+  expect(a.w).toBeCloseTo(90, 0); // 60 * 300 / 200
+  expect(b.x).toBeCloseTo(310, 0); // 100 + 140 * 1.5
+  expect(b.y).toBeCloseTo(150 + 100 * (240 / 140), 0);
+  await page.keyboard.press(`${MOD}+z`);
+  await settled(page, async () => (await draftRects(page, 2)).map((r) => [r.x, r.w]), [[100, 60], [240, 60]]);
+});
+
 test("a click on one object of a group makes it the only selection", async ({ page }) => {
   const box = await open(page);
   await threeRects(page, box);
