@@ -135,6 +135,6 @@ test("resizing the frame of original text re-wraps it live; Escape leaves the pa
   await page.mouse.up();
   await expect.poll(async () => (await draftOps(page)).length).toBe(1);
 
-  expect((await draftOps(page))[0].box.rect.w).toBeLessThan(rect.w - 100);
+  expect(Math.round((await draftOps(page))[0].box.rect.w)).toBe(Math.round(rect.w - 180)); // the frame the handle was dragged to, not the box's plus the drag
   await expect.poll(() => inkLines(page, ...area)).toBe(live);
 });

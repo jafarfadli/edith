@@ -250,7 +250,7 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
             resizing.current = null;
             setPreview(null);
             node.setAttrs({ x: p.rect.x, scaleX: 1, scaleY: 1 });
-            if (!cancelled) void materializeParagraph(pageKey, p, resizedParagraph(p, x, w));
+            if (!cancelled) void materializeParagraph(pageKey, p, resizedParagraph(x, w));
           }}
         />
       ))}
