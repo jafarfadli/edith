@@ -13,10 +13,10 @@ export const Z_COMMANDS: { move: ZMove; label: string; icon: LucideIcon }[] = [
   { move: "back", label: t.layers.back, icon: ArrowDownToLine },
 ];
 
-/** The selected objects (one today: the store keeps a single selection; the moves take a group). */
+/** The selected objects (the moves take a group). */
 export function selectedIds(): string[] {
   const s = editorStore.getState();
-  return s.selection && s.doc.objects[s.selection] ? [s.selection] : [];
+  return s.selected.filter((id) => s.doc.objects[id]);
 }
 
 /** Moves the selection in the stacking order of its page; false when nothing changed. */
