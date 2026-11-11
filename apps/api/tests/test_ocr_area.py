@@ -100,7 +100,8 @@ def test_an_area_over_visible_and_hidden_text_reads_only_the_rest(client):
 def test_stray_marks_are_no_paragraph():
     mark = {"runs": [{"text": "|"}]}
     word, digit = {"runs": [{"text": "RI"}]}, {"runs": [{"text": " 7 "}]}
-    assert _tidy([mark, word, digit, {"runs": [{"text": "–"}]}]) == [word, digit]
+    colon, unsure = {"runs": [{"text": ":"}], "confidence": 0.92}, {"runs": [{"text": "°"}], "confidence": 0.3}
+    assert _tidy([mark, word, digit, {"runs": [{"text": "–"}]}, colon, unsure]) == [word, digit, colon]
 
 
 @needs_tesseract

@@ -78,11 +78,17 @@ def _known(request: Request, doc, doc_id: str, index: int) -> list[pymupdf.Rect]
     return out
 
 
+STROKES = frozenset("|¦!/\\_-–—~'\"`")  # one of these alone is a line of the picture read as a glyph
+
+
 def _tidy(paragraphs: list[dict]) -> list[dict]:
-    """The OCR paragraphs without stray marks: one glyph that is no letter or digit (a "|" read off a box's edge, a
-    lone dash), which no one means to edit and whose cover would only paint over the picture."""
-    return [p for p in paragraphs if not (len(t := "".join(r["text"] for r in p["runs"]).strip()) == 1
-                                          and not t.isalnum())]
+    """The OCR paragraphs without stray marks: one glyph that is no letter or digit and either looks like a stroke (a
+    "|" read off a box's edge, a dash of a rule) or was read unsure, which no one means to edit and whose cover would
+    only paint over the picture. A sure lone ":" of a form row ("Nama : …") stays."""
+    def stray(p: dict) -> bool:
+        t = "".join(r["text"] for r in p["runs"]).strip()
+        return len(t) == 1 and not t.isalnum() and (t in STROKES or p.get("confidence", 1) < 0.6)
+    return [p for p in paragraphs if not stray(p)]
 
 
 def _unknown_only(paragraphs: list[dict], known: list[pymupdf.Rect]) -> list[dict]:
