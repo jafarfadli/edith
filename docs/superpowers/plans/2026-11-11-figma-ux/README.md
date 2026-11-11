@@ -14,6 +14,13 @@ Owner request: an editor feel like Figma — marquee multi-select, arrow-key nud
 - **Alt+drag** copies: the original is dragged, and on release a copy lands at the drop point (one undo step). Alt+click keeps cycling to the object beneath (on a selected object it waits for the release, so a drag copies instead).
 - **Cheap extras:** Cmd/Ctrl+A, Cmd/Ctrl+X, Cmd/Ctrl+D on groups; Tab / Shift+Tab cycles (reading order) only while an object is selected and focus is not on a control; Space+drag and middle-mouse pan; move cursor over objects.
 
+## Limits (known, on purpose)
+
+- Original (unedited) text paragraphs, and form fields, cannot join a multi-selection (see Decisions). A press on one still selects it alone, and a drag from original text is a marquee.
+- Resize snapping works for one upright object on an upright page; a turned object (or a page turned 90/180/270°) resizes without guides. Moving snaps on any page rotation. Group resize has no guides.
+- Equal-spacing guides need the objects to share a row or column (overlap on the cross axis) and look at the nearest neighbours' gaps and the other gaps of that row.
+- Undo does not bring the selection back (as before for one object).
+
 ## Tasks (TDD, one commit each)
 
 1. Store: `selected`, `selectMany`, `toggleSelected`, pruning; `putObjects` opts, per-call coalesce window.

@@ -413,6 +413,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     <div
       data-testid="overlay"
       className="absolute inset-0"
+      onPointerLeave={() => altMeasure.leave()}
       style={{ pointerEvents: tool === "pan" || space ? "none" : "auto", cursor: tool === "select" ? "default" : MARKUP_TOOLS.has(tool) ? "text" : "crosshair" }}
     >
       <Stage
@@ -420,7 +421,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
         width={size.width}
         height={size.height}
         onPointerDown={onDown}
-        onPointerMove={(e) => { if (poly.active) poly.hover(pos()); altMeasure(e.evt.altKey); }}
+        onPointerMove={(e) => { if (poly.active) poly.hover(pos()); altMeasure.move(e.evt.altKey); }}
         onDblClick={() => poly.doubleClick()}
         onContextMenu={onContextMenu}
       >

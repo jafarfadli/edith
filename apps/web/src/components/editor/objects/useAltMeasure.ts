@@ -7,11 +7,12 @@ import { editorStore } from "@/store/editor";
 import { snapStore } from "@/store/snap";
 
 /** Alt held with an object selected and the pointer over another: the distances between the two (Figma). `stackAt`
- *  gives the objects under the pointer, topmost first. Returns `update(alt)`: call it on pointer moves with the
- *  event's Alt state; Alt presses and releases are tracked here. A drag or resize in progress (its size badge is up)
- *  is never disturbed. */
+ *  gives the objects under the pointer, topmost first. Returns `{ move(alt), leave() }`: call them on pointer moves
+ *  (with the event's Alt state) and when the pointer leaves the page; Alt presses and releases are tracked here, for the
+ *  page the pointer is over. A drag or resize in progress (its size badge is up) is never disturbed. */
 export function useAltMeasure(pageKey: string, enabled: boolean, stackAt: () => string[]) {
   const shown = useRef(false);
+  const inside = useRef(false); // the pointer is over this page (Konva has a pointer position only then)
 
   const clear = () => {
     if (!shown.current) return;
@@ -34,7 +35,7 @@ export function useAltMeasure(pageKey: string, enabled: boolean, stackAt: () => 
   const latest = useRef(update);
   useEffect(() => { latest.current = update; });
   useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === "Alt") latest.current(e.type === "keydown"); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Alt" && inside.current) latest.current(e.type === "keydown"); };
     const blur = () => latest.current(false);
     window.addEventListener("keydown", key);
     window.addEventListener("keyup", key);
@@ -42,5 +43,8 @@ export function useAltMeasure(pageKey: string, enabled: boolean, stackAt: () => 
     return () => { window.removeEventListener("keydown", key); window.removeEventListener("keyup", key); window.removeEventListener("blur", blur); };
   }, []);
 
-  return update;
+  return {
+    move: (alt: boolean) => { inside.current = true; update(alt); },
+    leave: () => { inside.current = false; update(false); },
+  };
 }
