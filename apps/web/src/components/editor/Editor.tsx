@@ -96,7 +96,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
         const drop = (d: EditorDoc) => dropLockedTextEdits(d, pages).doc;
         const { dropped } = dropLockedTextEdits(editorStore.getState().doc, pages);
         if (dropped) {
-          editorStore.setState((s) => ({ doc: drop(s.doc), past: s.past.map(drop), future: s.future.map(drop), selection: null }));
+          editorStore.setState((s) => ({ doc: drop(s.doc), past: s.past.map(drop), future: s.future.map(drop), selected: [], selection: null }));
           setNotice({ kind: "error", text: t.editor.lockedEditsDropped });
         } else if (hasPictureText()) {
           // A page with a picture of print: offer to read the first one (OCR, M5d). Invisible text over its picture only:
