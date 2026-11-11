@@ -46,7 +46,8 @@ export function TextNode({ op: saved, hidden }: { op: TextOp; hidden: boolean })
       <Rect x={x} y={y} width={w} height={h} fill="transparent" />
       {overflow && !hidden && (
         // Owner decision (M2 backlog): longer text is not pushed down; show that it may cover what follows.
-        <Rect name="overflow" x={x - 2} y={y - 2} width={w + 4} height={h + 4} stroke={OVERFLOW} strokeWidth={1.5}
+        // Exactly the box's own rect: the group's client rect (what a resize with the handles measures) must stay the box.
+        <Rect name="overflow" x={x} y={y} width={w} height={h} stroke={OVERFLOW} strokeWidth={1.5}
           strokeScaleEnabled={false} dash={[6, 3]} listening={false} />
       )}
       {ready && !hidden && (

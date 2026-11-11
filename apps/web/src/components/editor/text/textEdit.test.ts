@@ -348,8 +348,8 @@ describe("live resize of an original paragraph", () => {
     expect(lines(160)).toBe(lines(160)); // the base is not changed by a frame
     const live = paragraphPreview("o0", para, base, 80, 90);
     expect(live).toMatchObject({ type: "text.edit", paragraphId: "g2", pageKey: "o0" });
-    expect(live.box.rect).toMatchObject({ x: 80 });
-    await materializeParagraph("o0", para, resizedParagraph(para, 80, 90));
+    expect(live.box.rect).toMatchObject({ x: 80, w: 90 }); // the frame's own width, not the box's plus the drag
+    await materializeParagraph("o0", para, resizedParagraph(80, 90));
     const landed = Object.values(editorStore.getState().doc.objects)[0] as TextEdit;
     expect(landed.box).toEqual(live.box);
     editorStore.getState().undo();

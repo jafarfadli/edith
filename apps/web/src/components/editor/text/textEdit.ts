@@ -230,15 +230,16 @@ export function materializeParagraph(pageKey: string, p: Paragraph, change: (box
   return putParagraphEdit(pageKey, p, (box) => relayout(change(box), (f) => fontStore.get(f)));
 }
 
-/** The change that sets original paragraph `p`'s frame to `x` and `w` (its handles' box): what a release hands to
- *  materializeParagraph and what the live preview lays out meanwhile. */
-export const resizedParagraph = (p: Paragraph, x: number, w: number) => (box: TextBox): TextBox =>
-  ({ ...box, rect: { ...box.rect, x, w: Math.max(10, box.rect.w + w - p.rect.w) } });
+/** The change that sets a paragraph's box to the frame its handles are at (`x`, `w`): what a release hands to
+ *  materializeParagraph and what the live preview lays out meanwhile. The width is the frame's own, not the box's
+ *  plus the drag: the text wraps where the frame the user sees ends. */
+export const resizedParagraph = (x: number, w: number) => (box: TextBox): TextBox =>
+  ({ ...box, rect: { ...box.rect, x, w: Math.max(10, w) } });
 
 /** The text.edit op drawn while a handle of paragraph `p` is dragged: `base` (paragraphStartBox) laid out for the frame
  *  at `x`, `w`, exactly as the release will land it. Not in the document. */
 export function paragraphPreview(pageKey: string, p: Paragraph, base: TextBox, x: number, w: number): TextEdit {
-  const box = relayout(resizedParagraph(p, x, w)(base), (f) => fontStore.get(f));
+  const box = relayout(resizedParagraph(x, w)(base), (f) => fontStore.get(f));
   return { id: `live:${p.id}`, type: "text.edit", decorV: DECOR_V, pageKey, paragraphId: p.id, box } as TextEdit;
 }
 
