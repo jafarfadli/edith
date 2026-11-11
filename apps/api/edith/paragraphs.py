@@ -636,6 +636,29 @@ def _line_decor(line: _Line, marks: "PageMarks | None") -> tuple[dict[tuple[int,
     return out, sorted(used.values(), key=lambda r: (r["y"], r["x"]))
 
 
+COVER_ABOVE, COVER_BELOW = 0.95, 0.25  # × size: how far the web's white cover of an edited line reaches above / below its baseline
+COVER_ASCENT = 0.8   # × size: the cover never stops below this above the baseline (ascenders, capitals stay covered)
+COVER_DESCENT = 0.1  # … nor above this below it (a descender's top)
+RULE_REACH = 1.0     # pt: a rule this far past the cover's reach still gets painted over by its antialiasing
+RULE_GAP = 0.75      # pt: the cover stops this far short of a rule (its half thickness and the antialiased edge)
+
+
+def _cover_limits(line: "_Line", rules: Rules) -> dict:
+    """`coverTop` / `coverBottom` of a line: where a table border or a separator rule drawn just above or below its text
+    stops the web's white cover (the bake redacts text only, it leaves a rule alone: the cover must not wipe it)."""
+    if not line.horizontal:
+        return {}
+    b, s = line.baseline, line.size
+    out: dict = {}
+    below = rules.h_in(b + COVER_DESCENT * s, b + COVER_BELOW * s + RULE_REACH, line.ink_x0, line.ink_x1)
+    if below:
+        out["coverBottom"] = _num(max(min(r.at for r in below) - RULE_GAP, b + COVER_DESCENT * s))
+    above = rules.h_in(b - COVER_ABOVE * s - RULE_REACH, b - COVER_ASCENT * s, line.ink_x0, line.ink_x1)
+    if above:
+        out["coverTop"] = _num(min(max(r.at for r in above) + RULE_GAP, b - COVER_ASCENT * s))
+    return out
+
+
 def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locked: SpanCheck | None = None,
                invisible: SpanCheck | None = None,
                program: Program | None = None, marks: "PageMarks | None" = None) -> dict:
@@ -861,6 +884,8 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
     for lines in blocks:
         for group in _split(lines, rules, room_end):
             paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked, invisible, program, marks)
+            for out_line, line in zip(paragraph["lines"], group):
+                out_line.update(_cover_limits(line, rules))
             if len(group) == 1 and group[0].horizontal:
                 paragraph["align"], paragraph["maxWidth"] = _single(group[0], every, rules, left_margin, right_margin,
                                                                     page.cropbox.width)

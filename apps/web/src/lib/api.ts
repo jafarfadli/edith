@@ -21,7 +21,7 @@ export class ApiError extends Error {
  *  at SPACE_CHARS, lib/keepLines.ts), where an edit keeps the words it leaves alone (lib/editLine.ts). */
 /** `decor`: the underlines, strikethroughs and highlights the page draws for the line's text (their painted rects), which
  *  an edit that redraws the line removes (Run.underline / strike / bgColor carry them). */
-export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number; wordX?: number[]; decor?: Rect[] }
+export interface ParagraphLine { rect: Rect; baseline: number; size: number; start: number; end: number; wordX?: number[]; decor?: Rect[]; coverTop?: number; coverBottom?: number }
 /** `maxWidth` (single-line paragraphs, M5): how wide the paragraph may grow when edited — up to the next cell border
  *  or text on its line. Measured per `align` (M5b): from the left edge (left), around the centre (center: the whole
  *  symmetric width) or leftwards from the right edge (right). Rects are the ink since M5b (no leading/trailing spaces).

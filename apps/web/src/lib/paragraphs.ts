@@ -234,6 +234,9 @@ export function maskRects(p: Paragraph, box?: TextBox): Rect[] {
       const a = Math.max(d.x - 0.5, x0), b = d.x + d.w + 0.5;
       return b > a ? [{ x: a, y: d.y - 0.5, w: b - a, h: d.h + 1 }] : [];
     });
+    // A table border or rule just above / below the text (the bake leaves it alone) is not wiped by the cover.
+    if (l.coverBottom !== undefined) bottom = Math.max(top, Math.min(bottom, l.coverBottom));
+    if (l.coverTop !== undefined) top = Math.min(bottom, Math.max(top, l.coverTop));
     return [{ x: x0, y: top, w: l.rect.x + l.rect.w + 0.5 - x0, h: bottom - top }, ...decor];
   });
 }
