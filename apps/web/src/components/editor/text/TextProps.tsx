@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "zustand";
 import type { TextAdd } from "@edith/ops";
 import { fontStore } from "@/lib/fonts";
+import { entryText, pickerGroups, type PickerGroup } from "@/lib/fontPicker";
 import { isTextOp } from "@/lib/objects";
 import { hasUnsupportedChars, prepareRuns } from "@/lib/paragraphs";
 import { applyPatch, attrsOf, docToRuns, fontStyle, type RunAttrs } from "@/lib/richtext";
@@ -87,14 +88,20 @@ function SizeField({ value, onChange }: { value: number; onChange: (v: number) =
   );
 }
 
+/** Until the font manifest is fetched (or when it cannot be): the three families every document can use. */
+const FALLBACK_GROUPS = pickerGroups({
+  families: { Arimo: { category: "sans", display: "Arial" }, Tinos: { category: "serif", display: "Times New Roman" }, Cousine: { category: "mono", display: "Courier New" } },
+  common: ["Tinos", "Arimo", "Cousine"],
+});
+
 export function TextProps() {
   const style = useEditor((s) => s.style);
   const editing = useStore(textEditStore, (s) => s.editing);
   const current = useStore(textEditStore, (s) => s.current);
   const selected = useEditor((s) => (s.selection ? s.doc.objects[s.selection] : undefined));
   const fonts = useText((s) => s.fonts);
-  const [families, setFamilies] = useState<string[]>(["Arimo", "Tinos", "Cousine"]);
-  useEffect(() => { fontStore.families().then(setFamilies).catch(() => {}); }, []);
+  const [groups, setGroups] = useState<PickerGroup[]>(FALLBACK_GROUPS);
+  useEffect(() => { fontStore.picker().then(setGroups).catch(() => {}); }, []);
 
   const box = editing?.box ?? (isTextOp(selected) ? selected.box : null);
   const overflow = useOverflow(!editing && isTextOp(selected) ? selected : undefined);
@@ -129,9 +136,13 @@ export function TextProps() {
     >
       <select aria-label={t.editor.font} value={original ? `orig:${original.ref}` : fs.family}
         onChange={(e) => { if (!e.target.value.startsWith("orig:")) set({ family: e.target.value }); }}
-        className={`${FIELD} max-w-44 pr-1`}>
+        className={`${FIELD} max-w-40 truncate pr-1`}>
         {original && <option value={`orig:${original.ref}`}>{t.text.originalFont(original.name)}</option>}
-        {families.map((f) => <option key={f} value={f}>{f}</option>)}
+        {groups.map((g) => (
+          <optgroup key={g.id} label={t.text.fontGroup[g.id]}>
+            {g.entries.map((e) => <option key={e.family} value={e.family}>{entryText(e)}</option>)}
+          </optgroup>
+        ))}
       </select>
       <SizeField value={attrs.size} onChange={(v) => set({ size: v })} />
       <button type="button" aria-label={t.editor.bold} aria-pressed={fs.bold} className={toggle(fs.bold)} onClick={() => set({ bold: !fs.bold })}><Bold {...ICON} /></button>
