@@ -136,7 +136,7 @@ export function TextProps() {
     >
       <select aria-label={t.editor.font} value={original ? `orig:${original.ref}` : fs.family}
         onChange={(e) => { if (!e.target.value.startsWith("orig:")) set({ family: e.target.value }); }}
-        className={`${FIELD} max-w-40 truncate pr-1`}>
+        className={`${FIELD} w-36 truncate pr-1`}>
         {original && <option value={`orig:${original.ref}`}>{t.text.originalFont(original.name)}</option>}
         {groups.map((g) => (
           <optgroup key={g.id} label={t.text.fontGroup[g.id]}>
