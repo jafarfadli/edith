@@ -1,0 +1,55 @@
+{
+  "_comment": "Where scripts/fetch-extra.py gets each family listed here (families of manifest.json that are not listed are fetched whole from Google Fonts by scripts/fetch.mjs). google: Google Fonts CSS API; urls: one URL per style; zip: archive URL plus the member path of each style. subset: true keeps Basic Latin, Latin-1/Extended-A/B, Vietnamese, punctuation, currency, arrows, math and shapes (everything Indonesian and English documents use) to keep the repo small.",
+  "Gelasio": {"google": true},
+  "Fira Sans": {"google": true, "subset": true},
+  "EB Garamond": {"google": true, "subset": true},
+  "Comic Neue": {"google": true},
+  "Anton": {"google": true},
+  "Archivo Black": {"google": true},
+  "Archivo Narrow": {"google": true},
+  "Libre Franklin": {"google": true},
+  "Cabin": {"google": true},
+  "Jost": {"google": true},
+  "Aleo": {"google": true},
+  "Inconsolata": {"google": true},
+  "DejaVu Sans": {
+    "subset": true,
+    "urls": {
+      "regular": "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf",
+      "bold": "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf",
+      "italic": "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Oblique.ttf",
+      "bolditalic": "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-BoldOblique.ttf"
+    }
+  },
+  "Selawik": {
+    "zip": "https://github.com/microsoft/Selawik/releases/download/1.01/Selawik_Release.zip",
+    "members": {"regular": "selawk.ttf", "bold": "selawkb.ttf"}
+  },
+  "P052": {
+    "subset": true,
+    "urls": {
+      "regular": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/P052-Roman.ttf",
+      "bold": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/P052-Bold.ttf",
+      "italic": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/P052-Italic.ttf",
+      "bolditalic": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/P052-BoldItalic.ttf"
+    }
+  },
+  "URW Bookman": {
+    "subset": true,
+    "urls": {
+      "regular": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/URWBookman-Light.ttf",
+      "bold": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/URWBookman-Demi.ttf",
+      "italic": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/URWBookman-LightItalic.ttf",
+      "bolditalic": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/URWBookman-DemiItalic.ttf"
+    }
+  },
+  "URW Gothic": {
+    "subset": true,
+    "urls": {
+      "regular": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/URWGothic-Book.ttf",
+      "bold": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/URWGothic-Demi.ttf",
+      "italic": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/URWGothic-BookOblique.ttf",
+      "bolditalic": "https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/20200910/fonts/URWGothic-DemiOblique.ttf"
+    }
+  }
+}

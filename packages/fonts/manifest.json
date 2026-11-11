@@ -1,46 +1,54 @@
 {
   "default": "Arimo",
   "fallback": {"sans": "Arimo", "serif": "Tinos", "mono": "Cousine"},
+  "common": ["Tinos", "Arimo", "Carlito", "Caladea", "Cousine", "Gelasio", "DejaVu Sans", "Open Sans", "Fira Sans", "Selawik", "Roboto", "P052", "URW Bookman", "URW Gothic", "Archivo Narrow", "EB Garamond"],
   "families": {
     "Arimo": {
       "category": "sans",
+      "display": "Arial",
       "files": {"regular": "Arimo-Regular.ttf", "bold": "Arimo-Bold.ttf", "italic": "Arimo-Italic.ttf", "bolditalic": "Arimo-BoldItalic.ttf"},
-      "aliases": ["arimo", "helvetica", "helv", "arial", "arialmt", "liberationsans", "nimbussans", "nimbussansl", "helveticaneue"]
+      "aliases": ["arimo", "helvetica", "helv", "arial", "arialmt", "liberationsans", "nimbussans", "nimbussansl", "helveticaneue", "microsoftsansserif", "mssansserif", "arialunicodems", "arialunicode"]
     },
     "Tinos": {
       "category": "serif",
+      "display": "Times New Roman",
       "files": {"regular": "Tinos-Regular.ttf", "bold": "Tinos-Bold.ttf", "italic": "Tinos-Italic.ttf", "bolditalic": "Tinos-BoldItalic.ttf"},
       "aliases": ["tinos", "times", "timesroman", "timesnewroman", "timesnewromanps", "timesnewromanpsmt", "tiro", "liberationserif", "nimbusroman", "nimbusromanno9l"]
     },
     "Cousine": {
       "category": "mono",
+      "display": "Courier New",
       "files": {"regular": "Cousine-Regular.ttf", "bold": "Cousine-Bold.ttf", "italic": "Cousine-Italic.ttf", "bolditalic": "Cousine-BoldItalic.ttf"},
-      "aliases": ["cousine", "courier", "couriernew", "couriernewps", "couriernewpsmt", "cour", "liberationmono", "nimbusmono", "nimbusmonops"]
+      "aliases": ["cousine", "courier", "couriernew", "couriernewps", "couriernewpsmt", "cour", "liberationmono", "nimbusmono", "nimbusmonops", "lucidaconsole", "lucidasanstypewriter", "aptosmono"]
     },
     "Carlito": {
       "category": "sans",
+      "display": "Calibri",
       "files": {"regular": "Carlito-Regular.ttf", "bold": "Carlito-Bold.ttf", "italic": "Carlito-Italic.ttf", "bolditalic": "Carlito-BoldItalic.ttf"},
-      "aliases": ["carlito", "calibri"]
+      "aliases": ["carlito", "calibri", "calibrilight", "candara", "corbel"]
     },
     "Caladea": {
       "category": "serif",
+      "display": "Cambria",
       "files": {"regular": "Caladea-Regular.ttf", "bold": "Caladea-Bold.ttf", "italic": "Caladea-Italic.ttf", "bolditalic": "Caladea-BoldItalic.ttf"},
-      "aliases": ["caladea", "cambria"]
+      "aliases": ["caladea", "cambria", "cambriamath", "constantia"]
     },
     "Inter": {
       "category": "sans",
       "files": {"regular": "Inter-Regular.ttf", "bold": "Inter-Bold.ttf", "italic": "Inter-Italic.ttf", "bolditalic": "Inter-BoldItalic.ttf"},
-      "aliases": ["inter"]
+      "aliases": ["inter", "sfpro", "sfprotext", "sfprodisplay", "sfns", "sfnstext", "sfnsdisplay", "sfui", "sfuitext", "sfuidisplay", "sanfrancisco", "systemui", "applesystemuifont"]
     },
     "Roboto": {
       "category": "sans",
+      "display": "Aptos",
       "files": {"regular": "Roboto-Regular.ttf", "bold": "Roboto-Bold.ttf", "italic": "Roboto-Italic.ttf", "bolditalic": "Roboto-BoldItalic.ttf"},
-      "aliases": ["roboto"]
+      "aliases": ["roboto", "aptos", "aptosdisplay", "aptoslight", "aptossemibold", "aptosextrabold", "aptosblack"]
     },
     "Open Sans": {
       "category": "sans",
+      "display": "Tahoma",
       "files": {"regular": "OpenSans-Regular.ttf", "bold": "OpenSans-Bold.ttf", "italic": "OpenSans-Italic.ttf", "bolditalic": "OpenSans-BoldItalic.ttf"},
-      "aliases": ["opensans"]
+      "aliases": ["opensans", "tahoma"]
     },
     "Lato": {
       "category": "sans",
@@ -60,7 +68,7 @@
     "Source Sans 3": {
       "category": "sans",
       "files": {"regular": "SourceSans3-Regular.ttf", "bold": "SourceSans3-Bold.ttf", "italic": "SourceSans3-Italic.ttf", "bolditalic": "SourceSans3-BoldItalic.ttf"},
-      "aliases": ["sourcesans3", "sourcesanspro"]
+      "aliases": ["sourcesans3", "sourcesanspro", "myriadpro", "myriad"]
     },
     "Lora": {
       "category": "serif",
@@ -121,6 +129,108 @@
       "category": "script",
       "files": {"regular": "Sacramento-Regular.ttf"},
       "aliases": ["sacramento"]
+    },
+    "Gelasio": {
+      "category": "serif",
+      "display": "Georgia",
+      "files": {"regular": "Gelasio-Regular.ttf", "bold": "Gelasio-Bold.ttf", "italic": "Gelasio-Italic.ttf", "bolditalic": "Gelasio-BoldItalic.ttf"},
+      "aliases": ["gelasio", "georgia"]
+    },
+    "DejaVu Sans": {
+      "category": "sans",
+      "display": "Verdana",
+      "files": {"regular": "DejaVuSans-Regular.ttf", "bold": "DejaVuSans-Bold.ttf", "italic": "DejaVuSans-Italic.ttf", "bolditalic": "DejaVuSans-BoldItalic.ttf"},
+      "aliases": ["dejavusans", "bitstreamverasans", "verasans", "verdana", "lucidasans", "lucidasansunicode", "lucidagrande"]
+    },
+    "Fira Sans": {
+      "category": "sans",
+      "display": "Trebuchet MS",
+      "files": {"regular": "FiraSans-Regular.ttf", "bold": "FiraSans-Bold.ttf", "italic": "FiraSans-Italic.ttf", "bolditalic": "FiraSans-BoldItalic.ttf"},
+      "aliases": ["firasans", "trebuchetms", "trebuchet"]
+    },
+    "Selawik": {
+      "category": "sans",
+      "display": "Segoe UI",
+      "files": {"regular": "Selawik-Regular.ttf", "bold": "Selawik-Bold.ttf"},
+      "aliases": ["selawik", "segoeui", "segoeuisemibold", "segoeuisemilight", "segoeuilight", "segoeuiblack"]
+    },
+    "P052": {
+      "category": "serif",
+      "display": "Palatino / Book Antiqua",
+      "files": {"regular": "P052-Regular.ttf", "bold": "P052-Bold.ttf", "italic": "P052-Italic.ttf", "bolditalic": "P052-BoldItalic.ttf"},
+      "aliases": ["p052", "palatino", "palatinolinotype", "bookantiqua", "palladio", "urwpalladio", "urwpalladiol"]
+    },
+    "URW Bookman": {
+      "category": "serif",
+      "display": "Bookman Old Style",
+      "files": {"regular": "URWBookman-Regular.ttf", "bold": "URWBookman-Bold.ttf", "italic": "URWBookman-Italic.ttf", "bolditalic": "URWBookman-BoldItalic.ttf"},
+      "aliases": ["urwbookman", "urwbookmanl", "bookman", "bookmanl", "bookmanoldstyle", "itcbookman"]
+    },
+    "URW Gothic": {
+      "category": "sans",
+      "display": "Century Gothic",
+      "files": {"regular": "URWGothic-Regular.ttf", "bold": "URWGothic-Bold.ttf", "italic": "URWGothic-Italic.ttf", "bolditalic": "URWGothic-BoldItalic.ttf"},
+      "aliases": ["urwgothic", "urwgothicl", "centurygothic", "avantgarde", "avantgardegothic", "itcavantgardegothic", "itcavantgarde"]
+    },
+    "Archivo Narrow": {
+      "category": "sans",
+      "display": "Arial Narrow",
+      "files": {"regular": "ArchivoNarrow-Regular.ttf", "bold": "ArchivoNarrow-Bold.ttf", "italic": "ArchivoNarrow-Italic.ttf", "bolditalic": "ArchivoNarrow-BoldItalic.ttf"},
+      "aliases": ["archivonarrow", "arialnarrow", "helveticanarrow", "nimbussansnarrow", "nimbussannarrow", "liberationsansnarrow", "aptosnarrow"]
+    },
+    "EB Garamond": {
+      "category": "serif",
+      "display": "Garamond",
+      "files": {"regular": "EBGaramond-Regular.ttf", "bold": "EBGaramond-Bold.ttf", "italic": "EBGaramond-Italic.ttf", "bolditalic": "EBGaramond-BoldItalic.ttf"},
+      "aliases": ["ebgaramond", "garamond", "agaramondpro", "adobegaramondpro", "adobegaramond", "garamondpremrpro", "garamondpremierpro", "monotypegaramond"]
+    },
+    "Comic Neue": {
+      "category": "sans",
+      "display": "Comic Sans MS",
+      "files": {"regular": "ComicNeue-Regular.ttf", "bold": "ComicNeue-Bold.ttf", "italic": "ComicNeue-Italic.ttf", "bolditalic": "ComicNeue-BoldItalic.ttf"},
+      "aliases": ["comicneue", "comicsans", "comicsansms"]
+    },
+    "Anton": {
+      "category": "sans",
+      "display": "Impact",
+      "files": {"regular": "Anton-Regular.ttf"},
+      "aliases": ["anton", "impact"]
+    },
+    "Archivo Black": {
+      "category": "sans",
+      "display": "Arial Black",
+      "files": {"regular": "ArchivoBlack-Regular.ttf"},
+      "aliases": ["archivoblack", "arialblack"]
+    },
+    "Libre Franklin": {
+      "category": "sans",
+      "display": "Franklin Gothic",
+      "files": {"regular": "LibreFranklin-Regular.ttf", "bold": "LibreFranklin-Bold.ttf", "italic": "LibreFranklin-Italic.ttf", "bolditalic": "LibreFranklin-BoldItalic.ttf"},
+      "aliases": ["librefranklin", "franklingothic", "franklingothicbook", "franklingothicmedium", "franklingothicdemi", "franklingothicheavy", "franklingothicmediumcond", "itcfranklingothic"]
+    },
+    "Cabin": {
+      "category": "sans",
+      "display": "Gill Sans",
+      "files": {"regular": "Cabin-Regular.ttf", "bold": "Cabin-Bold.ttf", "italic": "Cabin-Italic.ttf", "bolditalic": "Cabin-BoldItalic.ttf"},
+      "aliases": ["cabin", "gillsans", "gillsansmt", "gillsanslight"]
+    },
+    "Jost": {
+      "category": "sans",
+      "display": "Futura",
+      "files": {"regular": "Jost-Regular.ttf", "bold": "Jost-Bold.ttf", "italic": "Jost-Italic.ttf", "bolditalic": "Jost-BoldItalic.ttf"},
+      "aliases": ["jost", "futura", "futurapt", "futurabt", "futuramdbt"]
+    },
+    "Aleo": {
+      "category": "serif",
+      "display": "Rockwell",
+      "files": {"regular": "Aleo-Regular.ttf", "bold": "Aleo-Bold.ttf", "italic": "Aleo-Italic.ttf", "bolditalic": "Aleo-BoldItalic.ttf"},
+      "aliases": ["aleo", "rockwell", "rockwellstd", "rockwellnova"]
+    },
+    "Inconsolata": {
+      "category": "mono",
+      "display": "Consolas",
+      "files": {"regular": "Inconsolata-Regular.ttf", "bold": "Inconsolata-Bold.ttf"},
+      "aliases": ["inconsolata", "consolas"]
     }
   },
   "cjk": {
