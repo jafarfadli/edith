@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TextBox } from "@edith/ops";
 import type { OcrParagraph } from "@/lib/api";
-import { AREA_IDS, areaKey, coverRects, isLowConfidence, LOW_CONFIDENCE, mergeOcr, ocrBadge, ocrEditOp, ocrEditsOn, ocrOverflows, ocrQualityMessage, unedited } from "@/lib/ocr";
+import { AREA_IDS, areaKey, coverRects, replacedIds, isLowConfidence, LOW_CONFIDENCE, mergeOcr, ocrBadge, ocrEditOp, ocrEditsOn, ocrOverflows, ocrQualityMessage, unedited } from "@/lib/ocr";
 import { objectLabel } from "@/lib/objectLabels";
 import { hasOpacity, isCopyable, isRotatable, isTextOp, moveOp } from "@/lib/objects";
 import { zStage } from "@/lib/zorder";
@@ -72,6 +72,11 @@ describe("OCR paragraphs", () => {
     const op = ocrEditOp("e", "o0", p, box(30, [12]));
     expect(op.paragraphId).toBe("hg1");
     expect(objectLabel(op).label).toBe(t.objectKinds.textHidden);
+  });
+
+  it("a hidden paragraph measured or already rewritten shows no locked target", () => {
+    const ids = replacedIds([{ replaces: "g1" }, {}], [{ paragraphId: "hg4" }, { paragraphId: "ocr3" }]);
+    expect([...ids].sort()).toEqual(["g1", "g4"]); // g4: a restored draft's rewrite, even when not measured now
   });
 
   it("adds the paragraphs of another OCR run: never twice the same text, ids unique, areas numbered apart", () => {

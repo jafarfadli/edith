@@ -53,7 +53,18 @@ export interface OcrPageState {
   full?: boolean; areas?: string[]; running?: string; last?: { quality: OcrQuality; found: number; angle: number; area?: string };
 }
 
-export interface HiddenPageState { status: "loading" | "ready" | "error"; paragraphs: OcrParagraph[] }
+/** `tries`: how often it was asked (a failure, e.g. "hidden_text_busy", is asked again a few times: HIDDEN_TRIES). */
+export interface HiddenPageState { status: "loading" | "ready" | "error"; paragraphs: OcrParagraph[]; tries?: number }
+
+/** How often a page's hidden text is asked for at most, and the wait (ms) before the first retry (doubling after). */
+export const HIDDEN_TRIES = 4;
+export const HIDDEN_RETRY_MS = 1500;
+
+/** The wait before asking again for a page's hidden text that failed, or null when it should not be asked again. */
+export function hiddenRetryIn(st: HiddenPageState | undefined): number | null {
+  if (!st || st.status !== "error" || (st.tries ?? 1) >= HIDDEN_TRIES) return null;
+  return HIDDEN_RETRY_MS * 2 ** ((st.tries ?? 1) - 1);
+}
 
 /** The OCR state key of a run: the page ("page") or an area. */
 export const PAGE_RUN = "page";
@@ -154,12 +165,13 @@ export const textStore = createStore<TextState>()((set, get) => ({
     if (cur && cur.status !== "error") return cur;
     const main = get().docId;
     const put = (v: HiddenPageState) => { if (get().docId === main) set({ hidden: { ...get().hidden, [key]: v } }); return v; };
-    put({ status: "loading", paragraphs: [] });
+    const tries = (cur?.tries ?? 0) + 1;
+    put({ status: "loading", paragraphs: [], tries });
     try {
-      return put({ status: "ready", paragraphs: await getHiddenText(doc, index) });
+      return put({ status: "ready", paragraphs: await getHiddenText(doc, index), tries });
     } catch (e) {
       console.warn("hidden text failed", doc, index, e);
-      return put({ status: "error", paragraphs: [] });
+      return put({ status: "error", paragraphs: [], tries });
     }
   },
 }));

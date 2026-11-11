@@ -15,6 +15,15 @@ export function ocrBadge(p: Pick<OcrParagraph, "confidence" | "source">): string
   return `${isLowConfidence(p) ? t.ocr.badgeLow : t.ocr.badge} · ${t.ocr.confidence(Math.round(p.confidence * 100))}`;
 }
 
+/** Ids of the locked hidden paragraphs (gN) a page shows no locked target for: those measured (`hidden`, replacing
+ *  them) and those rewritten already (an hgN edit, e.g. from a restored draft, whatever the measurement says now). */
+export function replacedIds(hidden: Pick<OcrParagraph, "replaces">[], edits: Pick<TextOcrEdit, "paragraphId">[]): Set<string> {
+  return new Set([
+    ...hidden.flatMap((p) => (p.replaces ? [p.replaces] : [])),
+    ...edits.filter((e) => e.paragraphId.startsWith("hg")).map((e) => e.paragraphId.slice(1)),
+  ]);
+}
+
 /** The key of an area OCR read on a page (a picture's rect, an area dragged), so it is read once. */
 export function areaKey(r: Rect): string {
   return [r.x, r.y, r.w, r.h].map((v) => Math.round(v * 10) / 10).join(",");

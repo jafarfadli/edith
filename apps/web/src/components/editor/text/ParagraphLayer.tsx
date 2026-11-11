@@ -6,13 +6,13 @@ import { Label, Rect, Tag, Text, Transformer } from "react-konva";
 import { useStore } from "zustand";
 import type { Rect as Box, TextBox, TextEdit } from "@edith/ops";
 import type { OcrParagraph, Paragraph } from "@/lib/api";
-import { areaKey, coverRects, isLowConfidence, ocrBadge, ocrEditsOn, unedited, type OcrCover } from "@/lib/ocr";
+import { areaKey, coverRects, isLowConfidence, ocrBadge, ocrEditsOn, replacedIds, unedited, type OcrCover } from "@/lib/ocr";
 import { noticeStore } from "@/lib/notices";
 import { maskRects } from "@/lib/paragraphs";
 import { srcKey } from "@/lib/sources";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
-import { hiddenParagraphsOf, imagesOf, imageTextOf, isPrint, paragraphsOf, pictureParagraphsOf, textStore, useText } from "@/store/text";
+import { hiddenParagraphsOf, hiddenRetryIn, imagesOf, imageTextOf, isPrint, paragraphsOf, pictureParagraphsOf, textStore, useText } from "@/store/text";
 import { contextMenuStore } from "../objects/layering";
 import { runPageOcr } from "./ocrRun";
 import { materializeParagraph, startOcrEdit, startParagraphEdit, textEditStore } from "./textEdit";
@@ -77,7 +77,9 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   const ocrShown = entry ? unedited(pictureParagraphsOf(entry.src, { ocr, hidden }), ocrEdits) : [];
   const src = entry && "doc" in entry.src ? entry.src : null;
   const hiddenState = src ? hidden[srcKey(src.doc, src.index)] : undefined;
-  const replaced = new Set(entry ? hiddenParagraphsOf(entry.src, hidden).map((p) => p.replaces) : []);
+  // Hidden paragraphs replaced: by a measured one, or by a rewrite already made (a restored draft's hgN edit: no
+  // locked target over its cover, whatever the measurement says now).
+  const replaced = replacedIds(entry ? hiddenParagraphsOf(entry.src, hidden) : [], ocrEdits);
   const hasHidden = paragraphs.some((p) => p.lock === "hidden");
   const interactive = tool === "select" || tool === "text";
   // The selected paragraph only keeps its handles while it is still an original one under the select tool.
@@ -89,9 +91,15 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
     trRef.current?.getLayer()?.batchDraw();
   }, [active, pages]);
 
-  // A page shown with hidden text asks once which of it can be edited as its picture (GET .../hidden-text).
+  // A page shown with hidden text asks once which of it can be edited as its picture (GET .../hidden-text); a failure
+  // (the server busy measuring other pages) is asked again a few times, later each time.
   useEffect(() => {
-    if (src && hasHidden && !hiddenState) void textStore.getState().loadHidden(src.doc, src.index);
+    if (!src || !hasHidden) return;
+    if (!hiddenState) { void textStore.getState().loadHidden(src.doc, src.index); return; }
+    const wait = hiddenRetryIn(hiddenState);
+    if (wait === null) return;
+    const timer = setTimeout(() => { void textStore.getState().loadHidden(src.doc, src.index); }, wait);
+    return () => clearTimeout(timer);
   }, [src, hasHidden, hiddenState]);
 
   // Images of print first, so a locked paragraph over one (invisible text over its picture) is the target hit. A picture

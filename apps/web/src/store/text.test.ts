@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DocFont, Paragraph } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
-import { hasPictureText, hiddenParagraphsOf, imagesOf, imageTextOf, ocrParagraphsOf, ocrStateOf, paragraphsOf, pictureParagraphsOf, textStore } from "@/store/text";
+import { HIDDEN_RETRY_MS, HIDDEN_TRIES, hasPictureText, hiddenParagraphsOf, hiddenRetryIn, imagesOf, imageTextOf, ocrParagraphsOf, ocrStateOf, paragraphsOf, pictureParagraphsOf, textStore } from "@/store/text";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -145,6 +145,26 @@ describe("textStore", () => {
     st = await textStore.getState().runOcr("D", 0, { x: 95, y: 95, w: 80, h: 20 });
     expect(st.paragraphs).toHaveLength(2);
     expect(st.last).toMatchObject({ quality: "empty", found: 0 });
+  });
+
+  it("asks again, a few times and later each time, for hidden text that failed (the server busy)", async () => {
+    let busy = true;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/text")) return new Response(JSON.stringify({ doc_id: "D", pages: [{ index: 0, paragraphs: [] }], fonts: [] }), { status: 200 });
+      if (busy) return new Response(JSON.stringify({ error: { code: "hidden_text_busy" } }), { status: 429 });
+      return new Response(JSON.stringify({ doc_id: "D", index: 0, paragraphs: [] }), { status: 200 });
+    }));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await textStore.getState().load("D");
+    let st = await textStore.getState().loadHidden("D", 0);
+    expect(st).toMatchObject({ status: "error", tries: 1 });
+    expect(hiddenRetryIn(st)).toBe(HIDDEN_RETRY_MS);
+    st = await textStore.getState().loadHidden("D", 0);
+    expect(hiddenRetryIn(st)).toBe(2 * HIDDEN_RETRY_MS);
+    for (let i = 2; i < HIDDEN_TRIES; i++) st = await textStore.getState().loadHidden("D", 0);
+    expect(hiddenRetryIn(st)).toBeNull(); // given up
+    busy = false;
+    expect(hiddenRetryIn(await textStore.getState().loadHidden("D", 0))).toBeNull(); // ready
   });
 
   it("asks once per page which hidden paragraphs can be edited as their picture", async () => {
