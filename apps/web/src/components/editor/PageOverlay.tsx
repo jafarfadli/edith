@@ -5,7 +5,8 @@ import type Konva from "konva";
 import { Group, Layer, Rect, Stage, Transformer } from "react-konva";
 import { useStore } from "zustand";
 import type { ContentOp } from "@edith/ops";
-import { groupTransform, pageBounds, screenSize, type PageGeom } from "@/lib/coords";
+import type { Rect as Box } from "@edith/ops";
+import { groupTransform, pageBounds, screenSize, toPage, toScreen, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
 import {
   type TextOp, clampToBounds, createFromDrag, DRAG_TOOLS, hasRotation, inkWidth, isMarkup, isPointOp, isResizable, isRotatable, isTextOp, keepRotatedTopLeft, mapPoints, MARKUP_TOOLS,
@@ -22,12 +23,17 @@ import { usePolyTool } from "./shapes/usePolyTool";
 import { runPageOcr } from "./text/ocrRun";
 import { isDeletedText, textEditStore, updateTextOp } from "./text/textEdit";
 import { CANVAS } from "@/lib/theme";
-import { boundsUnion } from "@/lib/snap";
+import { modHeld } from "@/lib/modKeys";
+import { boundsUnion, fmtPt, snapResize } from "@/lib/snap";
 import { boundsOf, stacked } from "@/lib/zorder";
+import { snapStore } from "@/store/snap";
+import { useSpaceHeld } from "@/store/view";
 import { contextMenuStore, menuOpeners } from "./objects/layering";
 import { SnapGuides } from "./objects/SnapGuides";
+import { sizeBadge, snapTargets } from "./objects/snapTargets";
+import { useAltMeasure } from "./objects/useAltMeasure";
 import { useMarquee } from "./objects/useMarquee";
-import { useObjectDrag } from "./objects/useObjectDrag";
+import { SNAP_PX, useObjectDrag } from "./objects/useObjectDrag";
 
 
 /** Konva attributes of an object's group: objects with a `rotation` turn around their rect's centre (the group's
@@ -64,6 +70,9 @@ function transformed(cur: ContentOp, g: Konva.Group, page: Konva.Group): Content
   const to = { x: box.x, y: box.y, w: box.width, h: box.height };
   return isTextOp(cur) && overlayHooks.resizeText ? overlayHooks.resizeText(cur, to) : resizeOp(cur, to);
 }
+
+/** A box as the Transformer's boundBoxFunc gets it (stage pixels; rotation in radians). */
+type TrBox = { x: number; y: number; width: number; height: number; rotation: number };
 
 function setCursor(e: Konva.KonvaEventObject<unknown>, cursor: string) {
   const c = e.target.getStage()?.container();
@@ -117,6 +126,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   const objects = useEditor((s) => s.doc.objects);
   const selection = useEditor((s) => s.selection);
   const selected = useEditor((s) => s.selected);
+  const space = useSpaceHeld(); // Space held: the pointer goes through to the scroller, which pans
   const tool = useEditor((s) => s.tool);
   const docId = useEditor((s) => s.info?.docId ?? "");
   const src = useEditor((s) => {
@@ -130,6 +140,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   const stageRef = useRef<Konva.Stage>(null);
   const nodes = useRef(new Map<string, Konva.Group>());
   const [draft, setDraft] = useState<ContentOp | null>(null);
+  const resizeTargets = useRef<Box[] | null>(null); // what the resize in progress snaps to (read at its first move)
+  useEffect(() => { modHeld(); }, []); // start tracking Cmd/Ctrl: the Transformer's resize gets no event
   // The draw in progress. Move/up are tracked on window so a drag released outside the stage still commits.
   const drawing = useRef<{ start: Pt; draft: ContentOp | null; stop: () => void } | null>(null);
 
@@ -164,6 +176,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     pageKey, geom, scale, nodes, stackAt: () => stackAt(),
     home: (op) => { const a = objectGroupAttrs(op); return { x: a.x, y: a.y }; },
   });
+
+  // Alt over another object while something is selected: the distances between them.
+  const altMeasure = useAltMeasure(pageKey, tool === "select", () => stackAt());
 
   function openMenu(target: string, stack: string[], client: { x: number; y: number }) {
     const s = editorStore.getState();
@@ -254,6 +269,25 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     return clampToBounds([p.x, p.y], pageBounds(geom));
   };
 
+  /** The Transformer's resize with smart guides: the edges being dragged snap to the page and the other objects
+   *  (Cmd/Ctrl: off). Only an upright object on an upright page (a turned box is not axis-aligned on screen). */
+  function snapResizeBox(old: TrBox, next: TrBox): TrBox {
+    const flat = (b: TrBox) => Math.abs(b.rotation) < 1e-6;
+    if (!selection || selected.length !== 1 || !flat(old) || !flat(next) || modHeld()) { snapStore.getState().clear(); return next; }
+    const targets = (resizeTargets.current ??= snapTargets(pageKey, new Set([selection])));
+    const toRect = (b: TrBox) => normalizeRect(toPage([b.x, b.y], geom, scale), toPage([b.x + b.width, b.y + b.height], geom, scale));
+    const snap = snapResize(toRect(old), toRect(next), targets, pageBounds(geom), SNAP_PX / scale);
+    const corners = [[snap.rect.x, snap.rect.y], [snap.rect.x + snap.rect.w, snap.rect.y + snap.rect.h]].map((p) => toScreen(p as Pt, geom, scale));
+    snapStore.getState().show({
+      pageKey, guides: snap.guides, gaps: [],
+      badge: { at: sizeBadge(snap.rect, geom, scale), text: `${fmtPt(snap.rect.w)} × ${fmtPt(snap.rect.h)}` },
+    });
+    return {
+      ...next, x: Math.min(corners[0][0], corners[1][0]), y: Math.min(corners[0][1], corners[1][1]),
+      width: Math.abs(corners[1][0] - corners[0][0]), height: Math.abs(corners[1][1] - corners[0][1]),
+    };
+  }
+
   // Dragging on the empty page (or on original text) selects what the marquee touches, live.
   const marquee = useMarquee(scale, pos, () => mine.filter((op) => !isDeletedText(op)).map((op) => ({ id: op.id, rect: boundsOf(op) })));
   useEffect(() => marquee.stop, [tool]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -331,6 +365,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   }
 
   function onDown(e: Konva.KonvaEventObject<PointerEvent>) {
+    if (e.evt.button === 1) return; // the middle button pans the canvas (Editor), it draws nothing
     const s = editorStore.getState();
     if (tool === "select") {
       if (e.evt.button !== 0) return;
@@ -368,14 +403,14 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     <div
       data-testid="overlay"
       className="absolute inset-0"
-      style={{ pointerEvents: tool === "pan" ? "none" : "auto", cursor: tool === "select" ? "default" : MARKUP_TOOLS.has(tool) ? "text" : "crosshair" }}
+      style={{ pointerEvents: tool === "pan" || space ? "none" : "auto", cursor: tool === "select" ? "default" : MARKUP_TOOLS.has(tool) ? "text" : "crosshair" }}
     >
       <Stage
         ref={stageRef}
         width={size.width}
         height={size.height}
         onPointerDown={onDown}
-        onPointerMove={() => { if (poly.active) poly.hover(pos()); }}
+        onPointerMove={(e) => { if (poly.active) poly.hover(pos()); altMeasure(e.evt.altKey); }}
         onDblClick={() => poly.doubleClick()}
         onContextMenu={onContextMenu}
       >
@@ -398,7 +433,10 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
                 onDragStart={(e) => objectDrag.onDragStart(e, op.id)}
                 onDragMove={(e) => objectDrag.onDragMove(e, op.id)}
                 onDragEnd={() => objectDrag.onDragEnd()}
+                onTransformStart={() => { resizeTargets.current = null; }}
                 onTransformEnd={(e) => {
+                  snapStore.getState().clear();
+                  resizeTargets.current = null;
                   const g = e.currentTarget as Konva.Group;
                   const cur = editorStore.getState().doc.objects[op.id];
                   const next = cur ? transformed(cur, g, pageRef.current!) : null;
@@ -436,6 +474,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
             padding={selection && !isResizable(objects[selection]) ? 3 : 0}
             ignoreStroke
             keepRatio={false}
+            boundBoxFunc={snapResizeBox}
             enabledAnchors={selection && isTextOp(objects[selection])
               ? ["middle-left", "middle-right"]
               : boxAnchors(selection ? objects[selection] : undefined, tr.scale)}

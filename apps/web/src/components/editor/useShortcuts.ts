@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { toolForKey } from "@/lib/toolKeys";
 import { editorStore } from "@/store/editor";
+import { viewStore } from "@/store/view";
 import { openFind } from "./find/findStore";
 import { isMac } from "@/lib/keys";
 import { zMoveForKey } from "@/lib/zorder";
@@ -41,6 +42,13 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (isFindKey(e)) { e.preventDefault(); openFind(); return; } // before the typing check
+      // Space held: a drag pans the canvas (whatever the tool). Not from a button or field (Space is theirs), not
+      // while typing in a text box or composing.
+      if (e.code === "Space" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && !isTyping(e.target) && focusOnCanvas(e.target) && !textSessionBusy()) {
+        e.preventDefault();
+        viewStore.getState().setSpace(true);
+        return;
+      }
       // In a form field the document's undo, not the input's own (which would desync the controlled value).
       const formField = (e.target as HTMLElement | null)?.closest?.("[data-field]");
       const undo = undoKey(e);
@@ -74,7 +82,15 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       else if (e.key === "Escape") { s.select(null); s.setTool("select"); textEditStore.getState().selectParagraph(null); }
       else if (!e.repeat && !textSessionBusy() && toolForKey(e)) { e.preventDefault(); s.setTool(toolForKey(e)!); } // V, T, R …: see TOOL_KEYS
     }
+    const spaceUp = (e: KeyboardEvent) => { if (e.code === "Space") viewStore.getState().setSpace(false); };
+    const spaceOff = () => viewStore.getState().setSpace(false);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", spaceUp);
+    window.addEventListener("blur", spaceOff);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", spaceUp);
+      window.removeEventListener("blur", spaceOff);
+    };
   }, [extra]);
 }

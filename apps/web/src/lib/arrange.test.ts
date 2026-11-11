@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Rect } from "@edith/ops";
-import { alignMoves, cycleSelection, distributeMoves, marqueeHits, readingOrder } from "./arrange";
+import { alignMoves, cycleSelection, distributeMoves, marqueeHits, readingOrder, scaleBox } from "./arrange";
 
 const r = (x: number, y: number, w: number, h: number): Rect => ({ x, y, w, h });
 const item = (id: string, rect: Rect) => ({ id, rect });
@@ -68,6 +68,22 @@ describe("distributeMoves", () => {
 
   it("needs three objects", () => {
     expect(distributeMoves([item("a", r(0, 0, 10, 10)), item("b", r(50, 0, 10, 10))], "x")).toEqual({});
+  });
+});
+
+describe("scaleBox (a group resized)", () => {
+  it("maps a rect from the group's old box into its new box", () => {
+    const from = r(100, 100, 200, 100), to = r(100, 100, 400, 50);
+    expect(scaleBox(r(100, 100, 50, 50), from, to)).toEqual(r(100, 100, 100, 25));
+    expect(scaleBox(r(250, 150, 50, 50), from, to)).toEqual(r(400, 125, 100, 25));
+  });
+
+  it("follows the box when it moves (a handle on the left edge)", () => {
+    expect(scaleBox(r(100, 100, 50, 50), r(100, 100, 200, 100), r(0, 100, 300, 100))).toEqual(r(0, 100, 75, 50));
+  });
+
+  it("a flat group (no width) only moves", () => {
+    expect(scaleBox(r(100, 100, 0, 50), r(100, 100, 0, 100), r(120, 100, 0, 100))).toEqual(r(120, 100, 0, 50));
   });
 });
 

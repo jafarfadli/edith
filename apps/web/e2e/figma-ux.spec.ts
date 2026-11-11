@@ -59,21 +59,22 @@ async function settled<T>(_page: Page, fn: () => Promise<T>, expected: T) {
 }
 
 /** Columns / rows (canvas pixels) of the overlay's canvases holding the smart-guide colour. */
-async function guideLines(page: Page): Promise<{ cols: number[]; rows: number[] }> {
+async function guideLines(page: Page): Promise<{ cols: number[]; rows: number[]; count: number }> {
   return page.evaluate(() => {
     const cols = new Map<number, number>(), rows = new Map<number, number>();
+    let count = 0;
     for (const c of document.querySelectorAll<HTMLCanvasElement>('[data-testid="overlay"] canvas')) {
       const w = c.width, h = c.height, d = c.getContext("2d")!.getImageData(0, 0, w, h).data;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
         // #f5316f, solid (a 1 px line on a whole pixel) or half-covered.
         if (d[i + 3] > 100 && d[i] > 220 && d[i + 1] > 30 && d[i + 1] < 90 && d[i + 2] > 80 && d[i + 2] < 140) {
-          cols.set(x, (cols.get(x) ?? 0) + 1); rows.set(y, (rows.get(y) ?? 0) + 1);
+          cols.set(x, (cols.get(x) ?? 0) + 1); rows.set(y, (rows.get(y) ?? 0) + 1); count++;
         }
       }
     }
     const long = (m: Map<number, number>) => [...m].filter(([, n]) => n >= 40).map(([k]) => k).sort((a, b) => a - b);
-    return { cols: long(cols), rows: long(rows) };
+    return { cols: long(cols), rows: long(rows), count };
   });
 }
 
@@ -241,6 +242,62 @@ test("moving shows guides at the page centre and snaps to it; Cmd/Ctrl turns sna
   });
   const [free] = await rects(page, 1);
   expect(Math.abs(free.x - (x0 + 31))).toBeLessThan(1.5);
+});
+
+test("resizing from a handle snaps the dragged edge to the page centre, and shows the size", async ({ page }) => {
+  const box = await open(page);
+  await rect(page, box, ...A); // selected: its handles are on
+  const centre = box.width / 2;
+  await drag(page, box, [160, 190], [Math.round(centre) + 3, 190], {
+    during: async () => { expect((await guideLines(page)).cols).toContain(Math.floor(centre)); },
+  });
+  expect((await guideLines(page)).cols).toEqual([]);
+  const [r] = await rects(page, 1);
+  expect(r.x).toBeCloseTo(100, 0);
+  expect(r.x + r.w).toBeCloseTo(centre, 0);
+  expect(r.h).toBeCloseTo(40, 0);
+});
+
+test("Alt over another object shows the distances to it", async ({ page }) => {
+  const box = await open(page);
+  await rect(page, box, ...A);
+  await rect(page, box, [300, 150], [360, 190]); // selected
+  await page.mouse.click(box.x + 300, box.y + 400); // (empty) deselect
+  await page.mouse.click(box.x + 330, box.y + 170); // the second one
+  await page.keyboard.down("Alt");
+  await page.mouse.move(box.x + 120, box.y + 160);
+  await page.mouse.move(box.x + 130, box.y + 170);
+  await expect.poll(async () => (await guideLines(page)).count).toBeGreaterThan(30);
+  await page.keyboard.up("Alt");
+  await expect.poll(async () => (await guideLines(page)).count).toBe(0);
+});
+
+test("Space+drag and the middle button pan the canvas", async ({ page }) => {
+  let box = await open(page);
+  await rect(page, box, ...A);
+  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Perbesar" }).click();
+  await expect(page.getByText("150%")).toBeVisible();
+  box = (await page.getByTestId("page").first().boundingBox())!;
+  const scroller = page.locator("#page-scroller");
+  const top = () => scroller.evaluate((el) => el.scrollTop);
+  const t0 = await top();
+
+  // Focus is on the zoom button (Space would press it): a click on the page gives it back to the canvas.
+  await page.mouse.click(box.x + 400, box.y + 600);
+  await page.keyboard.down("Space");
+  await page.mouse.down();
+  await page.mouse.move(box.x + 400, box.y + 500, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up("Space");
+  await expect.poll(top).toBeGreaterThan(t0 + 60);
+  expect((await rects(page, 1))[0]).toMatchObject({ x: 100, y: 150 }); // nothing was drawn or moved
+
+  const t1 = await top();
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down({ button: "middle" });
+  await page.mouse.move(box.x + 400, box.y + 350, { steps: 5 });
+  await page.mouse.up({ button: "middle" });
+  await expect.poll(top).toBeLessThan(t1 - 20);
 });
 
 test("an object snaps to another one's edge", async ({ page }) => {

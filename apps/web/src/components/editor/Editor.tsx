@@ -16,6 +16,7 @@ import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
 import { editorStore, useEditor, type EditorDoc } from "@/store/editor";
 import { pdfStore } from "@/store/pdfs";
+import { useSpaceHeld } from "@/store/view";
 import { charsStore } from "@/store/chars";
 import { hasPictureText, imageTextOf, isPrint, paragraphsOf, textStore } from "@/store/text";
 import { BTN_PRIMARY } from "../ui/styles";
@@ -49,6 +50,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
   const [notice, setNotice] = useState<NoticeMsg | null>(null);
   const info = useEditor((s) => s.info);
   const tool = useEditor((s) => s.tool);
+  const space = useSpaceHeld();
   const initialDoc = useRef<EditorDoc | null>(null);
   const drag = useRef<{ x: number; y: number; l: number; t: number } | null>(null);
 
@@ -185,14 +187,16 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
           <main
             className="absolute inset-0 overflow-auto bg-canvas"
             id="page-scroller"
-            style={{ cursor: tool === "pan" ? "grab" : undefined }}
+            style={{ cursor: tool === "pan" || space ? "grab" : undefined }}
+            // The middle button pans too (and must not start the browser's auto-scroll).
+            onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
             onPointerDown={(e) => {
-              if (tool !== "pan") return;
+              if (!(tool === "pan" || space || e.button === 1)) return;
               const el = e.currentTarget;
               drag.current = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop };
             }}
             onPointerMove={(e) => {
-              if (!drag.current || e.buttons !== 1) return;
+              if (!drag.current || !(e.buttons & 5)) return; // left or middle button
               const el = e.currentTarget;
               el.scrollLeft = drag.current.l - (e.clientX - drag.current.x);
               el.scrollTop = drag.current.t - (e.clientY - drag.current.y);

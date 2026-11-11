@@ -45,6 +45,13 @@ export function distributeMoves(items: readonly Boxed[], axis: "x" | "y"): Recor
   return out;
 }
 
+/** `r`, a rect inside group box `from`, after the group was resized into box `to`: its position and size scale with
+ *  the box (a box without width or height only moves along that axis). */
+export function scaleBox(r: Rect, from: Rect, to: Rect): Rect {
+  const sx = from.w ? to.w / from.w : 1, sy = from.h ? to.h / from.h : 1;
+  return { x: to.x + (r.x - from.x) * sx, y: to.y + (r.y - from.y) * sy, w: r.w * sx, h: r.h * sy };
+}
+
 /** Tab order: rows from the top (boxes whose tops are within one band share a row), each row left to right. */
 const ROW = 10;
 export function readingOrder(items: readonly Boxed[]): string[] {
