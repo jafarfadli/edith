@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ContentOp } from "@edith/ops";
 import { editorStore, type DocInfo } from "@/store/editor";
-import { deleteObjects, moveBy, moveEach, nudgeSelection, selectedOps } from "./group";
+import { cycleObjects, deleteObjects, moveBy, moveEach, nudgeSelection, selectAll, selectedOps } from "./group";
 import { selectedIds } from "./layering";
 
 const info: DocInfo = {
@@ -101,6 +101,49 @@ describe("nudgeSelection", () => {
   it("nothing selected: false", () => {
     s().select(null);
     expect(nudgeSelection(1, 0)).toBe(false);
+  });
+});
+
+describe("selectAll / cycleObjects", () => {
+  it("selects every object of the page in view", () => {
+    s().addObject(rect("q", 1, 1, "o1"));
+    s().setCurrentPage("o0");
+    expect(selectAll()).toBe(true);
+    expect(s().selected.sort()).toEqual(["a", "b", "c"]);
+    s().setCurrentPage("o1");
+    selectAll();
+    expect(s().selected).toEqual(["q"]);
+  });
+
+  it("selects nothing on an empty page", () => {
+    s().setCurrentPage("o1");
+    expect(selectAll()).toBe(false);
+  });
+
+  it("selecting all leaves a text tool for Pilih", () => {
+    s().setTool("rect");
+    s().setCurrentPage("o0");
+    selectAll();
+    expect(s().tool).toBe("select");
+    expect(s().selected.length).toBe(3);
+  });
+
+  it("Tab walks the page's objects in reading order and wraps", () => {
+    s().setCurrentPage("o0");
+    s().select("a");
+    expect(cycleObjects(1)).toBe(true);
+    expect(s().selected).toEqual(["b"]);
+    cycleObjects(1);
+    expect(s().selected).toEqual(["c"]);
+    cycleObjects(1);
+    expect(s().selected).toEqual(["a"]);
+    cycleObjects(-1);
+    expect(s().selected).toEqual(["c"]);
+  });
+
+  it("Tab with nothing selected does nothing (the browser keeps the key)", () => {
+    s().select(null);
+    expect(cycleObjects(1)).toBe(false);
   });
 });
 

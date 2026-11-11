@@ -2,20 +2,19 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { ApiError, fileUrl, getStructure } from "@/lib/api";
-import { toPage } from "@/lib/coords";
 import { fontStore } from "@/lib/fonts";
 import { loadDraft, saveDraft } from "@/lib/draft";
 import { noticeLifetime, noticeStore, type NoticeMsg } from "@/lib/notices";
-import { isTextOp, moveOp } from "@/lib/objects";
+import { isTextOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { dropLockedTextEdits, dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
-import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
+import { editorStore, useEditor, type EditorDoc } from "@/store/editor";
 import { pdfStore } from "@/store/pdfs";
 import { charsStore } from "@/store/chars";
 import { hasPictureText, imageTextOf, isPrint, paragraphsOf, textStore } from "@/store/text";
@@ -31,7 +30,6 @@ import { Sidebar } from "./Sidebar";
 import { Toolbar } from "./Toolbar";
 import { ZoomPill } from "./ZoomPill";
 import { useShortcuts } from "./useShortcuts";
-import { updateTextOp } from "./text/textEdit";
 import { runPageOcr } from "./text/ocrRun";
 
 // The text tool's hooks live in the Konva overlay chunk (Konva must stay out of SSR), so install them when it loads.
@@ -166,23 +164,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     return () => clearTimeout(timer);
   }, [notice]);
 
-  const nudge = useCallback((e: KeyboardEvent) => {
-    const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-    const d = dirs[e.key];
-    const st = editorStore.getState();
-    if (!d || !st.selection || !st.info) return false;
-    const op = st.doc.objects[st.selection];
-    const entry = st.doc.pages.find((p) => p.pageKey === op?.pageKey);
-    if (!op || !entry) return false;
-    e.preventDefault();
-    const step = e.shiftKey ? 10 : 1;
-    const g = pageGeom(entry, st.info);
-    const [x0, y0] = toPage([0, 0], g, 1);
-    const [x1, y1] = toPage([d[0] * step, d[1] * step], g, 1);
-    updateTextOp(op.id, moveOp(op, x1 - x0, y1 - y0), { coalesce: `nudge:${op.id}` }); // held arrow keys: one undo step
-    return true;
-  }, []);
-  useShortcuts(nudge);
+  useShortcuts();
 
   if (fatal) {
     return (
