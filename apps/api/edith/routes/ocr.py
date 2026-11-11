@@ -6,10 +6,9 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from edith import ocr
-from edith.errors import InvalidRequest, OcrBusy, OcrTimeout, OcrUnavailable, PageNotFound
-from edith.hiddentext import hidden_text
+from edith.errors import HiddenTextBusy, InvalidRequest, OcrBusy, OcrTimeout, OcrUnavailable, PageNotFound
 from edith.imagetext import page_words
-from edith.routes.text import _open_source
+from edith.routes.text import _open_source, hidden_paragraphs
 
 router = APIRouter()
 
@@ -61,14 +60,18 @@ def _area(page: pymupdf.Page, rect: Area) -> pymupdf.Rect:
     return area
 
 
-def _known(page: pymupdf.Page, registry) -> list[pymupdf.Rect]:
+def _known(request: Request, doc, doc_id: str, index: int) -> list[pymupdf.Rect]:
     """Where the page's text is already editable: its visible characters, and the lines of the hidden paragraphs whose
-    picture was measured (edith.hiddentext)."""
-    shown, invisible = page_words(page)
+    picture was measured (GET .../hidden-text, from its cache). When measuring is busy, every invisible character
+    counts: an OCR paragraph is rather left out than read twice."""
+    shown, invisible = page_words(doc[index])
     out = list(shown)
     if invisible:
-        out += [pymupdf.Rect(c["x"], c["y"], c["x"] + c["w"], c["y"] + c["h"])
-                for p in hidden_text(page, registry) for c in p["covers"]]
+        try:
+            out += [pymupdf.Rect(c["x"], c["y"], c["x"] + c["w"], c["y"] + c["h"])
+                    for p in hidden_paragraphs(request, doc_id, index, doc) for c in p["covers"]]
+        except HiddenTextBusy:
+            out += invisible
     return out
 
 
@@ -106,14 +109,15 @@ def ocr_page(request: Request, doc_id: str, index: int, body: OcrRequest | None 
         gate.enter(doc_id)
         try:
             result = ocr.ocr_page(page, request.app.state.fonts, cmd, timeout=s.ocr_timeout_seconds, area=area)
+            if result["paragraphs"]:
+                # Still within the gate: what is known costs a measurement of the page's hidden text (cached).
+                kept = _unknown_only(result["paragraphs"], _known(request, doc, doc_id, index))
+                result = {**result, "paragraphs": kept, **({} if kept else {"quality": "empty"})}
         except OcrTimeout:
             limit = s.ocr_timeout_seconds
             raise OcrTimeout(f"OCR took longer than {limit:g} s", seconds=limit) from None
         finally:
             gate.leave(doc_id)
-        if result["paragraphs"]:
-            kept = _unknown_only(result["paragraphs"], _known(page, request.app.state.fonts))
-            result = {**result, "paragraphs": kept, **({} if kept else {"quality": "empty"})}
     finally:
         doc.close()
     return {"doc_id": doc_id, "index": index, **result}

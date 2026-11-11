@@ -229,6 +229,82 @@ def test_endpoint_serves_a_page_and_says_when_there_is_none(client):
     assert client.get(f"/documents/{doc_id}/pages/1/hidden-text").json()["error"]["code"] == "page_not_found"
 
 
+def test_a_page_is_measured_once_and_a_few_at_a_time(client, monkeypatch):
+    import edith.routes.text as text_routes
+    calls = []
+    real = text_routes.hidden_text
+    monkeypatch.setattr(text_routes, "hidden_text", lambda page, reg: calls.append(page.number) or real(page, reg))
+    doc_id = upload(client, make_kop_pdf()).json()["doc_id"]
+    first = client.get(f"/documents/{doc_id}/pages/0/hidden-text").json()
+    assert client.get(f"/documents/{doc_id}/pages/0/hidden-text").json() == first
+    assert calls == [0]  # the second answer came from the cache
+    # Every slot taken: "busy" at once, not queued.
+    cache = client.app.state.hidden_text
+    cache._pages.clear()
+    taken = [cache._slots.acquire(blocking=False) for _ in range(8)]
+    try:
+        r = client.get(f"/documents/{doc_id}/pages/0/hidden-text")
+        assert r.status_code == 429 and r.json()["error"]["code"] == "hidden_text_busy"
+    finally:
+        for ok in taken:
+            if ok:
+                cache._slots.release()
+    # A document that is gone loses its pages (the storage cleanup prunes), and is never served from the cache.
+    client.get(f"/documents/{doc_id}/pages/0/hidden-text")
+    cache.prune(lambda d: d != doc_id)
+    assert cache.cached(doc_id, 0) is None
+
+
+def test_a_page_of_too_many_pictures_is_refused_at_once(registry):
+    import time
+    from edith.ocr import MAX_IMAGES
+    doc = pymupdf.open(stream=hidden_over(picture([("KEMENTERIAN CONTOH", 14, 20)]), "KEMENTERIAN CONTOH"))
+    page = doc[0]
+    tiny = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 4, 4), False)
+    for i in range(MAX_IMAGES + 1):
+        page.insert_image(pymupdf.Rect(10 + i, 700, 14 + i, 704), pixmap=tiny)
+    page = pymupdf.open(stream=doc.tobytes())[0]
+    start = time.monotonic()
+    assert hidden_text(page, registry) == []
+    assert time.monotonic() - start < 1
+
+
+def test_covers_keep_to_the_pictures_never_the_gap_between_strips(registry):
+    """A line pictured in two strips with a 6 pt gap between them: a line that crosses the gap stays locked, a line on
+    one strip gets a cover inside that strip."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    left, right = (72, 60, 240, 84), (246, 60, 432, 84)
+    for rect, line in ((left, "KEMENTERIAN"), (right, "CONTOH RAYA")):
+        x0, y0, x1, y1 = rect
+        page.insert_image(pymupdf.Rect(*rect), pixmap=_strip(line, x1 - x0, y1 - y0))
+    writer = pymupdf.TextWriter(page.rect)
+    writer.append((76, 78), "KEMENTERIAN", font=pymupdf.Font("tiro"), fontsize=13)
+    writer.append((250, 78), "CONTOH RAYA", font=pymupdf.Font("tiro"), fontsize=13)
+    writer.write_text(page, render_mode=3)
+    found = hidden_text(page_of(doc.tobytes()), registry)
+    covers = [R(c) for p in found for c in p["covers"]]
+    assert covers, found
+    for c in covers:
+        assert pymupdf.Rect(*left).contains(c) or pymupdf.Rect(*right).contains(c), c
+    # One line over both strips (the gap crosses its print): locked.
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_image(pymupdf.Rect(*left), pixmap=_strip("KEMENTERIAN CONT", 168, 24))
+    page.insert_image(pymupdf.Rect(*right), pixmap=_strip("OH RAYA", 186, 24, x=-4))
+    writer = pymupdf.TextWriter(page.rect)
+    writer.append((76, 78), "KEMENTERIAN CONTOH RAYA", font=pymupdf.Font("tiro"), fontsize=13)
+    writer.write_text(page, render_mode=3)
+    assert hidden_text(page_of(doc.tobytes()), registry) == []
+
+
+def _strip(line: str, w: float, h: float, x: float = 4) -> pymupdf.Pixmap:
+    doc = pymupdf.open()
+    page = doc.new_page(width=w, height=h)
+    page.insert_text((x, 18), line, fontname="hebo", fontsize=14)
+    return page.get_pixmap(matrix=pymupdf.Matrix(3, 3), alpha=False)
+
+
 def test_export_of_a_hidden_paragraph_rewrite(client, registry):
     source = make_kop_pdf()
     doc_id = upload(client, source).json()["doc_id"]

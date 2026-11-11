@@ -24,6 +24,7 @@ import pymupdf
 from fontTools.ttLib import TTFont
 
 from edith.fonts import FontRegistry, parse_font_name
+from edith.ocr import MAX_IMAGES
 from edith.paragraphs import FLAGS, ROOM_PAD, extract_paragraphs, invisible_check
 
 DPI = 288                  # renders the picture under the lines at this resolution …
@@ -147,9 +148,34 @@ def _hex(rgb) -> str:
     return "#" + "".join(f"{int(round(min(max(float(v), 0), 255))):02x}" for v in rgb)
 
 
+def _on_pictures(cover: pymupdf.Rect, ink: pymupdf.Rect, pictures: list[pymupdf.Rect]) -> pymupdf.Rect | None:
+    """`cover` cut back to the pictures themselves (never the page between two strips): to the height the pictures that
+    hold the ink span, then to the run of side-by-side pictures spanning that height in which the ink lies. None when
+    the ink is not all on such a run (a gap between strips crosses the print)."""
+    holding = [p for p in pictures if p.y0 <= ink.y0 + 0.01 and p.y1 >= ink.y1 - 0.01]
+    if not holding:
+        return None
+    c = pymupdf.Rect(cover)
+    c.y0, c.y1 = max(c.y0, min(p.y0 for p in holding)), min(c.y1, max(p.y1 for p in holding))
+    spans = sorted((p.x0, p.x1) for p in pictures if p.y0 <= c.y0 + 0.01 and p.y1 >= c.y1 - 0.01)
+    runs: list[list[float]] = []
+    for a, b in spans:
+        if runs and a <= runs[-1][1] + 0.01:
+            runs[-1][1] = max(runs[-1][1], b)
+        else:
+            runs.append([a, b])
+    run = next((r for r in runs if r[0] <= ink.x0 + 0.01 and r[1] >= ink.x1 - 0.01), None)
+    if run is None:
+        return None
+    c.x0, c.x1 = max(c.x0, run[0]), min(c.x1, run[1])
+    return c
+
+
 def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face: pymupdf.Font,
-             extents: dict[int, tuple[float, float]], blocked: list[pymupdf.Rect]) -> _LineGeom | None:
-    """The print of one invisible line in the picture (`picture`: the images under it, as one rect), or None."""
+             extents: dict[int, tuple[float, float]], blocked: list[pymupdf.Rect],
+             pictures: list[pymupdf.Rect]) -> _LineGeom | None:
+    """The print of one invisible line in the picture (`picture`: the images under it, `pictures`, as one rect; covers
+    keep to `pictures` themselves), or None."""
     r, size = line["rect"], line["size"]
     inv = pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"])
     if inv.width <= 0 or size <= 0:
@@ -242,8 +268,8 @@ def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face
     right = np.nonzero(ink[cy0:cy1, ix1:cx1].any(axis=0))[0]
     if right.size:
         cx1 = ix1 + int(right[0]) - 1
-    cover = pymupdf.Rect(*render.pt(cx0 + x0, cy0 + y0), *render.pt(cx1 + x0, cy1 + y0)) & picture
-    if cover.x0 > inv.x0 + 0.5 or cover.x1 < inv.x1 - 0.5 or not cover.contains(ink_pt):
+    cover = _on_pictures(pymupdf.Rect(*render.pt(cx0 + x0, cy0 + y0), *render.pt(cx1 + x0, cy1 + y0)), ink_pt, pictures)
+    if cover is None or cover.x0 > inv.x0 + 0.5 or cover.x1 < inv.x1 - 0.5 or not cover.contains(ink_pt):
         return None  # other ink of the picture right at the line's ends: the invisible text would not all go
     return _LineGeom(ink=ink_pt, size=measured, baseline=ink_pt.y0 + ext[1] * measured, colour=colour,
                      h_scale=min(max(h, H_SCALE[0]), H_SCALE[1]), window=picture, cover=cover)
@@ -329,8 +355,9 @@ def hidden_text(page: pymupdf.Page, registry: FontRegistry) -> list[dict]:
     an OCR paragraph: id `h` + the paragraph's id, `replaces` (that id), `source` "hidden", `ocr`, `confidence` 1, runs
     in the bundled sans face (bold and italic as the invisible text's), the lines' boxes, sizes and baselines measured
     in the picture, `cover`, `covers`, `coverColor`, `coverUniform`. Paragraphs whose print can't be measured are left
-    out (they stay locked)."""
-    if page.rotation:
+    out (they stay locked), and so is every paragraph of a page of more than MAX_IMAGES pictures (a crafted or broken
+    PDF: judging it would render each), at once."""
+    if page.rotation or len(page.get_image_info()) > MAX_IMAGES:
         return []
     sans = registry.fallback("sans")
 
@@ -390,7 +417,8 @@ def hidden_text(page: pymupdf.Page, registry: FontRegistry) -> list[dict]:
         geom = None
         if not picture.is_empty:
             path = registry.path(sans, bold, italic)
-            geom = _measure(ln, text, picture, render, registry.font(sans, bold, italic), _extents(path), visible)
+            geom = _measure(ln, text, picture, render, registry.font(sans, bold, italic), _extents(path), visible,
+                            images)
         measured.setdefault(id(p), []).append(geom)
     # Every line's ink: a cover never takes another line's print.
     inks = [g.ink for gs in measured.values() for g in gs if g is not None]
