@@ -154,7 +154,7 @@
    "embedded": true,
    "format": "ttf",
    "reusable": true,
-   "family": "tinosregular",
+   "family": "tinos",
    "bold": false,
    "italic": false,
    "substitute": {

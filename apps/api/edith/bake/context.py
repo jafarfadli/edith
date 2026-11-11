@@ -17,3 +17,6 @@ class BakeContext:
     page_index: dict[str, int] | None = None  # pageKey → output page index, set by bake() (links)
     # Bytes of another uploaded document (an imported PDF) by doc id; raises DocExpired / DocNotFound.
     load_source: Callable[[str], bytes] | None = None
+    # pageKeys whose drawn decorations stay (the page has unapplied redactions of its own: no decoration pass), set by
+    # bake(): their text.edits neither remove nor redraw the original's decorations.
+    marks_stay: set[str] | None = None

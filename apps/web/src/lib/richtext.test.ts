@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Run } from "@edith/ops";
+import type { FontRef, Run } from "@edith/ops";
 import type { DocFont } from "@/lib/api";
-import { fontKey } from "@/lib/fonts";
+import { fontKey, type FontMetrics } from "@/lib/fonts";
 import { applyPatch, attrsOf, docToRuns, fontStyle, patchFont, runCss, runOf, runsToDoc } from "@/lib/richtext";
 
 const arimo = { kind: "bundled" as const, family: "Arimo", bold: false, italic: false };
@@ -82,6 +82,79 @@ describe("rich text model", () => {
     expect(css).toContain("font-size:calc(var(--edith-scale, 1) * 12px)");
     expect(css).toContain("text-decoration-line:underline line-through");
     expect(css).toContain("background-color:#ffff00");
+  });
+});
+
+describe("formatting of original text", () => {
+  // DocFonts as GET /text gives them for a Word PDF: the family key without style and vendor suffixes, bold / italic
+  // from the name (or the program), the bundled substitute.
+  const font = (ref: string, name: string, family: string, bold: boolean, italic: boolean, sub: string, reusable = true): DocFont => ({
+    ref, name, embedded: true, format: "ttf", reusable, family, bold, italic, substitute: { kind: "bundled", family: sub, bold, italic },
+  });
+  const word = {
+    f10: font("f10", "TimesNewRomanPSMT", "timesnewroman", false, false, "Tinos"),
+    f11: font("f11", "TimesNewRomanPS-BoldMT", "timesnewroman", true, false, "Tinos"),
+    f12: font("f12", "TimesNewRomanPS-ItalicMT", "timesnewroman", false, true, "Tinos"),
+    f20: font("f20", "Calibri-Bold", "calibri", true, false, "Carlito"),
+    f30: font("f30", "Arial-BoldMT", "arial", true, false, "Arimo"),
+    f40: font("f40", "Dotum", "dotum", false, false, "Noto Sans KR"),
+    f50: font("f50", "Tahoma-Bold", "tahoma", true, false, "Arimo", false),
+  };
+  const orig = (ref: string) => ({ kind: "original" as const, ref });
+
+  it("shows the original font's bold and italic in the toolbar", () => {
+    expect(fontStyle(orig("f20"), word)).toMatchObject({ bold: true, italic: false, original: "f20" });
+    expect(fontStyle(orig("f30"), word)).toMatchObject({ bold: true, italic: false });
+    expect(fontStyle(orig("f12"), word)).toMatchObject({ bold: false, italic: true });
+    expect(fontStyle(orig("f40"), word)).toMatchObject({ bold: false, italic: false });
+    // Not reusable: the run is in its substitute, which keeps the style.
+    expect(fontStyle(word.f50.substitute, word)).toMatchObject({ family: "Arimo", bold: true });
+  });
+
+  it("toggles bold / italic to the original variant of the same family, else to the bundled substitute's", () => {
+    expect(patchFont(orig("f10"), { bold: true }, word)).toEqual(orig("f11"));
+    expect(patchFont(orig("f11"), { bold: false }, word)).toEqual(orig("f10"));
+    expect(patchFont(orig("f10"), { italic: true }, word)).toEqual(orig("f12"));
+    expect(patchFont(orig("f11"), { italic: true }, word)).toEqual({ kind: "bundled", family: "Tinos", bold: true, italic: true });
+    expect(patchFont(orig("f20"), { italic: true }, word)).toEqual({ kind: "bundled", family: "Carlito", bold: true, italic: true });
+    expect(patchFont(orig("f40"), { bold: true }, word)).toEqual({ kind: "bundled", family: "Noto Sans KR", bold: true, italic: false });
+  });
+
+  it("toggles a word to the embedded variant only when it draws the whole word, else the whole word to the substitute", () => {
+    // The bold subset has only "Bab I": a word it lacks a letter of goes to the bundled Tinos Bold as a whole.
+    const boldSubset = { hasGlyph: (cp: number) => "Bab I".includes(String.fromCodePoint(cp)) } as FontMetrics;
+    const peek = (f: FontRef) => (fontKey(f) === fontKey(orig("f11")) ? boldSubset : null);
+    expect(patchFont(orig("f10"), { bold: true }, word, { text: "Bab I", peek })).toEqual(orig("f11"));
+    expect(patchFont(orig("f10"), { bold: true }, word, { text: "Bab II", peek })).toEqual(orig("f11"));
+    expect(patchFont(orig("f10"), { bold: true }, word, { text: "Pendahuluan", peek }))
+      .toEqual({ kind: "bundled", family: "Tinos", bold: true, italic: false });
+    // The variant not loaded yet: its glyphs are unknown, the substitute draws the word.
+    expect(patchFont(orig("f10"), { bold: true }, word, { text: "Bab", peek: () => null }))
+      .toEqual({ kind: "bundled", family: "Tinos", bold: true, italic: false });
+    expect(applyPatch({ ...attrsOf(r("")), font: orig("f10") }, { bold: true }, word, { text: "Pendahuluan", peek }).font)
+      .toEqual({ kind: "bundled", family: "Tinos", bold: true, italic: false });
+  });
+
+  const underlined = r("garis", { underline: true, underlineTop: 0.116, decorThickness: 0.064, decorColor: "#0000ff" });
+
+  it("carries the original's underline geometry and colour through the editor, copy/paste and a restyle", () => {
+    expect(runOf("garis", attrsOf(underlined))).toEqual(underlined);
+    expect(docToRuns(runsToDoc([[underlined, r(" biasa")]]), attrsOf(r("")))).toEqual([[underlined, r(" biasa")]]);
+    // Bigger text: the geometry is in ems, it stays; underline off: it goes; on again: the default geometry.
+    expect(applyPatch(attrsOf(underlined), { size: 20, color: "#ff0000" }, {})).toMatchObject({ underlineTop: 0.116, decorThickness: 0.064, decorColor: "#0000ff" });
+    const off = applyPatch(attrsOf(underlined), { underline: false }, {});
+    expect(runOf("x", off)).toEqual(r("x"));
+    expect(runOf("x", applyPatch(off, { underline: true }, {}))).toEqual(r("x", { underline: true }));
+    // A strikethrough keeps the shared thickness and colour, not the underline's position.
+    expect(runOf("x", applyPatch(attrsOf(underlined), { underline: false, strike: true }, {})))
+      .toEqual(r("x", { strike: true, decorThickness: 0.064, decorColor: "#0000ff" }));
+  });
+
+  it("draws the original's line colour and thickness in the editor", () => {
+    const css = runCss(attrsOf(underlined));
+    expect(css).toContain("text-decoration-color:#0000ff");
+    expect(css).toContain("text-decoration-thickness:calc(var(--edith-scale, 1) * 0.768px)");
+    expect(runCss(attrsOf(r("")))).not.toContain("text-decoration-color");
   });
 });
 

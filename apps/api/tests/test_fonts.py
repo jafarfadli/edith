@@ -3,7 +3,7 @@ import json
 import pymupdf
 import pytest
 
-from edith.fonts import STYLES, FontRegistry, UnknownFont, base_font_name, cjk_style, parse_font_name
+from edith.fonts import STYLES, FontRegistry, UnknownFont, base_font_name, cjk_style, family_key, parse_font_name
 from edith.settings import Settings
 from tests.pdfs import fake_cjk_pack
 
@@ -62,6 +62,13 @@ def test_name_parsing():
     assert parse_font_name("ABCDEF+Arial,BoldItalic") == ("arial", True, True)
     assert parse_font_name("Times New Roman") == ("timesnewroman", False, False)
     assert parse_font_name("Helvetica-Oblique") == ("helvetica", False, True)
+
+
+def test_family_key_is_shared_by_the_styles_of_a_family():
+    assert family_key("TimesNewRomanPSMT") == family_key("ABCDEF+TimesNewRomanPS-BoldItalicMT") == "timesnewroman"
+    assert family_key("ArialMT") == family_key("Arial-BoldMT") == family_key("Arial,Italic") == "arial"
+    assert family_key("Calibri") == family_key("Calibri-Bold") == "calibri"
+    assert family_key("Tinos Regular") == "tinos" and family_key("Dotum") == "dotum"
 
 
 @pytest.mark.parametrize("name,flags,family,bold,italic", [

@@ -20,6 +20,7 @@ _STYLE_FALLBACK = {
 _SUBSET_PREFIX = re.compile(r"^[A-Z]{6}\+")
 # Suffixes stripped one at a time from a normalized name until it matches an alias.
 _SUFFIXES = ("regular", "bolditalic", "boldoblique", "bold", "italic", "oblique", "roman", "book", "mt", "ps")
+_STYLE_SUFFIXES = tuple(s for s in _SUFFIXES if s not in ("roman", "book"))  # family_key: "TimesNewRoman" keeps its Roman
 _BOLD_WORDS = ("bold", "black", "heavy", "semibold", "demibold", "demi")
 _ITALIC_WORDS = ("italic", "oblique")
 FLAG_ITALIC, FLAG_SERIF, FLAG_MONO, FLAG_BOLD = 2, 4, 8, 16  # pymupdf TEXT_FONT_* span flags
@@ -69,6 +70,19 @@ def parse_font_name(name: str) -> tuple[str, bool, bool]:
     family = re.split(r"[-,]", base, maxsplit=1)[0]
     key = re.sub(r"[^a-z0-9]", "", family.lower())
     return key, bold, italic
+
+
+def family_key(name: str) -> str:
+    """The family key of a PDF font name without its style and vendor suffixes, so that the styles of one family share
+    it: `TimesNewRomanPSMT` and `TimesNewRomanPS-BoldMT` → `timesnewroman`, `ArialMT` and `Arial-BoldMT` → `arial`."""
+    key, _, _ = parse_font_name(name)
+    while True:
+        for suffix in _STYLE_SUFFIXES:
+            if key.endswith(suffix) and len(key) > len(suffix):
+                key = key[: -len(suffix)]
+                break
+        else:
+            return key
 
 
 def cjk_style(name: str) -> tuple[str, str] | None:

@@ -121,6 +121,80 @@ def make_edit_pdf() -> bytes:
     return doc.tobytes(garbage=3, deflate=True)
 
 
+HELV = pymupdf.Font("helv")
+DECOR_G0 = ("Alpha beta underlined gamma delta", "second line all underlined")
+
+
+def _at(x: float, text: str, word: str, size: float = 12) -> tuple[float, float]:
+    """x0, x1 of `word` in `text` written at x (Helvetica): from its origin to the end of its advance."""
+    i = text.index(word)
+    a = x + HELV.text_length(text[:i], size)
+    return a, a + HELV.text_length(word, size)
+
+
+def make_decor_pdf(extra: bool = False) -> bytes:
+    """Helvetica 12 pt text with decorations drawn as Word draws them (bars from the first decorated character's origin
+    to the last one's advance) and drawings next to them that are not decorations:
+    g0 = DECOR_G0 (baselines 100 / 114): "underlined" of line 1 (a filled bar at baseline + 1.2, 0.8 thick) and all of
+         line 2 (another bar) underlined; a table border at y 119 (x 60 … 540) just below it.
+    g1 = "Struck and highlighted" (baseline 160): "Struck" struck through (a 0.7 pt stroke at baseline − 3.6),
+         "highlighted" on a yellow fill (baseline − 10.8 … + 3; at the line's end: the fill's sides count as rules,
+         which split a line between two of its characters).
+    g2 = "Nama :" and a fill-in line (a 0.6 pt stroke from x 115 to 300 at baseline + 1.5) (baseline 200).
+    g3 = "Neighbour underlined" (baseline 240), underlined whole; a signature line at y 280 (x 72 … 250).
+    `extra`: a speck (0.4 × 0.3 pt) drawn inside g3's underline bar: removing the bar would remove it too."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    g1 = "Struck and highlighted"
+    hx0, hx1 = _at(72, g1, "highlighted")
+    page.draw_rect(pymupdf.Rect(hx0, 160 - 10.8, hx1, 163), color=None, fill=(1, 1, 0))  # under the text
+    for x, y, t in ((72, 100, DECOR_G0[0]), (72, 114, DECOR_G0[1]), (72, 160, g1), (72, 200, "Nama :"),
+                    (72, 240, "Neighbour underlined")):
+        page.insert_text((x, y), t, fontname="helv", fontsize=12)
+    ux0, ux1 = _at(72, DECOR_G0[0], "underlined")
+    page.draw_rect(pymupdf.Rect(ux0, 101.2, ux1, 102.0), color=None, fill=(0, 0, 0))
+    page.draw_rect(pymupdf.Rect(72, 115.2, 72 + HELV.text_length(DECOR_G0[1], 12), 116.0), color=None, fill=(0, 0, 0))
+    page.draw_line((60, 119), (540, 119), color=(0, 0, 0), width=0.5)  # a table border just below
+    sx0, sx1 = _at(72, g1, "Struck")
+    page.draw_line((sx0, 156.4), (sx1, 156.4), color=(1, 0, 0), width=0.7)
+    page.draw_line((115, 201.5), (300, 201.5), color=(0, 0, 0), width=0.6)  # a fill-in line after "Nama :"
+    nx1 = 72 + HELV.text_length("Neighbour underlined", 12)
+    page.draw_rect(pymupdf.Rect(72, 241.2, nx1, 242.0), color=None, fill=(0, 0, 0))
+    if extra:
+        page.draw_rect(pymupdf.Rect(100, 241.4, 100.4, 241.7), color=None, fill=(0, 0, 1))
+    page.draw_line((72, 280), (250, 280), color=(0, 0, 0), width=0.5)  # a signature line
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+FORMAT_PIECES = (("Peserta ", "Regular", False), ("Budi Santoso", "BoldItalic", True), (" wajib ", "Regular", False),
+                 ("hadir", "Italic", False), (" tepat waktu.", "Regular", False))
+FORMAT_NOTE = "Catatan ini tetap bergaris bawah"
+
+
+def make_formatting_pdf() -> bytes:
+    """apps/web/e2e/fixtures/formatting.pdf: one 14 pt line at baseline 120 from x 56 in embedded Arimo styles,
+    FORMAT_PIECES (text, style, underlined: a Word-like bar at baseline + 1.4, 0.9 thick, under "Budi Santoso"); a table
+    border just below it (y 127, x 40 … 555); FORMAT_NOTE (baseline 170) underlined whole, to stay as it is."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    fonts = {}
+    for style in ("Regular", "Bold", "Italic", "BoldItalic"):
+        fonts[style] = pymupdf.Font(fontfile=str(FONT_FILES / f"Arimo-{style}.ttf"))
+        page.insert_font(fontname=f"A{style}", fontfile=str(FONT_FILES / f"Arimo-{style}.ttf"))
+    x = 56.0
+    for text, style, underlined in FORMAT_PIECES:
+        page.insert_text((x, 120), text, fontname=f"A{style}", fontsize=14)
+        w = fonts[style].text_length(text, 14)
+        if underlined:
+            page.draw_rect(pymupdf.Rect(x, 121.4, x + w, 122.3), color=None, fill=(0, 0, 0))
+        x += w
+    page.draw_line((40, 127), (555, 127), color=(0.3, 0.3, 0.3), width=0.5)
+    page.insert_text((56, 170), FORMAT_NOTE, fontname="ARegular", fontsize=14)
+    page.draw_rect(pymupdf.Rect(56, 171.4, 56 + fonts["Regular"].text_length(FORMAT_NOTE, 14), 172.3), color=None, fill=(0, 0, 0))
+    doc.subset_fonts()  # as Word embeds them: what the page uses (typed letters a subset lacks fall back)
+    return doc.tobytes(garbage=3, deflate=True)
+
+
 def make_layout_pdf() -> bytes:
     """Wrapped paragraphs (standard Helvetica/Times/Courier, every alignment) plus hand-broken lines."""
     doc = pymupdf.open()

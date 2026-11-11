@@ -25,6 +25,10 @@ export type Color = string;
 export type Bgcolor = string | null;
 export type Underline = boolean;
 export type Strike = boolean;
+export type Underlinetop = number | null;
+export type Striketop = number | null;
+export type Decorthickness = number | null;
+export type Decorcolor = string | null;
 export type Hscale = number;
 export type Charspacing = number;
 export type Wordspacing = number;
@@ -42,6 +46,7 @@ export type Id1 = string;
 export type Pagekey1 = string;
 export type Type1 = "text.edit";
 export type Paragraphid = string;
+export type Decorv = 1 | null;
 export type Id2 = string;
 export type Pagekey2 = string;
 export type Type2 = "text.ocr_edit";
@@ -278,6 +283,10 @@ export interface Rect {
  * advance of a character is `hScale · advance · size + charSpacing (+ wordSpacing for " ")`, in pt; the glyph
  * is drawn `hScale` times as wide. Clients split a run with spacing into one segment per character
  * (`charSpacing`) or per word and space (`wordSpacing`), so a segment's own glyphs only need `hScale`.
+ * `underlineTop`, `strikeTop`, `decorThickness` (× size; top edge relative to the baseline, down positive) and
+ * `decorColor`: where, how thick and in which colour the original PDF drew a run's underline / strikethrough (GET
+ * /text, original text); absent = the defaults of bake/text.py (UNDERLINE_TOP, STRIKE_TOP, DECOR_THICKNESS, the
+ * text colour).
  *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "Run".
@@ -290,6 +299,10 @@ export interface Run {
   bgColor?: Bgcolor;
   underline?: Underline;
   strike?: Strike;
+  underlineTop?: Underlinetop;
+  strikeTop?: Striketop;
+  decorThickness?: Decorthickness;
+  decorColor?: Decorcolor;
   hScale?: Hscale;
   charSpacing?: Charspacing;
   wordSpacing?: Wordspacing;
@@ -354,7 +367,10 @@ export interface LinePrefix {
   segments: Segments1;
 }
 /**
- * Replaces original paragraph `paragraphId` of the page's source page with `box`.
+ * Replaces original paragraph `paragraphId` of the page's source page with `box`. `decorV` 1: the box's runs carry
+ * the original's drawn decorations as GET /text reports them (Run.underline / strike / bgColor and their geometry):
+ * the bake removes the decoration marks of the lines it redraws and keeps a line only with the same decorations.
+ * Absent (a client or draft from before): the marks stay where they are and decorations are not compared.
  *
  * This interface was referenced by `EdithSchema`'s JSON-Schema
  * via the `definition` "TextEdit".
@@ -365,6 +381,7 @@ export interface TextEdit {
   type: Type1;
   paragraphId: Paragraphid;
   box: TextBox;
+  decorV?: Decorv;
 }
 /**
  * Replaces a paragraph OCR read in a picture of text (POST /documents/{id}/pages/{n}/ocr, M5d). `cover` is painted

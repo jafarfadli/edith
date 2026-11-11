@@ -138,6 +138,19 @@ describe("editing an original paragraph", () => {
     expect(editorStore.getState().doc.objects.e1).toBeUndefined();
   });
 
+  it("stamps a new edit decorV 1 (its runs carry the original's decorations); an old unstamped op stays unstamped", async () => {
+    openParagraph("Halo dunia");
+    await commitEditing(runs("Halo semua"));
+    expect((editorStore.getState().doc.objects.e1 as TextEdit).decorV).toBe(1);
+    // An op from a draft made before decorations: edited again, it keeps behaving as it did (no stamp).
+    const old = { ...(editorStore.getState().doc.objects.e1 as TextEdit) };
+    delete old.decorV;
+    editorStore.getState().putObjects([old]);
+    textEditStore.getState().start({ id: "e1", pageKey: "o0", box: old.box, isNew: false, kind: "text.edit", paragraphId: "g3" });
+    await commitEditing(runs("Halo semua lagi"));
+    expect(editorStore.getState().doc.objects.e1).not.toHaveProperty("decorV");
+  });
+
   it("adds nothing when the text did not change", async () => {
     openParagraph("Halo dunia");
     await commitEditing(runs("Halo dunia"));
@@ -311,7 +324,7 @@ describe("original paragraphs", () => {
   it("materializeParagraph adds a moved text.edit op, selected, in one undo step", async () => {
     await materializeParagraph("o0", para, (b) => ({ ...b, rect: { ...b.rect, x: b.rect.x + 10 } }));
     const op = Object.values(editorStore.getState().doc.objects)[0] as TextEdit;
-    expect(op).toMatchObject({ type: "text.edit", paragraphId: "g2" });
+    expect(op).toMatchObject({ type: "text.edit", paragraphId: "g2", decorV: 1 });
     expect(op.box.rect.x).toBe(82);
     expect(editorStore.getState().selection).toBe(op.id);
     editorStore.getState().undo();

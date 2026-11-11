@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import pymupdf
 
 from edith.cid_fonts import add_cmap, char_to_glyph
-from edith.fonts import FontRegistry, base_font_name, parse_font_name
+from edith.fonts import FontRegistry, base_font_name, family_key, parse_font_name
 
 # pymupdf extract_font() extensions → spec font formats.
 _FORMATS = {"ttf": "ttf", "otf": "otf", "cff": "cff", "cid": "cff", "pfa": "type1", "pfb": "type1"}
@@ -90,14 +90,17 @@ def load_font(doc: pymupdf.Document, xref: int) -> pymupdf.Font | None:
 def _doc_font(doc: pymupdf.Document, entry: tuple) -> DocFont:
     xref, ext, ftype, basefont = entry[0], entry[1], entry[2], entry[3]
     name = base_font_name(basefont)
-    family, bold, italic = parse_font_name(name)
+    _key, bold, italic = parse_font_name(name)
+    family = family_key(name)
     embedded = ext not in ("n/a", "")
     fmt = "type3" if ftype == "Type3" else (_FORMATS.get(ext) if embedded else None)
     keys = {name_key(name)}
     if embedded:
         try:
-            buf = doc.extract_font(xref)[3]
-            keys.add(name_key(pymupdf.Font(fontbuffer=buf).name))
+            program = pymupdf.Font(fontbuffer=doc.extract_font(xref)[3])
+            keys.add(name_key(program.name))
+            # A name that says nothing of the style ("F1", "ABCDEF+Foo"): the program's own bold / italic flags.
+            bold, italic = bold or bool(program.is_bold), italic or bool(program.is_italic)
         except Exception:  # noqa: BLE001 - unreadable program: match by BaseFont only
             pass
     reusable = fmt in ("ttf", "otf") and load_font(doc, xref) is not None

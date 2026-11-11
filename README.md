@@ -16,6 +16,20 @@ Batasnya mengikuti tahap bake API, dan layar menumpuk objek dengan aturan yang s
 
 Urutan hanya bertukar dengan objek di halaman dan tahap yang sama; tombol yang tidak berpengaruh dinonaktifkan, dan menu menjelaskan batas ini bila relevan. "Bertumpuk" diukur dengan kotak pembatas objek (bounding box, termasuk rotasi), bukan bentuk persisnya: garis diagonal atau coretan bebas yang kotaknya beririsan dengan objek lain tanpa benar-benar menyentuhnya dihitung bertumpuk, jadi kadang perlu satu tekan tambahan sebelum perubahannya terlihat.
 
+## Format teks asli: tebal, miring, garis bawah, coret, stabilo
+
+Tebal dan miring ikut font: subset font asli dipakai ulang apa adanya, dan tombol **B**/**I** di toolbar menyala sesuai font aslinya (dari namanya, atau dari program font bila namanya tidak menyebut gaya). Menyalakan atau mematikan B/I memakai varian keluarga yang sama yang tertanam di PDF (TimesNewRomanPSMT ↔ TimesNewRomanPS-BoldMT) bila varian itu punya semua huruf kata tersebut; kalau tidak, seluruh kata memakai font pengganti bawaan dengan gaya itu (Calibri → Carlito, Arial → Arimo, Times → Tinos, Dotum → Noto Sans KR), tidak pernah satu kata dua font.
+
+Garis bawah, coret dan stabilo yang digambar PDF (Word dan kebanyakan pembuat PDF menggambarnya sebagai garis/persegi, bukan bagian teks) dikenali per kata: sebuah garis dianggap garis bawah/coret hanya bila kedua ujungnya tepat di tepi huruf satu baris, pada tinggi garis bawah/coret, tidak lebih dari satu spasi melewati tinta, tidak bertemu garis lain (dasar sel tabel), dan menghapusnya tidak ikut menghapus apa pun. Stabilo harus persegi buram yang digambar di bawah teksnya. Garis tabel, garis isian ("Nama : ____") dan garis tanda tangan tidak pernah disentuh. Saat paragraf diedit, tanda baris yang digambar ulang dihapus dan digambar lagi di bawah teks baru dengan posisi, ketebalan dan warna aslinya; baris yang tidak berubah menyimpan tandanya sendiri.
+
+Batasnya:
+
+- Garis bawah putus-putus, ganda atau bergelombang digambar ulang sebagai garis tunggal yang utuh.
+- Stabilo digambar ulang setinggi pita bawaan (bukan persis tinggi persegi aslinya); stabilo yang di dalamnya ada garis bawah tidak dipindahkan. Sisi persegi stabilo masih memotong baris menjadi paragraf terpisah (mengubahnya mengganti pemisahan paragraf).
+- Superskrip/subskrip belum didukung (run belum punya geser baseline).
+- Halaman yang menyimpan anotasi redaksi yang belum diterapkan: tanda aslinya tetap di tempat dan tidak digambar dua kali.
+- Edit dari draf atau tab lama (sebelum fitur ini, tanpa `decorV`) membiarkan tanda asli di tempatnya, seperti dulu.
+
 ## OCR: teks yang berupa gambar
 
 Halaman yang teksnya berupa gambar (hasil pindai, tangkapan layar surat) tidak punya teks yang bisa diedit. Di atas gambar itu muncul tombol **Kenali teks (OCR)** (juga di pemberitahuan saat dokumen dibuka dan saat bagian gambar diklik dua kali). OCR berjalan per halaman, atas permintaan, dengan Tesseract (bahasa Indonesia + Inggris, 300 dpi, maksimal 30 detik, satu halaman per dokumen dan dua halaman per server sekaligus). Hasilnya paragraf bergaris putus-putus berlabel "hasil OCR" (kuning: kurang yakin terbaca, keyakinan < 75 %); klik dua kali untuk mengedit. Hasil OCR hanya disimpan di tab browser (tidak di server, tidak di draf) dan tidak pernah ditulis ke PDF.
