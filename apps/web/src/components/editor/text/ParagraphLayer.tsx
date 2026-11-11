@@ -15,7 +15,8 @@ import { editorStore, useEditor } from "@/store/editor";
 import { hiddenParagraphsOf, hiddenRetryIn, imagesOf, imageTextOf, isPrint, paragraphsOf, pictureParagraphsOf, textStore, useText } from "@/store/text";
 import { contextMenuStore } from "../objects/layering";
 import { runPageOcr } from "./ocrRun";
-import { materializeParagraph, startOcrEdit, startParagraphEdit, textEditStore } from "./textEdit";
+import { materializeParagraph, paragraphPreview, paragraphStartBox, resizedParagraph, startOcrEdit, startParagraphEdit, textEditStore } from "./textEdit";
+import { TextNode } from "./TextNode";
 import { CANVAS } from "@/lib/theme";
 
 const OUTLINE = CANVAS.accent;
@@ -60,6 +61,21 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   const [hover, setHover] = useState<string | null>(null);
   const nodes = useRef(new Map<string, Konva.Rect>());
   const trRef = useRef<Konva.Transformer>(null);
+  // A handle being dragged: the paragraph's redrawn box (loaded when the drag starts) and the text laid out for the
+  // frame at the pointer, drawn over a white cover until release (the page's own glyphs cannot be re-wrapped).
+  const resizing = useRef<{ id: string; base: TextBox | null; cancelled: boolean } | null>(null);
+  const [preview, setPreview] = useState<{ op: TextEdit; p: Paragraph } | null>(null);
+  // Escape cancels the drag (captured: the shortcut that deselects does not see it).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !resizing.current || !trRef.current?.isTransforming()) return;
+      e.stopPropagation();
+      resizing.current.cancelled = true;
+      trRef.current.stopTransform();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
 
   const paragraphs = entry ? paragraphsOf(entry.src, pages) : [];
   // Edited paragraph → its op's box (lines it keeps stay uncovered); undefined while its rich editor is open.
@@ -166,6 +182,10 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
       {ocrEdits.flatMap((e) => coverRects(e).map((r, i) => (
         <Rect key={`cover-${e.id}-${i}`} name="ocr-cover" x={r.x} y={r.y} width={r.w} height={r.h} fill={e.coverColor} listening={false} />
       )))}
+      {preview && maskRects(preview.p).map((r, i) => (
+        <Rect key={`resize-cover-${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill="#ffffff" listening={false} />
+      ))}
+      {preview && <TextNode op={preview.op} hidden={false} />}
       {locked.map((l) => (
         <Rect
           key={l.key}
@@ -212,11 +232,25 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
             node.position({ x: p.rect.x, y: p.rect.y });
             if (dx || dy) void materializeParagraph(pageKey, p, (box) => ({ ...box, rect: { ...box.rect, x: box.rect.x + dx, y: box.rect.y + dy } }));
           }}
+          onTransformStart={() => {
+            const r = { id: p.id, base: null as TextBox | null, cancelled: false };
+            resizing.current = r;
+            paragraphStartBox(p).then((box) => { r.base = box; }).catch((err) => console.warn("paragraph resize: font load failed", err));
+          }}
+          onTransform={(e) => {
+            const r = resizing.current;
+            if (!r?.base) return; // fonts still loading: the frame alone follows the pointer
+            const node = e.target;
+            setPreview({ p, op: paragraphPreview(pageKey, p, r.base, node.x(), Math.max(10, p.rect.w * node.scaleX())) });
+          }}
           onTransformEnd={(e) => {
             const node = e.target;
+            const cancelled = resizing.current?.cancelled;
             const x = node.x(), w = Math.max(10, p.rect.w * node.scaleX());
+            resizing.current = null;
+            setPreview(null);
             node.setAttrs({ x: p.rect.x, scaleX: 1, scaleY: 1 });
-            void materializeParagraph(pageKey, p, (box) => ({ ...box, rect: { ...box.rect, x, w: Math.max(10, box.rect.w + w - p.rect.w) } }));
+            if (!cancelled) void materializeParagraph(pageKey, p, resizedParagraph(p, x, w));
           }}
         />
       ))}

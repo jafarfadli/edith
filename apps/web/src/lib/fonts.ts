@@ -1,6 +1,7 @@
 import * as fontkit from "fontkit";
 import type { BundledFont, FontRef, OriginalFont } from "@edith/ops";
 import type { CjkScript, FallbackFonts } from "@/lib/fallback";
+import { pickerGroups, type PickerGroup } from "@/lib/fontPicker";
 
 export interface FontMetrics {
   unitsPerEm: number; ascent: number; descent: number;
@@ -134,9 +135,9 @@ export function cssFamily(f: FontRef): string {
   return `edith-${fontKey(f)}`;
 }
 
-interface Family { category: string; files: Partial<Record<Style, string>> }
+interface Family { category: string; display?: string; files: Partial<Record<Style, string>> }
 /** `cjk`: the optional CJK pack, only the families (and styles) whose files were fetched (scripts/sync-fonts.mjs). */
-interface Manifest { default: string; families: Record<string, Family>; cjk?: Record<string, Family & { script: CjkScript }> }
+interface Manifest { default: string; common?: string[]; families: Record<string, Family>; cjk?: Record<string, Family & { script: CjkScript }> }
 
 export class FontStore implements FallbackFonts {
   private manifest?: Promise<Manifest>;
@@ -174,6 +175,11 @@ export class FontStore implements FallbackFonts {
   /** Families of the font picker (the CJK pack only serves as a fallback). */
   async families(): Promise<string[]> {
     return Object.keys((await this.getManifest()).families);
+  }
+
+  /** The font picker's groups: document fonts first under their familiar names (see fontPicker.ts). */
+  async picker(): Promise<PickerGroup[]> {
+    return pickerGroups(await this.getManifest());
   }
 
   ready(): Promise<unknown> {

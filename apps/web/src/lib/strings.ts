@@ -102,6 +102,8 @@ export const t = {
     noBackground: "Tanpa latar",
     alignJustify: "Rata kiri-kanan",
     originalFont: (name: string) => `${name} (asli)`,
+    /** Groups of the font picker; the first lists the document fonts under their familiar names. */
+    fontGroup: { common: "Umum / Dokumen", sans: "Sans", serif: "Serif", mono: "Mono", script: "Script" },
     revert: "Kembalikan teks asli",
     /** Deleting the text of an original (or OCR) paragraph: its menu, the bar over it, the Anotasi panel. */
     edit: "Edit teks",
