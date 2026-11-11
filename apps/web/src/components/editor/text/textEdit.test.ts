@@ -10,7 +10,7 @@ import { boxLineHeight, newBox, relayout } from "@/lib/textbox";
 import { editorStore, type DocInfo } from "@/store/editor";
 import { textStore } from "@/store/text";
 import { moveOp, resizeOp } from "@/lib/objects";
-import { afterTextCommitted, commitEditing, deleteObjectOrText, deleteSelectedParagraph, isDeletedText, materializeParagraph, startOcrEdit, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, updateTextOp, whenTextCommitted } from "./textEdit";
+import { afterTextCommitted, commitEditing, deleteObjectOrText, deleteSelectedParagraph, isDeletedText, materializeParagraph, paragraphPreview, paragraphStartBox, resizedParagraph, startOcrEdit, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, updateTextOp, whenTextCommitted } from "./textEdit";
 
 const info: DocInfo = {
   docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
@@ -327,6 +327,31 @@ describe("original paragraphs", () => {
     expect(op).toMatchObject({ type: "text.edit", paragraphId: "g2", decorV: 1 });
     expect(op.box.rect.x).toBe(82);
     expect(editorStore.getState().selection).toBe(op.id);
+    editorStore.getState().undo();
+    expect(editorStore.getState().doc.order).toEqual([]);
+  });
+});
+
+describe("live resize of an original paragraph", () => {
+  beforeEach(() => { gate.resolve(); fontsLoaded = true; });
+  const para: Paragraph = {
+    id: "g2", rect: { x: 72, y: 88, w: 160, h: 16 }, align: "left", lineHeight: 14, editable: true,
+    runs: [{ text: "Halo dunia yang indah sekali hari ini", font, size: 14, color: "#111111" }],
+    lines: [{ rect: { x: 72, y: 88, w: 160, h: 16 }, baseline: 100, size: 14, start: 0, end: 37 }],
+  };
+
+  it("the preview wraps at the width it is given, each time, and is the box a release lands", async () => {
+    const base = await paragraphStartBox(para);
+    const lines = (w: number) => paragraphPreview("o0", para, base, 72, w).box.layout.length;
+    expect(lines(160)).toBeLessThan(lines(100));
+    expect(lines(100)).toBeLessThan(lines(50));
+    expect(lines(160)).toBe(lines(160)); // the base is not changed by a frame
+    const live = paragraphPreview("o0", para, base, 80, 90);
+    expect(live).toMatchObject({ type: "text.edit", paragraphId: "g2", pageKey: "o0" });
+    expect(live.box.rect).toMatchObject({ x: 80 });
+    await materializeParagraph("o0", para, resizedParagraph(para, 80, 90));
+    const landed = Object.values(editorStore.getState().doc.objects)[0] as TextEdit;
+    expect(landed.box).toEqual(live.box);
     editorStore.getState().undo();
     expect(editorStore.getState().doc.order).toEqual([]);
   });
