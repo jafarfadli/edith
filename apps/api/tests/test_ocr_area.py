@@ -25,7 +25,8 @@ def text(p: dict) -> str:
 
 
 @pytest.mark.parametrize("rect", [{"x": 0, "y": 0, "w": 0, "h": 10}, {"x": 700, "y": 0, "w": 50, "h": 50},
-                                  {"x": 10, "y": 10, "w": 2, "h": 50}])
+                                  {"x": 10, "y": 10, "w": 2, "h": 50}, {"x": 1e308, "y": 0, "w": 1e308, "h": 10},
+                                  {"x": 0, "y": -2e5, "w": 50, "h": 50}, {"x": 0, "y": 0, "w": 50, "h": 1e6}])
 def test_an_area_outside_the_page_or_too_small_is_refused(client, monkeypatch, rect):
     monkeypatch.setattr(ocr, "available", lambda configured=None: True)
     doc = upload(client, make_maybe_text_pdf()).json()["doc_id"]

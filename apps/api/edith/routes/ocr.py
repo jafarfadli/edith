@@ -37,11 +37,14 @@ class OcrGate:
             self._slots.release()
 
 
+AREA_BOUND = 1e5  # pt: what an area's coordinates and size may be (far beyond any page; a huge float overflows MuPDF)
+
+
 class Area(BaseModel):
-    x: float
-    y: float
-    w: float = Field(gt=0)
-    h: float = Field(gt=0)
+    x: float = Field(ge=-AREA_BOUND, le=AREA_BOUND)
+    y: float = Field(ge=-AREA_BOUND, le=AREA_BOUND)
+    w: float = Field(gt=0, le=AREA_BOUND)
+    h: float = Field(gt=0, le=AREA_BOUND)
 
 
 class OcrRequest(BaseModel):
