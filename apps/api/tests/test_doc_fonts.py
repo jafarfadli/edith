@@ -3,7 +3,7 @@ import pymupdf
 from edith.doc_fonts import collect_fonts, fill_substitutes, load_font, name_key, span_fonts
 from edith.fonts import FontRegistry
 from edith.settings import Settings
-from tests.pdfs import make_cid_subset_pdf, make_fonts_pdf, make_pymupdf_subset_pdf, rename_font
+from tests.pdfs import FONT_FILES, make_cid_subset_pdf, make_fonts_pdf, make_pymupdf_subset_pdf, rename_font
 
 
 def fonts_of(data: bytes):
@@ -31,6 +31,23 @@ def test_font_table_per_kind():
     ]
     assert f["Helvetica"].ref == f"f{f['Helvetica'].xref}"
     assert f["Courier"].family == "courier"
+
+
+def test_style_from_the_program_when_the_name_says_nothing():
+    """A font whose BaseFont names no style ("F1") is bold / italic as its program says; the styles of a family share
+    its key (TimesNewRomanPSMT and TimesNewRomanPS-BoldMT: "timesnewroman"), so a style change finds the variant."""
+    doc = pymupdf.open()
+    page = doc.new_page()
+    for name, file, y in (("FB", "Arimo-BoldItalic.ttf", 100), ("FR", "Arimo-Regular.ttf", 140)):
+        page.insert_font(fontname=name, fontfile=str(FONT_FILES / file))
+        page.insert_text((72, y), "Styled line", fontname=name, fontsize=12)
+    bold_xref = next(f[0] for f in page.get_fonts(full=True) if f[4] == "FB")
+    doc.xref_set_key(bold_xref, "BaseFont", "/ABCDEF+F1")
+    data = doc.tobytes()
+    _, fonts = fonts_of(data)
+    styles = {f.name: (f.family, f.bold, f.italic) for f in fonts.values()}
+    assert styles["F1"] == ("f1", True, True)
+    assert styles[next(n for n in styles if n != "F1")][1:] == (False, False)
 
 
 def test_pymupdf_subset_gets_a_rebuilt_cmap():

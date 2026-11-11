@@ -1,0 +1,334 @@
+{
+ "doc_id": "fixture",
+ "pages": [
+  {
+   "index": 0,
+   "paragraphs": [
+    {
+     "id": "g0",
+     "rect": {
+      "x": 72.0,
+      "y": 87.1,
+      "w": 189.43,
+      "h": 30.49
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 87.1,
+        "w": 189.43,
+        "h": 16.49
+       },
+       "baseline": 100.0,
+       "size": 12.0,
+       "start": 0,
+       "end": 33,
+       "wordX": [
+        72.0,
+        106.02,
+        132.71,
+        192.07,
+        235.42
+       ],
+       "decor": [
+        {
+         "x": 132.71,
+         "y": 101.2,
+         "w": 56.03,
+         "h": 0.8
+        }
+       ]
+      },
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 101.1,
+        "w": 135.4,
+        "h": 16.49
+       },
+       "baseline": 114.0,
+       "size": 12.0,
+       "start": 34,
+       "end": 60,
+       "wordX": [
+        72.0,
+        114.02,
+        136.03,
+        151.37
+       ],
+       "decor": [
+        {
+         "x": 72.0,
+         "y": 115.2,
+         "w": 135.4,
+         "h": 0.8
+        }
+       ]
+      }
+     ],
+     "runs": [
+      {
+       "text": "Alpha beta ",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 12.0,
+       "color": "#000000"
+      },
+      {
+       "text": "underlined",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 12.0,
+       "color": "#000000",
+       "underline": true,
+       "underlineTop": 0.1,
+       "decorThickness": 0.067
+      },
+      {
+       "text": " gamma delta ",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 12.0,
+       "color": "#000000"
+      },
+      {
+       "text": "second line all underlined",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 12.0,
+       "color": "#000000",
+       "underline": true,
+       "underlineTop": 0.1,
+       "decorThickness": 0.067
+      }
+     ],
+     "align": "left",
+     "lineHeight": 14.0,
+     "editable": true,
+     "maxWidth": 449.0
+    },
+    {
+     "id": "g1",
+     "rect": {
+      "x": 72.0,
+      "y": 147.1,
+      "w": 118.73,
+      "h": 16.49
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 147.1,
+        "w": 118.73,
+        "h": 16.49
+       },
+       "baseline": 160.0,
+       "size": 12.0,
+       "start": 0,
+       "end": 22,
+       "wordX": [
+        72.0,
+        109.34,
+        132.7
+       ],
+       "decor": [
+        {
+         "x": 132.7,
+         "y": 149.2,
+         "w": 58.03,
+         "h": 13.8
+        },
+        {
+         "x": 72.0,
+         "y": 156.05,
+         "w": 34.01,
+         "h": 0.7
+        }
+       ]
+      }
+     ],
+     "runs": [
+      {
+       "text": "Struck",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 12.0,
+       "color": "#000000",
+       "strike": true,
+       "strikeTop": -0.329,
+       "decorThickness": 0.058,
+       "decorColor": "#ff0000"
+      },
+      {
+       "text": " and ",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 12.0,
+       "color": "#000000"
+      },
+      {
+       "text": "highlighted",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 12.0,
+       "color": "#000000",
+       "bgColor": "#ffff00"
+      }
+     ],
+     "align": "left",
+     "lineHeight": 14.4,
+     "editable": true,
+     "maxWidth": 118.73
+    },
+    {
+     "id": "g2",
+     "rect": {
+      "x": 72.0,
+      "y": 187.1,
+      "w": 38.68,
+      "h": 16.49
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 187.1,
+        "w": 38.68,
+        "h": 16.49
+       },
+       "baseline": 200.0,
+       "size": 12.0,
+       "start": 0,
+       "end": 6,
+       "wordX": [
+        72.0,
+        107.34
+       ]
+      }
+     ],
+     "runs": [
+      {
+       "text": "Nama :",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 12.0,
+       "color": "#000000"
+      }
+     ],
+     "align": "left",
+     "lineHeight": 14.4,
+     "editable": true,
+     "maxWidth": 449.0
+    },
+    {
+     "id": "g3",
+     "rect": {
+      "x": 72.0,
+      "y": 227.1,
+      "w": 114.72,
+      "h": 16.49
+     },
+     "lines": [
+      {
+       "rect": {
+        "x": 72.0,
+        "y": 227.1,
+        "w": 114.72,
+        "h": 16.49
+       },
+       "baseline": 240.0,
+       "size": 12.0,
+       "start": 0,
+       "end": 20,
+       "wordX": [
+        72.0,
+        130.69
+       ],
+       "decor": [
+        {
+         "x": 72.0,
+         "y": 241.2,
+         "w": 114.72,
+         "h": 0.8
+        }
+       ]
+      }
+     ],
+     "runs": [
+      {
+       "text": "Neighbour underlined",
+       "font": {
+        "kind": "bundled",
+        "family": "Arimo",
+        "bold": false,
+        "italic": false
+       },
+       "size": 12.0,
+       "color": "#000000",
+       "underline": true,
+       "underlineTop": 0.1,
+       "decorThickness": 0.067
+      }
+     ],
+     "align": "left",
+     "lineHeight": 14.4,
+     "editable": true,
+     "maxWidth": 449.0
+    }
+   ],
+   "imageText": []
+  }
+ ],
+ "fonts": [
+  {
+   "ref": "f6",
+   "name": "Helvetica",
+   "embedded": false,
+   "format": null,
+   "reusable": false,
+   "family": "helvetica",
+   "bold": false,
+   "italic": false,
+   "substitute": {
+    "kind": "bundled",
+    "family": "Arimo",
+    "bold": false,
+    "italic": false
+   }
+  }
+ ]
+}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Rect, Shape } from "react-konva";
 import { charOffsets, cssFamily, fontKey, fontStore, textWidth } from "@/lib/fonts";
-import { decorBands } from "@/lib/textDecor";
+import { decorBands, decorColor, joinBands } from "@/lib/textDecor";
 import { boxFonts } from "@/lib/textbox";
 import type { TextOp } from "@/lib/objects";
 import { fontsReady } from "./textEdit";
@@ -68,11 +68,11 @@ export function TextNode({ op, hidden }: { op: TextOp; hidden: boolean }) {
                 if (!r || !(r.bgColor || r.underline || r.strike)) continue;
                 const d = decorBands(seg.x, line.baseline, textWidth(seg.text, fontStore.get(r.font), r.size, r), r);
                 if (d.bg) bands.push({ ...d.bg, color: r.bgColor!, over: false });
-                if (d.underline) bands.push({ ...d.underline, color: r.color, over: true });
-                if (d.strike) bands.push({ ...d.strike, color: r.color, over: true });
+                if (d.underline) bands.push({ ...d.underline, color: decorColor(r), over: true });
+                if (d.strike) bands.push({ ...d.strike, color: decorColor(r), over: true });
               }
             }
-            const fill = (over: boolean) => bands.filter((b) => b.over === over).forEach((b) => { c.fillStyle = b.color; c.fillRect(b.x, b.y, b.w, b.h); });
+            const fill = (over: boolean) => joinBands(bands.filter((b) => b.over === over)).forEach((b) => { c.fillStyle = b.color; c.fillRect(b.x, b.y, b.w, b.h); });
             fill(false);
             for (const line of drawn) {
               for (const seg of line.segments) {

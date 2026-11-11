@@ -8,6 +8,7 @@ from typing import Callable
 
 import pymupdf
 
+from edith.decor import Decor, PageMarks, decorate, to_json as decor_json
 from edith.doc_fonts import name_key
 from edith.rules import Rules, page_rules
 
@@ -582,11 +583,67 @@ def _finish(run: dict, fits: list[_Fit | None]) -> None:
         run["wordSpacing"] = round(tw, 3)
 
 
+def _decor_fields(decors: list[Decor]) -> dict:
+    """Run fields of a character's decorations, geometry in pt (see _finish_decor): underline / strike with their bar's
+    top (relative to the baseline) and thickness, the bars' colour, a highlight's colour."""
+    out: dict = {}
+    for d in decors:
+        if d.kind == "bg":
+            out.setdefault("bgColor", d.mark.color)
+            continue
+        if d.kind in out:
+            continue
+        out[d.kind] = True
+        out[f"_{d.kind}"] = (round(d.top, 2), round(d.thickness, 2))
+        out.setdefault("_decorColor", d.mark.color)
+    return out
+
+
+DECOR_KEYS = ("bgColor", "underline", "strike", "_underline", "_strike", "_decorColor")
+
+
+def _finish_decor(run: dict) -> None:
+    """The run's bar geometry in ems of its (final) size: underlineTop / strikeTop and decorThickness (the underline's,
+    else the strike's), and decorColor when the bars are not in the text colour."""
+    size = run["size"]
+    thickness = None
+    for kind in ("underline", "strike"):
+        geo = run.pop(f"_{kind}", None)
+        if geo is not None:
+            run[f"{kind}Top"] = round(geo[0] / size, 3)
+            # Never 0 (Run.decorThickness > 0): a thin bar under huge text rounds to the thinnest one we keep.
+            thickness = thickness if thickness is not None else max(0.001, round(geo[1] / size, 3))
+    if thickness is not None:
+        run["decorThickness"] = thickness
+    color = run.pop("_decorColor", None)
+    if color is not None and color != run["color"]:
+        run["decorColor"] = color
+
+
+def _line_decor(line: _Line, marks: "PageMarks | None") -> tuple[dict[tuple[int, int], list[Decor]], list[dict]]:
+    """(id(span), index of the character in the span) → its decorations, and the marks the line's decorations are
+    (their painted rects: what an edit of the line removes)."""
+    if marks is None or not line.horizontal:
+        return {}, []
+    keys = [(id(s), k) for s in line.spans for k in range(len(s["chars"]))]
+    chars = [(c, s["origin"][1], s["size"]) for s in line.spans for c in s["chars"]]
+    found = decorate(chars, marks.marks, marks)
+    out = {keys[i]: d for i, d in found.items()}
+    used: dict[tuple, dict] = {}
+    for ds in found.values():
+        for d in ds:
+            used.setdefault(tuple(d.mark.rect), decor_json(d.mark.rect))
+    return out, sorted(used.values(), key=lambda r: (r["y"], r["x"]))
+
+
 def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locked: SpanCheck | None = None,
                invisible: SpanCheck | None = None,
-               program: Program | None = None) -> dict:
+               program: Program | None = None, marks: "PageMarks | None" = None) -> dict:
     """`program` (a run's FontRef → the font program clients measure it with): when given, runs carry the
-    original's measured hScale / charSpacing / wordSpacing (see _fit), and their size is the true size."""
+    original's measured hScale / charSpacing / wordSpacing (see _fit), and their size is the true size. `marks` (the
+    page's drawn decorations, see edith/decor.py): runs carry the underlines, strikethroughs and highlights drawn for
+    their characters (Run.underline / strike / bgColor, with the bars' geometry), and lines the rects of those marks
+    (`decor`)."""
     runs: list[dict] = []
     fits: list[list[_Fit | None]] = []  # per run: the fits of its spans
     measured: dict[int, _Fit | None] = {}
@@ -605,18 +662,19 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
                                   _fit(span, prog, font.get("kind") == "original", id(span) in natural))
         return measured[id(span)]
 
-    def add(text: str, span: dict) -> None:
+    def add(text: str, span: dict, decor: dict | None = None) -> None:
         nonlocal offset
         font = resolve(span) if resolve else None
         size, color = _num(span["size"]), _color(span["color"])
         fit = fit_of(span, font)
+        decor = decor or {}
         last = runs[-1] if runs else None
         if (last and last["font"] == font and last["size"] == size and last["color"] == color
-                and _fits_with(fits[-1], fit)):
+                and all(last.get(k) == decor.get(k) for k in DECOR_KEYS) and _fits_with(fits[-1], fit)):
             last["text"] += text
             fits[-1].append(fit)
         else:
-            runs.append({"text": text, "font": font, "size": size, "color": color})
+            runs.append({"text": text, "font": font, "size": size, "color": color, **decor})
             fits.append([fit])
         offset += len(text)
 
@@ -632,16 +690,28 @@ def _paragraph(pid: str, lines: list[_Line], resolve: FontResolver | None, locke
                 runs[-1]["text"] += " "  # the soft line break becomes a space in the previous run
                 offset += 1
         start = offset
-        for text, span in _trimmed(line.spans):  # leading spaces are geometry (the line's x), not text
-            add(text, span)
+        decor, used = _line_decor(line, marks)
+        for text, span, at in _trimmed(line.spans):  # leading spaces are geometry (the line's x), not text
+            # Split where the decorations change (an underlined word in a span).
+            piece, key = "", None
+            for k, ch in enumerate(text):
+                fields = _decor_fields(decor.get((id(span), at + k), []))
+                if piece and fields != key:
+                    add(piece, span, key)
+                    piece = ""
+                piece, key = piece + ch, fields
+            if piece:
+                add(piece, span, key)
         x0, x1 = _xs(line)
         out_lines.append({
             "rect": _rect(x0, line.y0, x1, line.y1),
             "baseline": _num(line.baseline), "size": _num(line.size), "start": start, "end": offset,
             **({"wordX": xs} if line.horizontal and (xs := _word_xs(line.spans)) is not None else {}),
+            **({"decor": used} if used else {}),
         })
     for run, run_fits in zip(runs, fits):
         _finish(run, run_fits)
+        _finish_decor(run)
 
     baselines = [line.baseline for line in lines]
     deltas = [b - a for a, b in zip(baselines, baselines[1:])]
@@ -704,8 +774,8 @@ def _xs(line: _Line) -> tuple[float, float]:
     return (line.ink_x0, line.ink_x1) if line.horizontal else (line.x0, line.x1)
 
 
-def _trimmed(spans: list[dict]) -> list[tuple[str, dict]]:
-    """(text, span) of a line without its leading and trailing whitespace."""
+def _trimmed(spans: list[dict]) -> list[tuple[str, dict, int]]:
+    """(text, span, offset of the text in the span's) of a line without its leading and trailing whitespace."""
     full = "".join(s["text"] for s in spans)
     lo, hi = len(full) - len(full.lstrip()), len(full.rstrip())
     out, k = [], 0
@@ -713,7 +783,7 @@ def _trimmed(spans: list[dict]) -> list[tuple[str, dict]]:
         n = len(s["text"])
         a, b = max(lo - k, 0), min(hi - k, n)
         if a < b:
-            out.append((s["text"][a:b], s))
+            out.append((s["text"][a:b], s, a))
         k += n
     return out
 
@@ -758,6 +828,7 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
     horizontal line gives `wordX`: the x of every word of its text (see _word_xs). With `program` (see _paragraph),
     runs carry the original's measured scale and spacing."""
     rules = page_rules(page)
+    marks = PageMarks(page)
     blocks: list[list[_Line]] = []
     for block in page.get_text("rawdict", flags=FLAGS)["blocks"]:
         if block.get("type", 0) != 0:
@@ -789,7 +860,7 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
     invisible = invisible_check(page)
     for lines in blocks:
         for group in _split(lines, rules, room_end):
-            paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked, invisible, program)
+            paragraph = _paragraph(f"g{len(paragraphs)}", group, resolve, locked, invisible, program, marks)
             if len(group) == 1 and group[0].horizontal:
                 paragraph["align"], paragraph["maxWidth"] = _single(group[0], every, rules, left_margin, right_margin,
                                                                     page.cropbox.width)

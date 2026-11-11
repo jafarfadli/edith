@@ -9,7 +9,9 @@ export function sameStyle(a: Run, b: Run): boolean {
   return JSON.stringify(a.font) === JSON.stringify(b.font) && a.size === b.size && a.color === b.color
     && (a.bgColor ?? null) === (b.bgColor ?? null) && !!a.underline === !!b.underline && !!a.strike === !!b.strike
     && (a.hScale ?? 1) === (b.hScale ?? 1) && (a.charSpacing ?? 0) === (b.charSpacing ?? 0)
-    && (a.wordSpacing ?? 0) === (b.wordSpacing ?? 0);
+    && (a.wordSpacing ?? 0) === (b.wordSpacing ?? 0)
+    && (a.underlineTop ?? null) === (b.underlineTop ?? null) && (a.strikeTop ?? null) === (b.strikeTop ?? null)
+    && (a.decorThickness ?? null) === (b.decorThickness ?? null) && (a.decorColor ?? null) === (b.decorColor ?? null);
 }
 
 /** Merges neighbours with the same style and drops empty runs; an empty paragraph keeps one empty run. */

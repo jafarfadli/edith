@@ -9,7 +9,7 @@ import { markupOverLines } from "@/lib/markup";
 import { noticeStore } from "@/lib/notices";
 import { newId } from "@/lib/id";
 import { ocrEditOp, type OcrCover } from "@/lib/ocr";
-import { blankBox, editedBox, isBlank, isBlankBox, keepFirstBaseline } from "@/lib/keepLines";
+import { blankBox, DECOR_V, editedBox, isBlank, isBlankBox, keepFirstBaseline } from "@/lib/keepLines";
 import { keptLines, keptPrefixes, paragraphBox, preloadFallback, prepareRuns, replacedLines, resolveLoadedRuns } from "@/lib/paragraphs";
 import { attrsOf, type RunAttrs } from "@/lib/richtext";
 import { normalizeRuns, paragraphsEqual, runsText } from "@/lib/runs";
@@ -249,7 +249,7 @@ async function putParagraphEdit(pageKey: string, p: Paragraph, make: (box: TextB
   const st = editorStore.getState();
   if (textEditFor(st.doc, pageKey, p.id) || !st.doc.pages.some((pg) => pg.pageKey === pageKey)) return;
   const id = newId();
-  const op = { id, type: "text.edit", pageKey, paragraphId: p.id, box: make(box) } as TextEdit;
+  const op = { id, type: "text.edit", decorV: DECOR_V, pageKey, paragraphId: p.id, box: make(box) } as TextEdit;
   // The edit removes the paragraph's original glyphs: their marks go in the same undo step.
   const removed = markupUnderEdits(st.doc, [op]);
   st.putObjects([op], removed);
@@ -391,7 +391,7 @@ function committedBox(e: Editing, draft: TextBox, runs: Run[][], original: Parag
 function land(e: Editing, box: TextBox): void {
   const st = editorStore.getState();
   const op = (e.kind === "text.edit"
-    ? { id: e.id, type: "text.edit", pageKey: e.pageKey, paragraphId: e.paragraphId as string, box } // checked in start()
+    ? { id: e.id, type: "text.edit", decorV: DECOR_V, pageKey: e.pageKey, paragraphId: e.paragraphId as string, box } // checked in start()
     : e.kind === "text.ocr_edit"
       ? ocrEditOp(e.id, e.pageKey, { id: e.paragraphId as string, ...e.ocr! }, box)
       : { id: e.id, type: "text.add", pageKey: e.pageKey, box }) as ContentOp;

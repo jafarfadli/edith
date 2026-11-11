@@ -20,6 +20,11 @@ export const KEEP_Y_EM = 0.4;
  *  line without exactly these. Shared contract with SPACE_CHARS in apps/api/edith/bake/text.py. */
 export const SPACE_CHARS = "\t\n\v\f\r                  　﻿";
 
+/** TextEdit.decorV of the text.edit ops this client makes: their runs carry the original's drawn decorations (GET /text
+ *  Run.underline / strike / bgColor and geometry), so the bake moves those marks with the text. An op without it (an old
+ *  draft) leaves them where they are; editing such an op keeps it as it is. */
+export const DECOR_V = 1 as const;
+
 /** The box keeps its first baseline where `prev` had it: a fallback font with a taller ascent in the first line
  *  (CJK fallbacks are) would otherwise push the whole paragraph down. */
 export function keepFirstBaseline(prev: TextBox, box: TextBox): TextBox {
@@ -62,7 +67,8 @@ export function blankBox(prev: TextBox, area: { y: number; h: number }): TextBox
  *  measured scale and spacing (Run.hScale / charSpacing / wordSpacing). */
 function styleKey(r: Run): string {
   return JSON.stringify([fontKey(r.font), r.size, r.color, r.bgColor ?? null, !!r.underline, !!r.strike,
-    r.hScale ?? 1, r.charSpacing ?? 0, r.wordSpacing ?? 0]);
+    r.hScale ?? 1, r.charSpacing ?? 0, r.wordSpacing ?? 0,
+    r.underlineTop ?? null, r.strikeTop ?? null, r.decorThickness ?? null, r.decorColor ?? null]);
 }
 
 /** The box text (paragraphs joined by "\n") and the style of each of its characters. */

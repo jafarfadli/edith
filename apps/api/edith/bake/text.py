@@ -7,6 +7,7 @@ import pymupdf
 from edith.bake.registry import register
 from edith.bake.tounicode import fix_to_unicode
 from edith.bake.util import rgb
+from edith.decor import PageMarks
 from edith.doc_fonts import name_key
 from edith.ops import Run, TextAdd, TextBox, TextEdit
 from edith.paragraphs import SPACE_CHARS
@@ -68,10 +69,43 @@ def _band(x: float, y: float, w: float, top: float, height: float, size: float) 
     return pymupdf.Rect(x, y + top * size, x + w, y + (top + height) * size)
 
 
+def decor_bands(x: float, y: float, w: float, r: Run) -> list[tuple[str, pymupdf.Rect, str]]:
+    """("bg" | "underline" | "strike", rect, colour) of a segment of run `r` drawn at (x, baseline y) with advance `w`:
+    the original's geometry and colour where the run carries them (Run.underlineTop …), else the defaults."""
+    out = []
+    if r.bgColor:
+        out.append(("bg", _band(x, y, w, -BG_ASCENT, BG_ASCENT + BG_DESCENT, r.size), r.bgColor))
+    thickness = r.decorThickness if r.decorThickness is not None else DECOR_THICKNESS
+    if r.underline:
+        top = r.underlineTop if r.underlineTop is not None else UNDERLINE_TOP
+        out.append(("underline", _band(x, y, w, top, thickness, r.size), r.decorColor or r.color))
+    if r.strike:
+        top = r.strikeTop if r.strikeTop is not None else STRIKE_TOP
+        out.append(("strike", _band(x, y, w, top, thickness, r.size), r.decorColor or r.color))
+    return out
+
+
+JOIN_GAP = 0.5  # pt: bands of one colour and height this close along a line are drawn as one (no seams between segments)
+
+
+def _joined(bands: list[tuple[pymupdf.Rect, str]]) -> list[tuple[pymupdf.Rect, str]]:
+    out: list[tuple[pymupdf.Rect, str]] = []
+    for rect, color in bands:
+        last = out[-1] if out else None
+        if (last and last[1] == color and abs(last[0].y0 - rect.y0) < 1e-3 and abs(last[0].y1 - rect.y1) < 1e-3
+                and last[0].x0 <= rect.x0 <= last[0].x1 + JOIN_GAP):  # touching, a small gap or overlapping (Tc < 0)
+            out[-1] = (pymupdf.Rect(last[0].x0, rect.y0, max(last[0].x1, rect.x1), rect.y1), color)
+        else:
+            out.append((rect, color))
+    return out
+
+
 def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozenset[int] = frozenset(),
-                  heads: dict[int, int] | None = None) -> None:
+                  heads: dict[int, int] | None = None, head_decor: bool = True) -> None:
     """Draws the box's layout, except the lines whose index is in `skip` (kept original lines of a text.edit) and the
-    first `heads[k]` segments of line k (the kept prefix of an edited original line)."""
+    glyphs of the first `heads[k]` segments of line k (the kept prefix of an edited original line: its decorations are
+    drawn, as the edit removes the original line's decoration marks whole, see text_edit_decor; not with `head_decor`
+    False: the marks stayed)."""
     runs = [r for paragraph in box.paragraphs for r in paragraph]
     writers: dict[tuple[str, float], pymupdf.TextWriter] = defaultdict(lambda: pymupdf.TextWriter(page.rect))
     backgrounds: list[tuple[pymupdf.Rect, str]] = []
@@ -79,30 +113,28 @@ def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozen
     for k, line in enumerate(box.layout):
         if k in skip:
             continue
-        for seg in line.segments[(heads or {}).get(k, 0):]:
-            if not seg.text:
-                continue
+        head = (heads or {}).get(k, 0)
+        for i, seg in enumerate(line.segments):
             r = runs[seg.runIndex]
+            if not seg.text or (i < head and not (head_decor and (r.bgColor or r.underline or r.strike))):
+                continue
             font = run_font(r, ctx)
+            x, y = box.rect.x + seg.x, box.rect.y + line.baseline
+            if r.bgColor or r.underline or r.strike:
+                for kind, rect, color in decor_bands(x, y, run_width(font, seg.text, r), r):
+                    (backgrounds if kind == "bg" else lines).append((rect, color))
+            if i < head:
+                continue  # the original's own glyphs stay
             if r.font.kind == "original":
                 # TextWriter would silently draw missing glyphs with another font; the client never sends them.
                 missing = sorted({c for c in seg.text if not font.has_glyph(ord(c))})
                 if missing:
                     raise ValueError(f"font {r.font.ref} has no glyph for {''.join(missing)!r}")
-            x, y = box.rect.x + seg.x, box.rect.y + line.baseline
-            if r.bgColor or r.underline or r.strike:
-                w = run_width(font, seg.text, r)
-                if r.bgColor:
-                    backgrounds.append((_band(x, y, w, -BG_ASCENT, BG_ASCENT + BG_DESCENT, r.size), r.bgColor))
-                if r.underline:
-                    lines.append((_band(x, y, w, UNDERLINE_TOP, DECOR_THICKNESS, r.size), r.color))
-                if r.strike:
-                    lines.append((_band(x, y, w, STRIKE_TOP, DECOR_THICKNESS, r.size), r.color))
             origin = writer_origin(page, (x, y))
             if r.hScale != 1:  # undone by the writer's morph (see SCALE_PIVOT)
                 origin = pymupdf.Point(SCALE_PIVOT.x + (origin.x - SCALE_PIVOT.x) / r.hScale, origin.y)
             writers[(r.color, r.hScale)].append(origin, seg.text, font=font, fontsize=r.size)
-    for rect, color in backgrounds:
+    for rect, color in _joined(backgrounds):
         page.draw_rect(rect, color=None, fill=rgb(color), width=0, overlay=True)
     before = {f[0] for f in page.get_fonts(full=True)}
     for (color, scale), writer in writers.items():
@@ -110,7 +142,7 @@ def draw_text_box(page: pymupdf.Page, box: TextBox, ctx, skip: set[int] | frozen
         writer.write_text(page, color=rgb(color), morph=morph)
     for xref in {f[0] for f in page.get_fonts(full=True)} - before:
         fix_to_unicode(page.parent, xref)  # spaces read back as U+0020, not U+00A0
-    for rect, color in lines:
+    for rect, color in _joined(lines):
         page.draw_rect(rect, color=None, fill=rgb(color), width=0, overlay=True)
 
 
@@ -193,7 +225,7 @@ def _same_char(orig: tuple[str, dict], new: tuple[str, Run], font_keys) -> bool:
     (c, span), (d, run) = orig, new
     if c != d or abs(run.size - span["size"]) > SIZE_TOL or run.color.lower() != span["color"].lower():
         return False
-    if run.bgColor or run.underline or run.strike:
+    if not _same_decor(run, span):
         return False
     # The original's measured scale and spacing (SourcePages measures them as GET /text does): unchanged.
     if (abs(run.hScale - span.get("hScale", 1)) > H_SCALE_TOL or abs(run.charSpacing - span.get("charSpacing", 0)) > SPACING_TOL
@@ -201,6 +233,24 @@ def _same_char(orig: tuple[str, dict], new: tuple[str, Run], font_keys) -> bool:
         return False
     # A bundled font stands in for an original one the client could not reuse (or lacked a glyph of): accepted.
     return run.font.kind != "original" or name_key(span["font"]["name"]) in font_keys(run.font)
+
+
+DECOR_TOL = 0.005  # × size: a kept line's decoration geometry as measured
+
+
+def _same_decor(run: Run, span: dict) -> bool:
+    """The run has exactly the original character's decorations (the marks the page draws for it, as GET /text reports
+    them): a kept line keeps those marks, so a line with any other decoration is redrawn."""
+    if (run.bgColor or "").lower() != (span.get("bgColor") or "").lower() or run.underline != bool(span.get("underline")) \
+            or run.strike != bool(span.get("strike")):
+        return False
+    if not (run.underline or run.strike):
+        return True
+    for field in ("underlineTop", "strikeTop", "decorThickness"):
+        a, b = getattr(run, field), span.get(field)
+        if (a is None) != (b is None) or (a is not None and abs(a - b) > DECOR_TOL):
+            return False
+    return (run.decorColor or run.color).lower() == (span.get("decorColor") or span["color"]).lower()
 
 
 @dataclass(frozen=True)
@@ -257,8 +307,38 @@ def kept_prefixes(box: TextBox, paragraph: dict, font_keys, kept: dict[int, int]
     return out
 
 
+DECOR_FIELDS = ("underline", "strike", "bgColor", "underlineTop", "strikeTop", "decorThickness", "decorColor")
+
+
+def _undecorated(paragraph: dict) -> dict:
+    """`paragraph` as it was before GET /text reported decorations: runs without them."""
+    return {**paragraph, "runs": [{k: v for k, v in r.items() if k not in DECOR_FIELDS} for r in paragraph["runs"]]}
+
+
+def _aware(op: TextEdit, ctx) -> bool:
+    """The edit moves the original's drawn decorations: its client knows them (TextEdit.decorV) and its page has no
+    unapplied redactions of its own (no decoration pass there, see bake())."""
+    return op.decorV is not None and op.pageKey not in (ctx.marks_stay or ())
+
+
+def _without_original_decor(box: TextBox, paragraph: dict) -> TextBox:
+    """`box` without the decorations its runs took from the original (which stay on the page): an underline or strike
+    with the original's geometry (only GET /text gives runs that), a highlight in one of the original's colours."""
+    bgs = {(r.get("bgColor") or "").lower() for r in paragraph["runs"] if r.get("bgColor")}
+
+    def plain(r: Run) -> Run:
+        return r.model_copy(update={
+            **({"underline": False} if r.underline and r.underlineTop is not None else {}),
+            **({"strike": False} if r.strike and r.strikeTop is not None else {}),
+            **({"bgColor": None} if r.bgColor and r.bgColor.lower() in bgs else {}),
+        })
+    return box.model_copy(update={"paragraphs": [[plain(r) for r in p] for p in box.paragraphs]})
+
+
 def _kept(op: TextEdit, ctx) -> tuple[dict[int, int], dict[int, KeptPrefix]]:
     paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
+    if not _aware(op, ctx):  # a client from before decorations: its runs never carry the original's (see TextEdit)
+        paragraph = _undecorated(paragraph)
     font_keys = lambda f: ctx.source.font_keys(f.ref, f.doc)  # noqa: E731
     kept = kept_lines(op.box, paragraph, font_keys)
     return kept, kept_prefixes(op.box, paragraph, font_keys, kept)
@@ -272,10 +352,41 @@ def text_edit_redact(page: pymupdf.Page, op: TextEdit, ctx) -> None:
         page.add_redact_annot(rect, fill=False)  # fill=False: paint nothing over what stays
 
 
+def decor_redactions(page: pymupdf.Page, paragraph: dict, keep: set[int] | frozenset[int] = frozenset()) -> list[pymupdf.Rect]:
+    """The redaction rects that remove the decoration marks (GET /text line `decor`: underlines, strikethroughs,
+    highlights drawn for the text) of every line of `paragraph` but the kept ones (`keep`): a kept prefix's line loses
+    its marks too, its prefix's decorations are drawn again with the new text (draw_text_box). A mark is removed only
+    when the page still draws it and nothing else lies inside its rect (PageMarks.removable): else it stays."""
+    if not any(line.get("decor") for line in paragraph["lines"]):
+        return []
+    marks = PageMarks(page)
+    out = []
+    for i, line in enumerate(paragraph["lines"]):
+        if i in keep:
+            continue
+        for d in line.get("decor", []):
+            found = marks.find(pymupdf.Rect(d["x"], d["y"], d["x"] + d["w"], d["y"] + d["h"]))
+            if found and all(marks.removable(m) for m in found):
+                out.append(found[0].remove)
+    return out
+
+
+@register("text.edit", phase="redact_decor")
+def text_edit_decor(page: pymupdf.Page, op: TextEdit, ctx) -> None:
+    if not _aware(op, ctx):
+        return  # the marks stay where they are (as before decorations were moved)
+    paragraph = ctx.source.paragraph(op.pageKey, op.paragraphId)
+    kept, _prefixes = _kept(op, ctx)
+    for rect in decor_redactions(page, paragraph, set(kept.values())):
+        page.add_redact_annot(rect, fill=False)
+
+
 @register("text.edit")
 def text_edit(page: pymupdf.Page, op: TextEdit, ctx) -> None:
     kept, prefixes = _kept(op, ctx)
-    draw_text_box(page, op.box, ctx, skip=set(kept), heads={k: p.segments for k, p in prefixes.items()})
+    aware = _aware(op, ctx)
+    box = op.box if aware else _without_original_decor(op.box, ctx.source.paragraph(op.pageKey, op.paragraphId))
+    draw_text_box(page, box, ctx, skip=set(kept), heads={k: p.segments for k, p in prefixes.items()}, head_decor=aware)
 
 
 def links_under_redactions(page: pymupdf.Page) -> list[str]:
