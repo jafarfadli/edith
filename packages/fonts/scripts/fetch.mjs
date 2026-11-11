@@ -1,5 +1,8 @@
 // Downloads static TTF files from the Google Fonts CSS API into ../files and checks them against manifest.json.
 // An old user agent makes the API return one full truetype file per style instead of woff2 subsets.
+// Families listed in ../sources.json (the document fonts: look-alikes of Georgia, Verdana, Palatino... some of them
+// subset or not on Google Fonts) are fetched by fetch-extra.py, which needs `uv` (the API's toolchain) for fonttools.
+import { spawnSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +10,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(here, "..", "files");
 const manifest = JSON.parse(await readFile(path.join(here, "..", "manifest.json"), "utf8"));
+const sources = JSON.parse(await readFile(path.join(here, "..", "sources.json"), "utf8"));
 const STYLE = { "normal-400": "regular", "normal-700": "bold", "italic-400": "italic", "italic-700": "bolditalic" };
 
 async function get(url, as) {
@@ -17,6 +21,7 @@ async function get(url, as) {
 
 await mkdir(outDir, { recursive: true });
 for (const [family, info] of Object.entries(manifest.families)) {
+  if (sources[family]) continue; // fetch-extra.py
   const css = await get(`https://fonts.googleapis.com/css2?family=${family.replace(/ /g, "+")}:ital,wght@0,400;0,700;1,400;1,700`, "text");
   const served = {};
   for (const block of css.split("@font-face").slice(1)) {
@@ -32,3 +37,6 @@ for (const [family, info] of Object.entries(manifest.families)) {
   const extra = Object.keys(served).filter((s) => !info.files[s]);
   if (extra.length) throw new Error(`${family}: manifest lacks served styles ${extra.join(", ")}`);
 }
+
+const run = spawnSync("uv", ["run", "--no-project", "--with", "fonttools", "python", path.join(here, "fetch-extra.py")], { stdio: "inherit" });
+if (run.status !== 0) throw new Error("fetch-extra.py failed (is uv installed?)");

@@ -153,6 +153,30 @@ describe("FontRef support", () => {
     return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
   };
 
+  it("parses and measures every file of the manifest (fontkit), with Latin-1 / Latin-Ext letters", () => {
+    const manifest = JSON.parse(readFileSync(path.resolve(__dirname, "../../../../packages/fonts/manifest.json"), "utf8"));
+    for (const [family, info] of Object.entries<{ files: Record<string, string> }>(manifest.families)) {
+      for (const file of Object.values(info.files)) {
+        const m = metricsFromBuffer(ttf(file));
+        expect(textWidth("Surat Dinas Rp 1.250.000, éÉñłŞ", m, 12), `${family} ${file}`).toBeGreaterThan(50);
+        expect(m.hasGlyph!("é".codePointAt(0)!), `${family} ${file}`).toBe(true);
+      }
+    }
+  });
+
+  it("serves the picker's groups from the manifest, document fonts first", async () => {
+    const m = { default: "Arimo", common: ["Tinos"], families: {
+      Arimo: { category: "sans", files: { regular: "Arimo-Regular.ttf" } },
+      Tinos: { category: "serif", display: "Times New Roman", files: { regular: "Tinos-Regular.ttf" } },
+    } };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(m), { status: 200 })));
+    const groups = await new FontStore("/fonts").picker();
+    expect(groups.map((g) => [g.id, g.entries.map((e) => [e.family, e.label, e.substitute])])).toEqual([
+      ["common", [["Tinos", "Times New Roman", "Tinos"]]],
+      ["sans", [["Arimo", "Arimo", null]]],
+    ]);
+  });
+
   it("keys original fonts by ref", () => {
     expect(fontKey({ kind: "original", ref: "f12" })).toBe("orig-f12");
     expect(cssFamily({ kind: "original", ref: "f12" })).toBe("edith-orig-f12");
