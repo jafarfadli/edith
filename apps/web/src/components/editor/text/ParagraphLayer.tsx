@@ -197,7 +197,9 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
           onMouseEnter={(e) => { setHover(p.id); setCursor(e, "text"); }}
           onMouseLeave={(e) => { setHover((h) => (h === p.id ? null : h)); setCursor(e, ""); }}
           onPointerDown={(e) => {
-            e.cancelBubble = true; // not a click on the empty page
+            // Not a click on the empty page. With the select tool the press bubbles up unless the paragraph is already
+            // selected (then a drag moves it): a drag from original text is a marquee (PageOverlay).
+            if (tool !== "select" || active === p.id) e.cancelBubble = true;
             if (tool === "text") { setCursor(e, ""); void startParagraphEdit(pageKey, p); }
             else select(p);
           }}
@@ -233,7 +235,7 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
             onMouseEnter={(e) => { setHover(p.id); setCursor(e, "text"); }}
             onMouseLeave={(e) => { setHover((h) => (h === p.id ? null : h)); setCursor(e, ""); }}
             onPointerDown={(e) => {
-              e.cancelBubble = true;
+              if (tool !== "select") e.cancelBubble = true; // with the select tool a drag from here is a marquee
               if (tool === "text") { setCursor(e, ""); void startOcrEdit(pageKey, p); } else selectOcr(p);
             }}
             onDblClick={(e) => { setCursor(e, ""); void startOcrEdit(pageKey, p); }}

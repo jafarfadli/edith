@@ -2,14 +2,14 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type Konva from "konva";
-import { Group, Layer, Stage, Transformer } from "react-konva";
+import { Group, Layer, Rect, Stage, Transformer } from "react-konva";
 import { useStore } from "zustand";
 import type { ContentOp } from "@edith/ops";
 import { groupTransform, pageBounds, screenSize, type PageGeom } from "@/lib/coords";
 import { newId } from "@/lib/id";
 import {
   type TextOp, clampToBounds, createFromDrag, DRAG_TOOLS, hasRotation, inkWidth, isMarkup, isPointOp, isResizable, isRotatable, isTextOp, keepRotatedTopLeft, mapPoints, MARKUP_TOOLS,
-  MIN_DRAG, moveOp, normalizeRect, normalizeRotation, noteAt, opacityOf, opBounds, POLY_TOOLS, resizeOp, rotateAnchorOffset, rotationOf, symbolAt, type DragTool, type PolyTool, type Pt,
+  MIN_DRAG, normalizeRect, normalizeRotation, noteAt, opacityOf, opBounds, POLY_TOOLS, resizeOp, rotateAnchorOffset, rotationOf, symbolAt, type DragTool, type PolyTool, type Pt,
 } from "@/lib/objects";
 import { charsStore } from "@/store/chars";
 import { editorStore, useEditor, type MarkupTool } from "@/store/editor";
@@ -20,11 +20,14 @@ import { markupFromDrag, onMarkableText } from "./marks/markupTool";
 import { ObjectShape } from "./ObjectShape";
 import { usePolyTool } from "./shapes/usePolyTool";
 import { runPageOcr } from "./text/ocrRun";
-import { textEditStore, updateTextOp } from "./text/textEdit";
+import { isDeletedText, textEditStore, updateTextOp } from "./text/textEdit";
 import { CANVAS } from "@/lib/theme";
-import { isMac } from "@/lib/keys";
-import { boundsOf, nextBelow, stacked } from "@/lib/zorder";
+import { boundsUnion } from "@/lib/snap";
+import { boundsOf, stacked } from "@/lib/zorder";
 import { contextMenuStore, menuOpeners } from "./objects/layering";
+import { SnapGuides } from "./objects/SnapGuides";
+import { useMarquee } from "./objects/useMarquee";
+import { useObjectDrag } from "./objects/useObjectDrag";
 
 
 /** Konva attributes of an object's group: objects with a `rotation` turn around their rect's centre (the group's
@@ -62,6 +65,11 @@ function transformed(cur: ContentOp, g: Konva.Group, page: Konva.Group): Content
   return isTextOp(cur) && overlayHooks.resizeText ? overlayHooks.resizeText(cur, to) : resizeOp(cur, to);
 }
 
+function setCursor(e: Konva.KonvaEventObject<unknown>, cursor: string) {
+  const c = e.target.getStage()?.container();
+  if (c) c.style.cursor = cursor;
+}
+
 /** Highlights multiply over the pdf.js canvas below (as their /BM /Multiply appearance does in a
  *  viewer), so text under them stays dark: the markup layer's canvas blends with the page. */
 function multiplyLayer(layer: Konva.Layer | null) {
@@ -80,6 +88,9 @@ export const overlayHooks: {
   /** Konva nodes drawn over the page's objects (search highlights). */
   renderOver?: (pageKey: string) => React.ReactNode;
 } = {};
+
+/** Konva names of the original-text targets of ParagraphLayer: a press on one that is not draggable can start a marquee. */
+const TEXT_TARGETS: ReadonlySet<string> = new Set(["paragraph", "ocr-paragraph", "locked-text"]);
 
 /** Page points around an object's box still tried by stackAt (half the widest stroke and the hit tolerance). */
 const HIT_PAD = 12;
@@ -105,6 +116,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   const order = useEditor((s) => s.doc.order);
   const objects = useEditor((s) => s.doc.objects);
   const selection = useEditor((s) => s.selection);
+  const selected = useEditor((s) => s.selected);
   const tool = useEditor((s) => s.tool);
   const docId = useEditor((s) => s.info?.docId ?? "");
   const src = useEditor((s) => {
@@ -126,6 +138,9 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   // Text markup is drawn in its own (multiplying) layer, over the objects: in the PDF it is an annotation.
   const objs = mine.filter((op) => !isMarkup(op));
   const markups = mine.filter(isMarkup);
+  // A group (several selected): each member outlined, and the box around them all.
+  const picked = selected.length > 1 ? selected.map((id) => objects[id]).filter((op): op is ContentOp => !!op && op.pageKey === pageKey) : [];
+  const groupBox = picked.length > 1 ? boundsUnion(picked.map(boundsOf)) : null;
 
   /** The objects under stage point `at` (default: the pointer), topmost first, as the canvas stacks them. */
   function stackAt(at?: { x: number; y: number } | null): string[] {
@@ -144,21 +159,16 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     return near.filter((id) => groups.get(id)?.find("Shape").some((s) => s.isVisible() && (s as Konva.Shape).intersects(p))).reverse();
   }
 
-  /** A press on object `id` with the select tool: selects it; Alt selects the next object beneath the selection at
-   *  the pointer instead (cycling); other buttons leave the selection to the context menu, and so does Ctrl+click on
-   *  the Mac (its right-click: selecting the topmost here would lose a selection beneath it). */
-  function pressObject(e: Konva.KonvaEventObject<PointerEvent>, id: string) {
-    e.cancelBubble = true; // not a press on the empty page
-    if (e.evt.button !== 0 || (e.evt.ctrlKey && isMac())) return;
-    textEditStore.getState().selectParagraph(null);
-    const s = editorStore.getState();
-    s.select(e.evt.altKey ? nextBelow(stackAt(), s.selection) ?? id : id);
-  }
+  // Pressing and dragging objects (select, Shift+click, group move, Alt+click / Alt+drag): see useObjectDrag.
+  const objectDrag = useObjectDrag({
+    pageKey, geom, scale, nodes, stackAt: () => stackAt(),
+    home: (op) => { const a = objectGroupAttrs(op); return { x: a.x, y: a.y }; },
+  });
 
   function openMenu(target: string, stack: string[], client: { x: number; y: number }) {
     const s = editorStore.getState();
     textEditStore.getState().selectParagraph(null);
-    if (s.selection !== target) s.select(target);
+    if (!s.selected.includes(target)) s.select(target); // a member of the group: the menu acts on the group
     contextMenuStore.getState().open({ x: client.x, y: client.y, target, stack });
   }
 
@@ -181,8 +191,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       return;
     }
     e.evt.preventDefault();
-    const sel = editorStore.getState().selection;
-    openMenu(sel !== null && stack.includes(sel) ? sel : stack[0], stack, { x: e.evt.clientX, y: e.evt.clientY });
+    const sel = editorStore.getState().selected;
+    openMenu(stack.find((id) => sel.includes(id)) ?? stack[0], stack, { x: e.evt.clientX, y: e.evt.clientY });
   }
 
   // The keyboard's menu key / Shift+F10 opens the menu over the selected object (useShortcuts → menuOpeners).
@@ -207,7 +217,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   });
 
   useEffect(() => {
-    const node = selection ? nodes.current.get(selection) : undefined;
+    // The handles are for one object; a group gets its box (drawn below) and moves as one.
+    const node = selection && selected.length === 1 ? nodes.current.get(selection) : undefined;
     const tr = trRef.current;
     tr?.nodes(node ? [node] : []);
     if (tr && node) {
@@ -216,7 +227,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       tr.rotateAnchorOffset(rotateAnchorOffset(top, tr.height()));
     }
     trRef.current?.getLayer()?.batchDraw();
-  }, [selection, mine, objects]);
+  }, [selection, selected, mine, objects]);
 
   // Konva rebuilds a layer's hit graph in a batched draw (requestAnimationFrame, which can lag by hundreds of ms
   // in a busy or background tab). A pointer event in between is hit-tested against the stale graph: right after a
@@ -242,6 +253,10 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
     const p = page.getRelativePointerPosition()!;
     return clampToBounds([p.x, p.y], pageBounds(geom));
   };
+
+  // Dragging on the empty page (or on original text) selects what the marquee touches, live.
+  const marquee = useMarquee(scale, pos, () => mine.filter((op) => !isDeletedText(op)).map((op) => ({ id: op.id, rect: boundsOf(op) })));
+  useEffect(() => marquee.stop, [tool]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function setDrawDraft(d: ContentOp | null) {
     if (drawing.current) drawing.current.draft = d;
@@ -318,7 +333,14 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
   function onDown(e: Konva.KonvaEventObject<PointerEvent>) {
     const s = editorStore.getState();
     if (tool === "select") {
-      if (e.target === e.target.getStage()) { s.select(null); textEditStore.getState().selectParagraph(null); }
+      if (e.evt.button !== 0) return;
+      const t = e.target, empty = t === t.getStage();
+      // The empty page, or original text that is not being dragged (ParagraphLayer lets such a press through): a
+      // click clears the selection (Delete must not remove an object the user sees as deselected), a drag is a marquee.
+      if (empty || (TEXT_TARGETS.has(t.name()) && !t.draggable())) {
+        if (empty && !e.evt.shiftKey) { s.select(null); textEditStore.getState().selectParagraph(null); }
+        marquee.begin(pos(), e.evt.shiftKey);
+      }
       return;
     }
     const at = pos();
@@ -369,17 +391,13 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
                 {...objectGroupAttrs(op)}
                 draggable={tool === "select"}
                 listening={tool === "select"}
-                onPointerDown={(e) => { if (tool === "select") pressObject(e, op.id); }}
-                // Alt+drag would move the object on top, not the one Alt+click picked beneath it.
-                onDragStart={(e) => { if (e.evt?.altKey) e.target.stopDrag(); }}
-                onDragEnd={(e) => {
-                  const g = e.currentTarget as Konva.Group;
-                  const cur = editorStore.getState().doc.objects[op.id];
-                  const home = objectGroupAttrs(cur ?? op);
-                  const dx = g.x() - home.x, dy = g.y() - home.y;
-                  g.position({ x: home.x, y: home.y });
-                  if (cur && (dx || dy)) updateTextOp(op.id, moveOp(cur, dx, dy));
-                }}
+                onPointerDown={(e) => { if (tool === "select") objectDrag.onPress(e, op.id); }}
+                onPointerUp={() => objectDrag.onRelease(op.id)}
+                onMouseEnter={(e) => { if (tool === "select") setCursor(e, "move"); }}
+                onMouseLeave={(e) => setCursor(e, "")}
+                onDragStart={(e) => objectDrag.onDragStart(e, op.id)}
+                onDragMove={(e) => objectDrag.onDragMove(e, op.id)}
+                onDragEnd={() => objectDrag.onDragEnd()}
                 onTransformEnd={(e) => {
                   const g = e.currentTarget as Konva.Group;
                   const cur = editorStore.getState().doc.objects[op.id];
@@ -395,6 +413,15 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
               </Group>
             ))}
             {draft && !isMarkup(draft) && <Group opacity={opacityOf(draft)}><ObjectShape op={draft} docId={docId} /></Group>}
+            {picked.length > 1 && picked.map((op) => {
+              const b = boundsOf(op);
+              return <Rect key={`pick-${op.id}`} name="pick" x={b.x} y={b.y} width={b.w} height={b.h} stroke={CANVAS.accent} strokeWidth={1} strokeScaleEnabled={false} listening={false} />;
+            })}
+            {groupBox && <Rect name="group-box" x={groupBox.x} y={groupBox.y} width={groupBox.w} height={groupBox.h} stroke={CANVAS.accent} strokeWidth={1} strokeScaleEnabled={false} listening={false} />}
+            {marquee.rect && (
+              <Rect name="marquee" x={marquee.rect.x} y={marquee.rect.y} width={marquee.rect.w} height={marquee.rect.h}
+                fill={CANVAS.marqueeFill} stroke={CANVAS.accent} strokeWidth={1} strokeScaleEnabled={false} listening={false} />
+            )}
             {poly.preview && <Group opacity={opacityOf(poly.preview)} listening={false}><ObjectShape op={poly.preview} docId={docId} /></Group>}
             {overlayHooks.renderOver?.(pageKey)}
           </Group>
@@ -420,7 +447,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
         <Layer ref={multiplyLayer} listening={tool === "select"}>
           <Group x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale} offsetX={tr.offsetX} offsetY={tr.offsetY}>
             {markups.map((op) => (
-              <Group key={op.id} name="object" id={op.id} onPointerDown={(e) => pressObject(e, op.id)}
+              <Group key={op.id} name="object" id={op.id} onPointerDown={(e) => objectDrag.onPress(e, op.id)} onPointerUp={() => objectDrag.onRelease(op.id)}
               // The markup layer is above the text: a double-click edits the text under the markup.
               onDblClick={() => overlayHooks.onMarkupDoubleClick?.(pageKey, pos())}
               onDblTap={() => overlayHooks.onMarkupDoubleClick?.(pageKey, pos())}>
@@ -430,6 +457,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
             {draft && isMarkup(draft) && <MarkupShape op={draft} />}
           </Group>
         </Layer>
+        <SnapGuides pageKey={pageKey} geom={geom} scale={scale} />
       </Stage>
     </div>
   );
