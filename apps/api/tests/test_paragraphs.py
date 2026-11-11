@@ -354,3 +354,19 @@ def test_room_is_measured_in_unrotated_points_whatever_the_page_rotation(rotatio
     (p,) = extract_paragraphs(doc[0])
     assert p["maxWidth"] == pytest.approx(width - 100 - 2 - p["rect"]["x"], abs=0.01)  # mirrored left margin, 2 pt pad
     assert p["rect"]["x"] == pytest.approx(100, abs=0.5)
+
+
+def test_a_border_just_below_or_above_a_line_limits_the_web_cover():
+    """A table cell whose text sits close to its borders: the line says where the web's white cover must stop (`coverTop`
+    / `coverBottom`: the bake redacts text only and leaves the border), not for a border far from the text."""
+    def draw(page):
+        page.draw_rect(pymupdf.Rect(100, 100, 300, 130), width=0.75)        # a cell: 12 pt text, baseline 3.5 pt above its bottom
+        page.insert_text((110, 126.5), "9 September 2026", fontname="helv", fontsize=12)
+        page.draw_rect(pymupdf.Rect(100, 200, 300, 260), width=0.75)        # a roomy cell: borders far from the text
+        page.insert_text((110, 235), "Isi sel yang lega", fontname="helv", fontsize=12)
+    near, roomy = (paragraphs(page_with(draw)))[:2]
+    line = near["lines"][0]
+    assert line["coverBottom"] == pytest.approx(130 - 0.75, abs=0.3)   # the border's centre, less its gap
+    assert line["baseline"] + 0.1 * line["size"] <= line["coverBottom"] < 130
+    assert "coverTop" not in line
+    assert "coverBottom" not in roomy["lines"][0] and "coverTop" not in roomy["lines"][0]

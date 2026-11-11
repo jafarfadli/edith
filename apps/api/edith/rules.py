@@ -73,6 +73,10 @@ class Rules:
         """A horizontal rule strictly between heights y0 < y1 that overlaps x0 … x1."""
         return y0 < y1 and any(y0 < s.at < y1 and s.lo < x1 and s.hi > x0 for s in self._h(y0, y1))
 
+    def h_in(self, y0: float, y1: float, x0: float, x1: float) -> list[Segment]:
+        """The horizontal rules at heights y0 … y1 that overlap x0 … x1."""
+        return [s for s in self._h(y0, y1) if s.lo < x1 and s.hi > x0]
+
     def v_between(self, x0: float, x1: float, y0: float, y1: float) -> bool:
         """A vertical rule within x0 … x1 that covers the middle of y0 … y1."""
         mid = (y0 + y1) / 2

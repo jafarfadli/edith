@@ -217,6 +217,18 @@ describe("kept lines on screen", () => {
     expect(maskRects(LEFT)).toHaveLength(4); // no box (the editor is open): every line
   });
 
+  it("does not wipe a table border drawn just under or over the line (the line's coverTop / coverBottom)", () => {
+    const l = LEFT.lines[0];
+    const free = maskRects(LEFT)[0];
+    const bottom = l.baseline + 0.2 * l.size, top = l.baseline - 0.85 * l.size;
+    const tight = { ...LEFT, lines: LEFT.lines.map((x, i) => (i === 0 ? { ...x, coverBottom: bottom, coverTop: top } : x)) };
+    const [cover] = maskRects(tight);
+    expect(free.y + free.h).toBeGreaterThan(bottom); // without a border the cover runs on
+    expect(cover.y + cover.h).toBeCloseTo(bottom);
+    expect(cover.y).toBeCloseTo(top);
+    expect(cover.x).toBe(free.x); // only its height is cut
+  });
+
   it("stops a cover where a kept neighbour's band starts at tight leading (descenders stay visible)", () => {
     // 10 pt lines at a 10 pt leading: bands (0.95 above, 0.25 below the baseline) overlap by 2 pt.
     const line = (baseline: number) => ({ rect: { x: 10, y: baseline - 9, w: 100, h: 12 }, baseline, size: 10, start: 0, end: 1 });
