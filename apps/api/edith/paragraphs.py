@@ -532,20 +532,24 @@ def _fit(span: dict, prog: "pymupdf.Font", original: bool, spaces: bool) -> _Fit
     if len(glyph) < FIT_GLYPHS - 1:
         return None
     tc = _mean(glyph, OUTLIER_EM * true)
+    if tc is None:
+        return None
     if not original and abs(tc) > 0.25 * true:  # a substitute far off the original widths: no spacing makes it fit
         tc = 0.0
-    tw = _mean(space, OUTLIER_EM * true) - tc if spaces and space else None
+    word = _mean(space, OUTLIER_EM * true) if spaces and space else None
+    tw = word - tc if word is not None else None
     if abs(tc) > SPACING_MAX or (tw is not None and abs(tw) > SPACING_MAX):
         return None
     return _Fit(a, tc, tw, len(glyph))
 
 
-def _mean(values: list[float], spread: float) -> float:
+def _mean(values: list[float], spread: float) -> float | None:
     """Mean of the values within `spread` of their median: the line keeps its length (the mean extra), while a
-    tab-like jump or a kerned pair does not pull the spacing."""
+    tab-like jump or a kerned pair does not pull the spacing. None: none is that close (two values far apart have
+    their median between them): there is no spacing to measure."""
     mid = median(values)
     kept = [v for v in values if abs(v - mid) <= spread]
-    return sum(kept) / len(kept)
+    return sum(kept) / len(kept) if kept else None
 
 
 def _fits_with(fits: list[_Fit | None], fit: _Fit | None) -> bool:
