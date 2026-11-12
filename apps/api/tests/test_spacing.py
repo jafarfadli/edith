@@ -166,3 +166,21 @@ def test_letter_spacing_of_an_original_font_is_kept_however_wide():
     # Beyond what ops.Run accepts (±100 pt): unmeasured, never an op the export rejects.
     huge, _ = _spaced_span(150, size=400)
     assert _fit(huge, tinos, original=True, spaces=True) is None
+
+
+def test_two_spaces_far_apart_leave_no_word_spacing_to_measure_and_no_crash():
+    """"Nama      : x" in a form: of two space advances one is the normal gap, the other a wide run of blanks. Their
+    median lies between them, nearer to neither than OUTLIER_EM, so nothing is kept: the word spacing is unmeasured
+    (it used to divide by zero, and GET /text failed for the whole document)."""
+    from edith.paragraphs import _fit, _mean
+    assert _mean([0.0, 40.0], 3.0) is None
+    span, tinos = _spaced_span(0, text="NamaAbc")
+    chars = span["chars"]
+    x = chars[-1]["bbox"][2]
+    for gap, word in ((0, "ab"), (20, "cd")):  # a plain space, then a wide one, then more letters
+        for c in (" " + word):
+            w = tinos.glyph_advance(ord(c)) * span["size"]
+            chars.append({"c": c, "origin": (x, 100.0), "bbox": (x, 88.0, x + w, 103.0)})
+            x += w + (gap if c == " " else 0)
+    fit = _fit(span, tinos, original=True, spaces=True)
+    assert fit is not None and fit.tw is None
