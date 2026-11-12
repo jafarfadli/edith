@@ -31,6 +31,7 @@ import { Sidebar } from "./Sidebar";
 import { Toolbar } from "./Toolbar";
 import { ZoomPill } from "./ZoomPill";
 import { useShortcuts } from "./useShortcuts";
+import { useWheelZoom } from "./useWheelZoom";
 import { runPageOcr } from "./text/ocrRun";
 
 // The text tool's hooks live in the Konva overlay chunk (Konva must stay out of SSR), so install them when it loads.
@@ -167,6 +168,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
   }, [notice]);
 
   useShortcuts();
+  useWheelZoom("page-scroller");
 
   if (fatal) {
     return (
