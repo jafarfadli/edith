@@ -5,7 +5,7 @@ import type { DocInfo, EditorDoc, PageEntry } from "@/store/editor";
 
 const D = "D".repeat(22), I = "I".repeat(22);
 const info: DocInfo = {
-  docId: D, sha256: "s", fileName: "a.pdf",
+  docId: D, editId: "E".repeat(22), fileName: "a.pdf",
   pages: [0, 1, 2].map((i) => ({ index: i, width: 595, height: 842, rotation: i === 2 ? 90 : 0, hasText: true })),
   imports: { [I]: [{ index: 0, width: 300, height: 400, rotation: 0, hasText: false }] },
 };

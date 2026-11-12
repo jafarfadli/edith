@@ -1,4 +1,5 @@
 import { FormInput, LayoutGrid, Signature, Type } from "lucide-react";
+import { RecentEdits } from "@/components/RecentEdits";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { t } from "@/lib/strings";
 
@@ -33,6 +34,7 @@ export default function Home() {
               </li>
             ))}
           </ul>
+          <RecentEdits />
         </section>
         <div className="flex justify-center md:justify-end">
           <UploadDropzone />

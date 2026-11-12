@@ -4,6 +4,7 @@ import { FileUp, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { ApiError, uploadDocument } from "@/lib/api";
+import { putSource, saveRecord } from "@/lib/library";
 import { errorMessage, t } from "@/lib/strings";
 import { BTN_PRIMARY } from "./ui/styles";
 
@@ -30,6 +31,9 @@ export function UploadDropzone() {
       setBusy(true);
       try {
         const res = await uploadDocument(file, file.name);
+        // A copy stays in this browser, so the edit goes on when the server has dropped its own (lib/session.ts).
+        saveRecord({ id: res.doc_id, serverId: res.doc_id, name: file.name, pageCount: res.page_count, edited: false, updatedAt: Date.now() });
+        await putSource(res.doc_id, file).catch(() => undefined);
         router.push(`/edit/${res.doc_id}?name=${encodeURIComponent(file.name)}`);
       } catch (e) {
         setError(errorMessage(e instanceof ApiError ? e.code : "generic"));

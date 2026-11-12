@@ -5,7 +5,7 @@ import { cycleObjects, deleteObjects, moveBy, moveEach, nudgeSelection, selectAl
 import { selectedIds } from "./layering";
 
 const info: DocInfo = {
-  docId: "D".repeat(22), sha256: "s", fileName: "a.pdf",
+  docId: "D".repeat(22), editId: "E".repeat(22), fileName: "a.pdf",
   pages: [0, 1].map((i) => ({ index: i, width: 600, height: 800, rotation: i === 1 ? 90 : 0, hasText: true })),
 };
 const rect = (id: string, x: number, y: number, pageKey = "o0"): ContentOp =>

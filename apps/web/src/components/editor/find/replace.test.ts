@@ -13,7 +13,7 @@ import { textStore } from "@/store/text";
 import { applyReplacements } from "./replace";
 
 const arimo = metricsFromBuffer(readFileSync(path.resolve(__dirname, "../../../../../../packages/fonts/files/Arimo-Regular.ttf")));
-const info: DocInfo = { docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf", pages: [{ index: 0, width: 595, height: 842, rotation: 0, hasText: true }] };
+const info: DocInfo = { docId: "D".repeat(22), editId: "E".repeat(22), fileName: "a.pdf", pages: [{ index: 0, width: 595, height: 842, rotation: 0, hasText: true }] };
 const font = { kind: "bundled" as const, family: "Arimo", bold: false, italic: false };
 const para: Paragraph = {
   id: "g0", rect: { x: 72, y: 88, w: 200, h: 16 }, align: "left", lineHeight: 14, editable: true,

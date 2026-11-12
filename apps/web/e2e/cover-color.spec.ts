@@ -24,14 +24,18 @@ test("the cover of edited text in a tinted cell is the tint, not white", async (
   await page.mouse.click(box.x + 450, box.y + 400);
   await expect(editor).toHaveCount(0);
 
-  // A point of the cover above the capitals (page y 116: the cover starts 0.95 em over the baseline), between glyphs.
-  const px = (x: number, y: number) => page.evaluate(([px, py]) => {
+  // The cover above the capitals (page y 116: it starts 0.95 em over the baseline): the commonest colour of a stretch of
+  // pixels there, since the new text's glyphs may cross any one of them. It is the tint once the page has been drawn.
+  const cover = () => page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>('[data-testid="overlay"] canvas')!;
     const k = canvas.width / canvas.getBoundingClientRect().width;
-    return Array.from(canvas.getContext("2d")!.getImageData(Math.round(px * k), Math.round(py * k), 1, 1).data);
-  }, [x, y]);
-  await expect.poll(async () => (await px(150, 116))[3], { timeout: 10_000 }).toBe(255); // the cover is there
-  const [r, g, b, a] = await px(150, 116);
-  expect(a).toBe(255);
-  [[r, 255], [g, 235], [b, 180]].forEach(([got, want]) => expect(Math.abs(got - want)).toBeLessThanOrEqual(8)); // the dominant bucket's mean
+    const d = canvas.getContext("2d")!.getImageData(Math.round(120 * k), Math.round(116 * k), Math.round(80 * k), 1).data;
+    const count = new Map<string, number>();
+    for (let i = 0; i < d.length; i += 4) { const key = `${d[i]},${d[i + 1]},${d[i + 2]},${d[i + 3]}`; count.set(key, (count.get(key) ?? 0) + 1); }
+    return [...count.entries()].sort((a, b) => b[1] - a[1])[0][0].split(",").map(Number);
+  });
+  await expect.poll(async () => {
+    const [r, g, b, a] = await cover();
+    return a === 255 && Math.abs(r - 255) <= 8 && Math.abs(g - 235) <= 8 && Math.abs(b - 180) <= 8; // the dominant bucket's mean
+  }, { timeout: 10_000 }).toBe(true);
 });

@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SignatureAdd } from "@edith/ops";
 import { ApiError, uploadAsset } from "@/lib/api";
+import { putAsset } from "@/lib/library";
 import { cssFamily, fontStore } from "@/lib/fonts";
 import { newId } from "@/lib/id";
 import {
@@ -25,7 +26,9 @@ async function placeSignature(img: SignatureImage): Promise<void> {
   const st = editorStore.getState();
   const at = currentPage();
   if (!st.info || !at) return;
-  const asset = await uploadAsset(st.info.docId, dataUrlToBlob(img.dataUrl));
+  const blob = dataUrlToBlob(img.dataUrl);
+  const asset = await uploadAsset(st.info.docId, blob);
+  void putAsset(st.info.editId, asset.asset_id, blob).catch(() => undefined); // kept for when the server drops the document
   const op: SignatureAdd = { id: newId(), type: "signature.add", pageKey: at.entry.pageKey, rect: signatureRect(img.width, img.height, at.size), assetId: asset.asset_id };
   placeObject(op);
 }

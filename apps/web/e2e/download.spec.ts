@@ -34,7 +34,7 @@ test("a failing download says why and can be retried", async ({ page }) => {
   await page.unroute(EXPORT);
   await page.route(EXPORT, (r) => r.fulfill({ status: 410, contentType: "application/json", body: JSON.stringify({ error: { code: "doc_expired", message: "expired" } }) }));
   await unduh.click();
-  await expect(alert).toContainText("Sesi dokumen sudah berakhir");
+  await expect(alert).toContainText("Dokumen ini sudah dihapus dari server");
   await expect(alert.getByRole("button", { name: "Coba lagi" })).toHaveCount(0);
 
   // Back to the real server: Coba lagi from a transient error downloads the PDF and says so.
