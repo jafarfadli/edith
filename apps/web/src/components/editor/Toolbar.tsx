@@ -7,6 +7,7 @@ import {
 import { useRef, useState } from "react";
 import type { ContentOp } from "@edith/ops";
 import { ApiError, uploadAsset } from "@/lib/api";
+import { putAsset } from "@/lib/library";
 import { newId } from "@/lib/id";
 import { fitImage } from "@/lib/image";
 import { errorMessage, t } from "@/lib/strings";
@@ -45,6 +46,7 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
     if (!f || !st.info || !at) return;
     try {
       const asset = await uploadAsset(st.info.docId, f);
+      void putAsset(st.info.editId, asset.asset_id, f).catch(() => undefined); // kept for when the server drops the document
       const rect = fitImage(asset.width, asset.height, at.size.width, at.size.height);
       placeObject({ id: newId(), type: "image.add", pageKey: at.entry.pageKey, rect, assetId: asset.asset_id } as ContentOp);
     } catch (e) {

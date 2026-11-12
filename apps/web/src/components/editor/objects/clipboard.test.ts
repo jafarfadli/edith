@@ -5,7 +5,7 @@ import { editorStore, type DocInfo } from "@/store/editor";
 import { alignSelection, clearClipboard, copySelection, cutSelection, distributeSelection, duplicateSelection, hasClipboard, pasteClipboard, PASTE_OFFSET } from "./clipboard";
 
 const info: DocInfo = {
-  docId: "D".repeat(22), sha256: "s", fileName: "a.pdf",
+  docId: "D".repeat(22), editId: "E".repeat(22), fileName: "a.pdf",
   pages: [0, 1].map((i) => ({ index: i, width: 600, height: 800, rotation: i === 1 ? 90 : 0, hasText: true })),
 };
 const box = (extra: object = {}) => ({ id: "r", type: "shape.add", pageKey: "o0", kind: "rect", rect: { x: 100, y: 200, w: 50, h: 20 }, stroke: "#000000", fill: null, width: 1, ...extra }) as ContentOp;

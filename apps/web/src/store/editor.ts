@@ -11,7 +11,8 @@ export interface StructurePage { index: number; width: number; height: number; r
 /** `imports`/`importFields`: page sizes and form fields of the other PDFs imported into this one, by doc id
  *  (not undoable: a registry). Imported fields keep the names of their own PDF. */
 export interface DocInfo {
-  docId: string; sha256: string; fileName: string; pages: StructurePage[]; fields?: FormField[];
+  /** `editId`: the edit's address and the key of its draft; `docId`: the document the server holds for it now. */
+  docId: string; editId: string; fileName: string; pages: StructurePage[]; fields?: FormField[];
   imports?: Record<string, StructurePage[]>; importFields?: Record<string, FormField[]>;
 }
 export type PageSrc = { doc: string; index: number } | { blank: { width: number; height: number } };

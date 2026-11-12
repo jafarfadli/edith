@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Op } from "@edith/ops";
 import { ApiError, exportPdf } from "@/lib/api";
+import { checkAlive, isGone } from "@/lib/session";
 import { compact, failedOpId } from "@/lib/compact";
 import { downloadError, downloadName, isPdfBlob, openBlob, savedNotice, saveBlob } from "@/lib/download";
 import type { NoticeMsg } from "@/lib/notices";
@@ -50,6 +51,9 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null)
       onNotice(savedNotice(saveBlob(blob, name), name, openTab));
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError("generic", 0);
+      // The server dropped the document: the edit is put back and the page reopens it (press Unduh again). Without a
+      // kept copy the message below says so.
+      if (isGone(err) && s.info && (await checkAlive(s.info.editId, s.info.docId)) === "moved") { window.location.reload(); return; }
       if (err.code === "bake_failed" || err.code === "invalid_op") console.warn(`export ${err.code}:`, err.extra.message);
       else console.warn("export failed:", e);
       const failed = failedOpId(err.code, err.extra, sent);

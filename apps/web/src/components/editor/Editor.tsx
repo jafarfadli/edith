@@ -7,6 +7,8 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { ApiError, fileUrl, getStructure } from "@/lib/api";
 import { fontStore } from "@/lib/fonts";
 import { loadDraft, saveDraft } from "@/lib/draft";
+import { touchRecord } from "@/lib/library";
+import { checkAlive, KEEP_ALIVE_MS, openEdit } from "@/lib/session";
 import { noticeLifetime, noticeStore, type NoticeMsg } from "@/lib/notices";
 import { isTextOp } from "@/lib/objects";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
@@ -45,7 +47,9 @@ const FindBar = dynamic(() => import("./find/FindBar").then((m) => m.FindBar), {
 const OcrButton = dynamic(() => import("./text/OcrButton").then((m) => m.OcrButton), { ssr: false });
 
 
-export function Editor({ docId, initialName }: { docId: string; initialName: string }) {
+/** `editId`: the edit (the id of the document at its upload, the address /edit/{id}); the server's document for it is
+ *  `serverId`, which changes when the edit is put back on the server after it forgot the PDF (lib/session.ts). */
+export function Editor({ docId: editId, initialName }: { docId: string; initialName: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [notice, setNotice] = useState<NoticeMsg | null>(null);
@@ -59,15 +63,17 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
     let cancelled = false;
     initialDoc.current = null;
     (async () => {
-      let st;
+      let st, docId: string;
       try {
-        st = await getStructure(docId);
+        const opened = await openEdit(editId);
+        st = opened.structure;
+        docId = opened.serverId;
       } catch (e) {
         if (!cancelled) setFatal(e instanceof ApiError ? e.code : "generic");
         return;
       }
       if (cancelled) return;
-      let draft = restoreDraft(loadDraft(st.sha256), docId, st.page_count);
+      let draft = restoreDraft(loadDraft(editId), docId, st.page_count);
       // Text edits from before a segmentation change name other paragraphs now: drop them (with a notice below).
       const stale = draft ? dropStaleTextEdits(draft) : null;
       if (stale) draft = stale.doc;
@@ -82,7 +88,7 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       }
       if (cancelled) return;
       if (resolved) draft = resolved.doc;
-      editorStore.getState().init({ docId, sha256: st.sha256, fileName: initialName, pages: st.pages, fields: st.fields, imports: resolved?.imports, importFields: resolved?.fields }, draft);
+      editorStore.getState().init({ docId, editId, fileName: initialName, pages: st.pages, fields: st.fields, imports: resolved?.imports, importFields: resolved?.fields }, draft);
       initialDoc.current = editorStore.getState().doc;
       if (resolved?.missing) setNotice({ kind: "error", text: t.pages.importGone });
       else if (stale?.dropped) setNotice({ kind: "error", text: t.editor.textEditsDropped });
@@ -139,22 +145,38 @@ export function Editor({ docId, initialName }: { docId: string; initialName: str
       setPdf(null);
       setFatal(null);
     };
-  }, [docId, initialName]);
+  }, [editId, initialName]);
 
   // Autosave the undoable document (debounced), but not the document produced by init.
   useEffect(() => {
-    const saver = createDebounced<{ sha: string; doc: EditorDoc }>((v) => saveDraft(v.sha, v.doc), 500);
+    const saver = createDebounced<{ id: string; doc: EditorDoc }>((v) => { saveDraft(v.id, v.doc); touchRecord(v.id); }, 500);
     let dirty = false;
     const unsub = editorStore.subscribe((s, prev) => {
       if (s.doc === prev.doc || !s.info || !initialDoc.current) return;
       if (!dirty && s.doc === initialDoc.current) return;
       dirty = true;
-      saver.push({ sha: s.info.sha256, doc: s.doc });
+      saver.push({ id: s.info.editId, doc: s.doc });
     });
     const onHide = () => saver.flush();
     window.addEventListener("pagehide", onHide);
     return () => { window.removeEventListener("pagehide", onHide); unsub(); saver.flush(); };
   }, []);
+
+  // The server drops a document an hour after its last use. An open editor keeps it (and when it was dropped anyway, e.g.
+  // the laptop slept, the edit is put back and the page reopens it: the draft is saved, so nothing is lost).
+  const liveDoc = useEditor((s) => s.info?.docId);
+  useEffect(() => {
+    if (!liveDoc) return;
+    let last = Date.now();
+    const check = async () => {
+      last = Date.now();
+      if ((await checkAlive(editId, liveDoc)) === "moved") window.location.reload();
+    };
+    const timer = setInterval(() => void check(), KEEP_ALIVE_MS);
+    const onVisible = () => { if (document.visibilityState === "visible" && Date.now() - last > 30_000) void check(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [editId, liveDoc]);
 
   // Notices raised by store actions (e.g. a text commit that deleted marks).
   useEffect(() => noticeStore.subscribe((s, prev) => { if (s.notice && s.notice !== prev.notice) setNotice(s.notice); }), []);

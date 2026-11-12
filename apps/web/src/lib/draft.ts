@@ -1,7 +1,8 @@
 import { PARAGRAPHS_VERSION } from "@/lib/api";
 import type { EditorDoc } from "@/store/editor";
 
-const key = (sha: string) => `edith:draft:${sha}`;
+/** A draft is kept per edit (lib/library.ts), not per file: uploading the same file again starts a clean edit. */
+const key = (editId: string) => `edith:draft:${editId}`;
 
 function isEditorDoc(v: unknown): v is EditorDoc {
   if (typeof v !== "object" || v === null) return false;
@@ -14,13 +15,13 @@ function isEditorDoc(v: unknown): v is EditorDoc {
 }
 
 /** Stores `doc` stamped with the paragraph segmentation its text.edit ids belong to (see dropStaleTextEdits). */
-export function saveDraft(sha256: string, doc: EditorDoc): void {
-  try { localStorage.setItem(key(sha256), JSON.stringify({ ...doc, paragraphsVersion: PARAGRAPHS_VERSION })); } catch { /* storage full or blocked */ }
+export function saveDraft(editId: string, doc: EditorDoc): void {
+  try { localStorage.setItem(key(editId), JSON.stringify({ ...doc, paragraphsVersion: PARAGRAPHS_VERSION })); } catch { /* storage full or blocked */ }
 }
 
-export function loadDraft(sha256: string): EditorDoc | null {
+export function loadDraft(editId: string): EditorDoc | null {
   try {
-    const raw = localStorage.getItem(key(sha256));
+    const raw = localStorage.getItem(key(editId));
     if (!raw) return null;
     const v: unknown = JSON.parse(raw);
     return isEditorDoc(v) ? v : null;
@@ -29,6 +30,6 @@ export function loadDraft(sha256: string): EditorDoc | null {
   }
 }
 
-export function clearDraft(sha256: string): void {
-  try { localStorage.removeItem(key(sha256)); } catch { /* ignore */ }
+export function clearDraft(editId: string): void {
+  try { localStorage.removeItem(key(editId)); } catch { /* ignore */ }
 }

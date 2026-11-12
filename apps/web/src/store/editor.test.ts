@@ -3,7 +3,7 @@ import type { ContentOp } from "@edith/ops";
 import { createEditorStore, HISTORY_LIMIT, pageGeom, textEditFor, type DocInfo } from "@/store/editor";
 
 const info: DocInfo = {
-  docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
+  docId: "D".repeat(22), editId: "E".repeat(22), fileName: "a.pdf",
   pages: [0, 1, 2].map((i) => ({ index: i, width: 595, height: 842, rotation: i === 2 ? 90 : 0, hasText: true })),
 };
 const white = (id: string, pageKey = "o0"): ContentOp =>

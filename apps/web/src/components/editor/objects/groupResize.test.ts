@@ -4,7 +4,7 @@ import { editorStore, type DocInfo } from "@/store/editor";
 import { resizeGroup } from "./groupResize";
 
 const info: DocInfo = {
-  docId: "D".repeat(22), sha256: "s", fileName: "a.pdf",
+  docId: "D".repeat(22), editId: "E".repeat(22), fileName: "a.pdf",
   pages: [{ index: 0, width: 600, height: 800, rotation: 0, hasText: true }],
 };
 const r = (x: number, y: number, w: number, h: number): Rect => ({ x, y, w, h });

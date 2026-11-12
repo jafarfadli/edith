@@ -13,7 +13,7 @@ import { moveOp, resizeOp } from "@/lib/objects";
 import { afterTextCommitted, commitEditing, deleteObjectOrText, deleteSelectedParagraph, isDeletedText, materializeParagraph, paragraphPreview, paragraphStartBox, resizedParagraph, startOcrEdit, startParagraphEdit, startTextAt, textEditStore, textSessionBusy, updateTextOp, whenTextCommitted } from "./textEdit";
 
 const info: DocInfo = {
-  docId: "D".repeat(22), sha256: "abc", fileName: "a.pdf",
+  docId: "D".repeat(22), editId: "E".repeat(22), fileName: "a.pdf",
   pages: [{ index: 0, width: 595, height: 842, rotation: 0, hasText: true }],
 };
 const arimo = metricsFromBuffer(readFileSync(path.resolve(__dirname, "../../../../../../packages/fonts/files/Arimo-Regular.ttf")));

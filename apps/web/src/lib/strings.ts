@@ -8,6 +8,9 @@ export const t = {
     choose: "Pilih file",
     limit: "Maksimal 50 MB atau 500 halaman",
     processing: "Memproses dokumen…",
+    recent: "Editan terakhir",
+    recentRemove: "Hapus dari daftar",
+    recentPages: (n: number) => `${n} halaman`,
     lede: "Ubah teks, isi formulir, tanda tangani, dan atur halaman PDF tanpa memasang aplikasi apa pun.",
     points: {
       text: "Edit teks asli langsung di halaman",
@@ -304,7 +307,7 @@ export const t = {
     too_large: "File terlalu besar. Maksimal 50 MB atau 500 halaman.",
     unsupported_media: "Format file tidak didukung.",
     doc_not_found: "Dokumen tidak ditemukan.",
-    doc_expired: "Sesi dokumen sudah berakhir (1 jam). Unggah ulang file yang sama untuk melanjutkan.",
+    doc_expired: "Dokumen ini sudah dihapus dari server dan browser ini tidak menyimpan salinannya. Unggah filenya lagi.",
     asset_not_found: "Gambar tidak ditemukan. Tambahkan ulang gambarnya.",
     invalid_op: "Ada perubahan yang tidak valid.",
     bake_failed: "Gagal menyimpan salah satu objek. Hapus objek yang disorot lalu coba lagi.",
