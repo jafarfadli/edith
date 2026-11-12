@@ -12,9 +12,11 @@ test("the font picker lists document fonts by their familiar names; choosing one
 
   await page.getByRole("button", { name: "Teks", exact: true }).click();
   const box = (await page.getByTestId("page").first().boundingBox())!;
-  await page.mouse.click(box.x + 100, box.y + 400);
   const editor = page.getByTestId("text-editor");
-  await expect(editor).toBeVisible();
+  await expect(async () => { // a click before the overlay (loaded on demand) is mounted is lost: click again
+    await page.mouse.click(box.x + 100, box.y + 400);
+    await expect(editor).toBeVisible({ timeout: 1000 });
+  }).toPass();
   await editor.fill("Surat Dinas");
 
   // The picker: "Umum / Dokumen" first, the familiar name before the substitute, then one group per design.
