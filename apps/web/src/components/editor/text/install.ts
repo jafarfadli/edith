@@ -54,7 +54,7 @@ export function installTextTool(): void {
     return { ...op, box: fontsReady(box) ? relayout(box, (f) => fontStore.get(f)) : box };
   };
 
-  overlayHooks.renderUnder = (pageKey) => createElement(ParagraphLayer, { pageKey });
+  overlayHooks.renderUnder = (pageKey, geom, scale) => createElement(ParagraphLayer, { pageKey, geom, scale });
   overlayHooks.renderOver = (pageKey) => createElement(MatchHighlights, { pageKey });
 
   textPropsSlot.render = () => createElement(TextProps);

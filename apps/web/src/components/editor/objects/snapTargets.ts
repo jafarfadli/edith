@@ -15,8 +15,8 @@ export function sizeBadge(box: Rect, geom: PageGeom, scale: number): [number, nu
 
 /** The boxes an object dragged or resized on `pageKey` snaps to: the page's other objects (not text markup, which sits
  *  on its text, nor the `exclude`d ones being moved) and the frames of its original paragraphs that were not edited
- *  (an edited one is its op). Page points, rotation included. */
-export function snapTargets(pageKey: string, exclude: ReadonlySet<string>): Rect[] {
+ *  (an edited one is its op), but `ownParagraph`, the one being dragged. Page points, rotation included. */
+export function snapTargets(pageKey: string, exclude: ReadonlySet<string>, ownParagraph?: string): Rect[] {
   const s = editorStore.getState();
   const out: Rect[] = [];
   for (const id of s.doc.order) {
@@ -25,6 +25,6 @@ export function snapTargets(pageKey: string, exclude: ReadonlySet<string>): Rect
     out.push(boundsOf(op));
   }
   const entry = s.doc.pages.find((p) => p.pageKey === pageKey);
-  if (entry) for (const p of paragraphsOf(entry.src)) if (!textEditFor(s.doc, pageKey, p.id)) out.push(p.rect);
+  if (entry) for (const p of paragraphsOf(entry.src)) if (p.id !== ownParagraph && !textEditFor(s.doc, pageKey, p.id)) out.push(p.rect);
   return out;
 }

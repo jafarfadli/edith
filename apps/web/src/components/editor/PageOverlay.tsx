@@ -96,7 +96,7 @@ export const overlayHooks: {
   /** A double-click on a text markup (select tool): edit the text under it at `at`. */
   onMarkupDoubleClick?: (pageKey: string, at: Pt) => void;
   /** Konva nodes drawn under the page's objects (original paragraphs). */
-  renderUnder?: (pageKey: string) => React.ReactNode;
+  renderUnder?: (pageKey: string, geom: PageGeom, scale: number) => React.ReactNode;
   /** Konva nodes drawn over the page's objects (search highlights). */
   renderOver?: (pageKey: string) => React.ReactNode;
 } = {};
@@ -443,7 +443,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       >
         <Layer>
           <Group ref={pageRef} x={tr.x} y={tr.y} rotation={tr.rotation} scaleX={tr.scale} scaleY={tr.scale} offsetX={tr.offsetX} offsetY={tr.offsetY}>
-            {overlayHooks.renderUnder?.(pageKey)}
+            {overlayHooks.renderUnder?.(pageKey, geom, scale)}
             {objs.map((op) => (
               <Group
                 key={op.id}

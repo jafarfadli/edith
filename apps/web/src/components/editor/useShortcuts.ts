@@ -9,7 +9,7 @@ import { isMac } from "@/lib/keys";
 import { zMoveForKey } from "@/lib/zorder";
 import { arrangeForKey, isCutKey, isSelectAllKey, nudgeForKey, tabForKey } from "@/lib/selectionKeys";
 import { alignSelection, copySelection, cutSelection, distributeSelection, duplicateSelection, pasteClipboard } from "./objects/clipboard";
-import { cycleObjects, deleteObjects, nudgeSelection, selectAll } from "./objects/group";
+import { cycleObjects, deleteObjects, nudgeSelectedParagraph, nudgeSelection, selectAll } from "./objects/group";
 import { moveSelection, openMenuForSelection } from "./objects/layering";
 import { afterTextCommitted, deleteSelectedParagraph, textEditStore, textSessionBusy } from "./text/textEdit";
 
@@ -58,7 +58,8 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       const s = editorStore.getState();
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
-      const nudge = s.selected.length ? nudgeForKey(e) : null;
+      const arrow = nudgeForKey(e);
+      const nudge = s.selected.length ? arrow : null;
       const arrange = s.selected.length ? arrangeForKey(e) : null;
       // Tab walks the objects only while one is selected and focus is on the canvas, not on a button or field: it must
       // stay the way through the toolbar for the keyboard.
@@ -71,6 +72,8 @@ export function useShortcuts(extra?: (e: KeyboardEvent) => boolean) {
       else if (isCutKey(e)) { if (cutSelection()) e.preventDefault(); }
       else if (isSelectAllKey(e)) { e.preventDefault(); selectAll(); } // not the page's own text selection
       else if (nudge) { e.preventDefault(); nudgeSelection(nudge[0], nudge[1]); } // held: one undo step
+      // An original paragraph, selected but not yet an object, is moved the same way (it becomes its text.edit op).
+      else if (arrow && !s.selected.length && focusOnCanvas(e.target) && nudgeSelectedParagraph(arrow[0], arrow[1])) e.preventDefault();
       else if (arrange) { e.preventDefault(); if ("align" in arrange) alignSelection(arrange.align); else distributeSelection(arrange.distribute); }
       else if (tab) { e.preventDefault(); cycleObjects(tab); }
       // Only with an object selected: otherwise Ctrl/Cmd+[ ] stay the browser's Back/Forward.
