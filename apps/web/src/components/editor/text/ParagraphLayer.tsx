@@ -7,14 +7,19 @@ import { useStore } from "zustand";
 import type { Rect as Box, TextBox, TextEdit } from "@edith/ops";
 import type { OcrParagraph, Paragraph } from "@/lib/api";
 import { areaKey, coverRects, isLowConfidence, ocrBadge, ocrEditsOn, replacedIds, unedited, type OcrCover } from "@/lib/ocr";
+import { pageBounds, type PageGeom } from "@/lib/coords";
 import { noticeStore } from "@/lib/notices";
 import { backgroundAround, useRendered } from "@/lib/pageBackground";
 import { maskRects } from "@/lib/paragraphs";
+import { fmtPt, snapMove } from "@/lib/snap";
 import { srcKey } from "@/lib/sources";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
+import { snapStore } from "@/store/snap";
 import { hiddenParagraphsOf, hiddenRetryIn, imagesOf, imageTextOf, isPrint, paragraphsOf, pictureParagraphsOf, textStore, useText } from "@/store/text";
 import { contextMenuStore } from "../objects/layering";
+import { sizeBadge, snapTargets } from "../objects/snapTargets";
+import { SNAP_PX } from "../objects/useObjectDrag";
 import { runPageOcr } from "./ocrRun";
 import { materializeParagraph, paragraphPreview, paragraphStartBox, resizedParagraph, startOcrEdit, startParagraphEdit, textEditStore } from "./textEdit";
 import { TextNode } from "./TextNode";
@@ -47,7 +52,7 @@ const explained = new Set<string>();
  *  edited (a locked paragraph, an image of print: M5c) gets a target too, which says why when clicked. Paragraphs OCR
  *  read (M5d) show with a dashed accent outline (amber when unsure) and a "hasil OCR" badge on hover or selection; an
  *  edited one is covered in its picture's background colour, as the export paints it (from its op: no OCR needed). */
-export function ParagraphLayer({ pageKey }: { pageKey: string }) {
+export function ParagraphLayer({ pageKey, geom, scale }: { pageKey: string; geom: PageGeom; scale: number }) {
   const entry = useEditor((s) => s.doc.pages.find((p) => p.pageKey === pageKey));
   const order = useEditor((s) => s.doc.order);
   const objects = useEditor((s) => s.doc.objects);
@@ -66,6 +71,8 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
   // A handle being dragged: the paragraph's redrawn box (loaded when the drag starts) and the text laid out for the
   // frame at the pointer, drawn over a white cover until release (the page's own glyphs cannot be re-wrapped).
   const resizing = useRef<{ id: string; base: TextBox | null; cancelled: boolean } | null>(null);
+  // A paragraph being dragged: what it snaps to (read when the drag starts).
+  const dragging = useRef<{ targets: Box[]; page: Box } | null>(null);
   const [preview, setPreview] = useState<{ op: TextEdit; p: Paragraph } | null>(null);
   // Escape cancels the drag (captured: the shortcut that deselects does not see it).
   useEffect(() => {
@@ -228,7 +235,24 @@ export function ParagraphLayer({ pageKey }: { pageKey: string }) {
           onDblClick={(e) => { setCursor(e, ""); void startParagraphEdit(pageKey, p); }}
           onDblTap={(e) => { setCursor(e, ""); void startParagraphEdit(pageKey, p); }}
           onContextMenu={(e) => openMenu(e, p)}
+          onDragStart={() => { dragging.current = { targets: snapTargets(pageKey, new Set(), p.id), page: pageBounds(geom) }; }}
+          onDragMove={(e) => {
+            // As an object drag: the box snaps to the page's guides (Cmd/Ctrl turns it off) and shows its size.
+            const d = dragging.current, node = e.target;
+            if (!d) return;
+            let dx = node.x() - p.rect.x, dy = node.y() - p.rect.y;
+            let snap: ReturnType<typeof snapMove> | null = null;
+            if (!(e.evt.metaKey || e.evt.ctrlKey)) {
+              snap = snapMove({ ...p.rect, x: p.rect.x + dx, y: p.rect.y + dy }, d.targets, d.page, SNAP_PX / scale);
+              dx += snap.dx; dy += snap.dy;
+              node.position({ x: p.rect.x + dx, y: p.rect.y + dy });
+            }
+            const box = { ...p.rect, x: p.rect.x + dx, y: p.rect.y + dy };
+            snapStore.getState().show({ pageKey, guides: snap?.guides ?? [], gaps: snap?.gaps ?? [], badge: { at: sizeBadge(box, geom, scale), text: `${fmtPt(box.w)} × ${fmtPt(box.h)}` } });
+          }}
           onDragEnd={(e) => {
+            dragging.current = null;
+            snapStore.getState().clear();
             const node = e.target;
             const dx = node.x() - p.rect.x, dy = node.y() - p.rect.y;
             node.position({ x: p.rect.x, y: p.rect.y });
