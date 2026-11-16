@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { Cutter, Pencil } from "@/components/bench/Props";
+import { SheetDecor } from "@/components/bench/SheetDecor";
 import { Crumbs, Headline } from "@/components/hero/Headline";
 import { Stickers } from "@/components/hero/Stickers";
 import { RecentEdits } from "@/components/RecentEdits";
@@ -27,11 +28,12 @@ export default function Home() {
         <a href="#tools" className="rounded-md px-2 py-1 text-sm text-muted transition-colors hover:text-ink">{t.tools.heading}</a>
       </header>
 
-      <main className={`relative z-10 mx-auto grid w-full max-w-[84rem] content-center gap-x-12 gap-y-12 px-5 pb-24 pt-10 md:px-10 lg:min-h-[calc(100dvh-4.5rem)] lg:grid-cols-[auto_clamp(17rem,26vw,23rem)] lg:justify-center lg:gap-x-[clamp(4rem,8vw,9rem)] lg:gap-y-10 lg:pb-20 lg:pt-4 ${AREAS}`}>
+      <main className={`relative z-10 mx-auto grid w-full max-w-[84rem] content-center gap-x-12 gap-y-12 px-5 pb-24 pt-10 md:px-10 lg:min-h-[calc(100dvh-4.5rem)] lg:grid-cols-[auto_clamp(17rem,26vw,23rem)] lg:justify-center lg:gap-x-[clamp(4rem,8vw,9rem)] lg:gap-y-8 lg:pb-16 lg:pt-2 ${AREAS}`}>
         {/* From 1024px as wide as the screen's height allows, so the stickers under it stay in view. */}
-        <Headline className="w-full max-w-[26rem] [grid-area:words] md:max-w-[36rem] lg:w-[min(42rem,calc((100dvh-17rem)*1.1),calc(66vw-6rem))] lg:max-w-none lg:self-end" />
+        <Headline className="w-full max-w-[26rem] [grid-area:words] md:max-w-[36rem] lg:w-[min(42rem,calc((100dvh-19rem)*1.15),calc(66vw-6rem))] lg:max-w-none lg:self-end" />
 
         <div className="relative w-full max-w-[17rem] justify-self-center [grid-area:sheet] md:max-w-[21rem] lg:max-w-none lg:self-center">
+          <SheetDecor />
           <UploadDropzone />
           {/* The pencil rests across the sheet's bottom-left corner, the cutter across its bottom-right, as if just put down. */}
           <Pencil className="animate-slide-in pointer-events-none absolute -bottom-7 -left-24 z-10 hidden w-56 rotate-[-16deg] [animation-delay:.3s] md:block" />
@@ -39,7 +41,7 @@ export default function Home() {
         </div>
 
         <section className="flex min-w-0 flex-col gap-10 [grid-area:stickers] lg:self-start">
-          <Stickers className="max-w-[44rem] lg:max-w-[min(42rem,calc((100dvh-17rem)*1.1),calc(66vw-6rem))]" />
+          <Stickers className="max-w-[44rem] lg:w-[min(44rem,calc(66vw-6rem))] lg:max-w-none" />
           <RecentEdits />
         </section>
       </main>
