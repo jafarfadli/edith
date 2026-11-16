@@ -314,3 +314,58 @@ def test_export_of_a_hidden_paragraph_rewrite(client, registry):
     assert r.status_code == 200, r.text
     words = pymupdf.open(stream=r.content, filetype="pdf")[0].get_text()
     assert words.count("BIRO BARU") == 1 and "ORGANISASI" not in words and "SEKRETARIAT JENDERAL" in words
+
+
+def drawn(draw) -> pymupdf.Pixmap:
+    """A 360 × 40 pt picture `draw(page)` paints (as `picture`, 3 px a point), placed by `hidden_over` at (72, 60)."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=360, height=40)
+    draw(page)
+    return page.get_pixmap(matrix=pymupdf.Matrix(3, 3), alpha=False)
+
+
+def spaced(page: pymupdf.Page, line: str, size: float, x: float, base: float, gap: float) -> float:
+    """`line` in Helvetica Bold with `gap` pt between its letters (a slide's spaced-out label); returns its right end."""
+    font = pymupdf.Font("hebo")
+    for c in line:
+        page.insert_text((x, base), c, fontname="hebo", fontsize=size)
+        x += font.text_length(c, fontsize=size) + gap
+    return x - gap
+
+
+def test_a_dot_of_a_diagram_set_right_after_a_label_is_not_its_print(registry):
+    # "ACT" beside a ring of a cycle diagram, 4 pt after it and taller than the letters (Contoh PPT.pdf).
+    def draw(page):
+        end = spaced(page, "ACT", 13, 4, 20, 0)
+        page.draw_circle((end + 4 + 8, 15.5), 8, color=(0.1, 0.1, 0.1), width=2.5)
+    page = page_of(hidden_over(drawn(draw), "ACT"))
+    [p] = hidden_text(page, registry)
+    assert text(p) == "ACT"
+    ring = pymupdf.Rect(76 + print_box("ACT", 13, 4, 20).x1 - 4 + 4, 60, 432, 100)
+    assert not R(p["cover"]).intersects(ring)
+    assert p["runs"][0]["size"] == pytest.approx(13, abs=1.2)
+
+
+def test_a_spaced_out_label_in_capitals_is_measured_in_capitals(registry):
+    # A slide's All Caps: the invisible text keeps the words as typed ("Networking research"), the picture shows them
+    # in capitals, spaced out. Its edit starts in capitals, its size that of the capitals.
+    page = page_of(hidden_over(drawn(lambda page: spaced(page, "NETWORKING RESEARCH", 9, 4, 20, 1.0)), "Networking research", size=13))
+    [p] = hidden_text(page, registry)
+    assert text(p) == "NETWORKING RESEARCH"
+    assert p["runs"][0]["size"] == pytest.approx(9, abs=1)
+
+
+def test_print_in_the_case_of_its_text_keeps_that_case(registry):
+    page = page_of(hidden_over(picture([("Kementerian contoh", 14, 20)]), "Kementerian contoh"))
+    [p] = hidden_text(page, registry)
+    assert text(p) == "Kementerian contoh"
+
+
+def test_spaced_out_print_in_mixed_case_is_not_taken_for_capitals(registry):
+    # Letters apart, with brackets above the capitals and tails below the line (a letterhead's address line): the short
+    # letters still show it is not in capitals.
+    line = "Telp. (021) jalan raya"
+    page = page_of(hidden_over(drawn(lambda page: spaced(page, line, 10, 4, 20, 1.0)), line, size=13))
+    [p] = hidden_text(page, registry)
+    assert text(p) == line
+

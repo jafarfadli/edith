@@ -37,6 +37,14 @@ START_EM = 1.0             # the print starts at most this far (× band height) 
 WIDTH_RANGE = (0.6, 1.6)   # the print's width over the invisible text's
 SIZE_RANGE = (0.5, 2.0)    # the measured size over the invisible text's
 H_RANGE = (0.7, 1.45)      # the print's width over the bundled face's at the measured size (else: not that text)
+LETTER_GAP = 0.15         # ink pieces closer than this × the band's height are one letter (or touching letters)
+FOREIGN_EM = 0.3           # a piece at the stretch's end, beside the text, reaching this far (× band height) past the
+                           # band is a graphic (a dot of a diagram, an icon, a rule), not print of the line
+XLOW = set("acemnorsuvwxz")  # lower-case letters that stand no higher than the x-height
+CAPS_TOP = 0.15            # a letter whose top is within this share of the cap height of the top is a capital
+LOW_MARKS = set(".,·-–_:;")  # marks that stand lower than a capital
+CAPS_PIECES = 0.7          # … judged only where the print shows at least this share of the letters apart
+TRACK_EM = 0.5             # spacing between letters (× size) at most, for print wider than its text at H_SCALE[1]
 H_SCALE = (0.8, 1.25)      # the horizontal scale a line is drawn with to keep the print's width, within these bounds
 CONTRAST = 40              # grey levels between ink and paper, at least
 COVER_PAD_EM, COVER_PAD = 0.15, (1.0, 2.5)  # the cover reaches this far (× size, clamped in pt) past the ink
@@ -142,6 +150,8 @@ class _LineGeom:
     h_scale: float
     window: pymupdf.Rect   # the pictures under the line: no cover reaches past them
     cover: pymupdf.Rect    # the ink padded over paper only (see _measure)
+    upper: bool = False    # the print is the text in capitals (a slide's "All Caps")
+    char_spacing: float = 0.0  # pt between letters: the print is spaced out (tracked)
 
 
 def _hex(rgb) -> str:
@@ -173,9 +183,10 @@ def _on_pictures(cover: pymupdf.Rect, ink: pymupdf.Rect, pictures: list[pymupdf.
 
 def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face: pymupdf.Font,
              extents: dict[int, tuple[float, float]], blocked: list[pymupdf.Rect],
-             pictures: list[pymupdf.Rect]) -> _LineGeom | None:
+             pictures: list[pymupdf.Rect], caps: bool = False) -> _LineGeom | None:
     """The print of one invisible line in the picture (`picture`: the images under it, `pictures`, as one rect; covers
-    keep to `pictures` themselves), or None."""
+    keep to `pictures` themselves), or None. `caps`: the print is known to be in capitals (another line of the
+    paragraph is)."""
     r, size = line["rect"], line["size"]
     inv = pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"])
     if inv.width <= 0 or size <= 0:
@@ -228,7 +239,7 @@ def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face
     start = next((st for st in stretches if st[0] <= c0 + START_EM * band_h and st[1] > c0 - START_EM * band_h), None)
     if start is None:
         return None
-    ix0, ix1 = start
+    ix0, ix1 = _trim_foreign(ink, start, (a, b), (c0, c1))
     # The rows of that stretch (taller letters further right: the whole stretch counts).
     rows = ink[:, ix0:ix1].any(axis=1)
     near = [(p, q) for p, q in _runs(rows, gap=1) if q > a and p < b]
@@ -236,13 +247,26 @@ def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face
     ink_pt = pymupdf.Rect(*render.pt(ix0 + x0, top + y0), *render.pt(ix1 + x0, bottom + y0))
     if not WIDTH_RANGE[0] <= ink_pt.width / inv.width <= WIDTH_RANGE[1]:
         return None
+    upper = text.upper() != text and len(text.upper()) == len(text) and (
+        caps or _all_caps(ink, (ix0, ix1), (top, bottom), text))
+    if upper:
+        text = text.upper()
+        ext = _text_extent(text, extents) or ext
     measured = ink_pt.height / (ext[1] - ext[0])
     if not SIZE_RANGE[0] <= measured / size <= SIZE_RANGE[1]:
         return None
     natural = face.text_length(text, fontsize=measured)
     h = ink_pt.width / natural if natural > 0 else 0
-    if not H_RANGE[0] <= h <= H_RANGE[1]:
+    # Print wider than the text drawn at the widest scale allowed: spaced-out letters, when the space between them
+    # stays modest (the width already matches the invisible text's, so it is that text).
+    letters = len(text.rstrip())
+    tracking = (ink_pt.width - natural) / (letters - 1) if h > H_SCALE[1] and letters > 1 else 0.0
+    if tracking > TRACK_EM * measured:
         return None
+    if not tracking and not H_RANGE[0] <= h <= H_RANGE[1]:
+        return None
+    if tracking:
+        h = 1.0
     # The colour of the print: the core of its strokes (the fifth of its pixels farthest from the paper).
     box = ink[top:bottom, ix0:ix1]
     g = grey[top:bottom, ix0:ix1]
@@ -272,7 +296,60 @@ def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face
     if cover is None or cover.x0 > inv.x0 + 0.5 or cover.x1 < inv.x1 - 0.5 or not cover.contains(ink_pt):
         return None  # other ink of the picture right at the line's ends: the invisible text would not all go
     return _LineGeom(ink=ink_pt, size=measured, baseline=ink_pt.y0 + ext[1] * measured, colour=colour,
-                     h_scale=min(max(h, H_SCALE[0]), H_SCALE[1]), window=picture, cover=cover)
+                     h_scale=min(max(h, H_SCALE[0]), H_SCALE[1]), window=picture, cover=cover, upper=upper,
+                     char_spacing=tracking)
+
+
+def _all_caps(ink: np.ndarray, stretch: tuple[int, int], rows: tuple[int, int], text: str) -> bool:
+    """True when the print of `text` (ink columns `stretch`, rows `rows`) is that text in capitals: it has lower-case
+    letters that stand no higher than the x-height, yet every letter of the print reaches the cap height (bar the few
+    marks that stand low: a full stop, a middle dot). Judged only where the print's letters stand apart (spaced-out
+    labels, headings): touching letters hide the short ones."""
+    if text.upper() == text or len(text.upper()) != len(text) or not any(c in XLOW for c in text):
+        return False
+    top, bottom = rows
+    x0, x1 = stretch
+    letters = [c for c in text if not c.isspace()]
+    pieces = _runs(ink[top:bottom, x0:x1].any(axis=0), gap=0)
+    if len(pieces) < CAPS_PIECES * len(letters):
+        return False
+    spans = []
+    for p, q in pieces:
+        r = np.nonzero(ink[top:bottom, x0 + p:x0 + q].any(axis=1))[0]
+        spans.append((int(r[0]), int(r[-1]) + 1))
+    baseline = float(np.median([v for _, v in spans]))  # most letters sit on it
+    cap = baseline - min(u for u, _ in spans)
+    if cap <= 0:
+        return False
+    low = sum(u > CAPS_TOP * cap for u, _ in spans)
+    return low <= sum(c in LOW_MARKS for c in letters)
+
+
+def _trim_foreign(ink: np.ndarray, stretch: tuple[int, int], band: tuple[int, int],
+                  text: tuple[int, int]) -> tuple[int, int]:
+    """`stretch` (ink columns) without the pieces at its ends that are no print of the line: wholly beside the invisible
+    text's columns `text`, and reaching well above or below the band of its letters (a diagram's dot set right next to
+    a label, an icon before it). A letter never does: the band holds the line's ascenders and descenders."""
+    a, b = band
+    reach = FOREIGN_EM * (b - a)
+    x0, x1 = stretch
+    pieces = [(x0 + p, x0 + q) for p, q in _runs(ink[a:b, x0:x1].any(axis=0), gap=max(1, int(LETTER_GAP * (b - a))))]
+
+    def foreign(p: int, q: int) -> bool:
+        if not (q <= text[0] or p >= text[1]):
+            return False
+        rows = np.nonzero(ink[:, p:q].any(axis=1))[0]
+        near = [(u, v) for u, v in _runs(ink[:, p:q].any(axis=1), gap=1) if v > a and u < b]
+        if not rows.size or not near:
+            return False
+        top, bottom = min(u for u, _ in near), max(v for _, v in near)
+        return a - top > reach or bottom - b > reach
+
+    while len(pieces) > 1 and foreign(*pieces[0]):
+        pieces.pop(0)
+    while len(pieces) > 1 and foreign(*pieces[-1]):
+        pieces.pop()
+    return pieces[0][0], pieces[-1][1]
 
 
 def _clear_of(cover: pymupdf.Rect, ink: pymupdf.Rect, others: list[pymupdf.Rect], gap: float) -> pymupdf.Rect:
@@ -339,11 +416,14 @@ def _restyled(p: dict, geoms: list[_LineGeom]) -> list[dict]:
             lo, hi = max(a, starts[j]), min(b, starts[j + 1])
             if lo >= hi:
                 continue
-            piece = {"text": text[lo:hi], "font": run["font"], "size": _num(g.size), "color": g.colour}
+            piece = {"text": text[lo:hi].upper() if g.upper else text[lo:hi], "font": run["font"], "size": _num(g.size),
+                     "color": g.colour}
             if abs(g.h_scale - 1) > 0.02:
                 piece["hScale"] = round(g.h_scale, 3)
+            if g.char_spacing:
+                piece["charSpacing"] = _num(g.char_spacing)
             last = out[-1] if out else None
-            if last and all(last.get(key) == piece.get(key) for key in ("font", "size", "color", "hScale")):
+            if last and all(last.get(key) == piece.get(key) for key in ("font", "size", "color", "hScale", "charSpacing")):
                 last["text"] += piece["text"]
             else:
                 out.append(piece)
@@ -411,15 +491,26 @@ def hidden_text(page: pymupdf.Page, registry: FontRegistry) -> list[dict]:
         return []
     out: list[dict] = []
     measured: dict[int, list[_LineGeom | None]] = {}
-    for p, ln, text, picture in jobs:
+    def measure(p: dict, ln: dict, text: str, picture: pymupdf.Rect, caps: bool = False) -> _LineGeom | None:
+        if picture.is_empty:
+            return None
         bold = any(r["font"]["bold"] for r in p["runs"])
         italic = any(r["font"]["italic"] for r in p["runs"])
-        geom = None
-        if not picture.is_empty:
-            path = registry.path(sans, bold, italic)
-            geom = _measure(ln, text, picture, render, registry.font(sans, bold, italic), _extents(path), visible,
-                            images)
-        measured.setdefault(id(p), []).append(geom)
+        path = registry.path(sans, bold, italic)
+        return _measure(ln, text, picture, render, registry.font(sans, bold, italic), _extents(path), visible,
+                        images, caps)
+
+    for job in jobs:
+        measured.setdefault(id(job[0]), []).append(measure(*job))
+    # All Caps is a paragraph's: a line too short to tell (a lone "y" wrapped from "Classify") is measured in capitals
+    # when another line of its paragraph is in them.
+    by_paragraph: dict[int, list[tuple[dict, dict, str, pymupdf.Rect]]] = {}
+    for job in jobs:
+        by_paragraph.setdefault(id(job[0]), []).append(job)
+    for key, geoms in measured.items():
+        if any(g is not None and g.upper for g in geoms):
+            measured[key] = [g if g is not None and g.upper else measure(*job, caps=True)
+                             for g, job in zip(geoms, by_paragraph[key])]
     # Every line's ink: a cover never takes another line's print.
     inks = [g.ink for gs in measured.values() for g in gs if g is not None]
     for p in paragraphs:
