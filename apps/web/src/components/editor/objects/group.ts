@@ -1,11 +1,11 @@
-import type { ContentOp } from "@edith/ops";
+import type { ContentOp, TextBox } from "@edith/ops";
 import { cycleSelection, readingOrder } from "@/lib/arrange";
 import { toPage } from "@/lib/coords";
 import { blankBox, isBlankBox } from "@/lib/keepLines";
 import { moveOp } from "@/lib/objects";
 import { boundsOf } from "@/lib/zorder";
 import { editorStore, pageGeom } from "@/store/editor";
-import { isDeletedText, isTextEdit, marksLostBy, materializeParagraph, noteMarkupRemoved, originalParagraph, selectedParagraph, textEditStore } from "../text/textEdit";
+import { isDeletedText, isTextEdit, marksLostBy, materializeOcr, materializeParagraph, noteMarkupRemoved, originalParagraph, selectedParagraph, textEditStore } from "../text/textEdit";
 
 /** Actions on the whole selection (Figma's model: what applies to one object applies to a group). Each is one
  *  undo step, however many objects it touches. */
@@ -58,23 +58,25 @@ export function nudgeSelection(dx: number, dy: number): boolean {
   return moveBy(ops.map((o) => o.id), x1 - x0, y1 - y0, { coalesce: `nudge:${ops.map((o) => o.id).join(",")}`, within: NUDGE_MS });
 }
 
-/** Arrow keys on a selected original paragraph (not yet an op): it becomes its text.edit op, moved by (dx, dy) screen
- *  points, and stays selected as that op, so the next presses are nudgeSelection's. The op lands once the fonts have
- *  loaded; presses until then add to the move (a held key repeats faster than that). False when no original paragraph
- *  is selected. */
+/** Arrow keys on a selected original or OCR paragraph (not yet an op): it becomes its op (text.edit, text.ocr_edit),
+ *  moved by (dx, dy) screen points, and stays selected as that op, so the next presses are nudgeSelection's. The op
+ *  lands once the fonts have loaded; presses until then add to the move (a held key repeats faster than that). False
+ *  when no such paragraph is selected. */
 let paragraphNudge: { dx: number; dy: number } | null = null;
 export function nudgeSelectedParagraph(dx: number, dy: number): boolean {
   const sel = selectedParagraph();
   const st = editorStore.getState();
-  const entry = sel?.original && st.doc.pages.find((p) => p.pageKey === sel.pageKey);
-  if (!sel?.original || !entry || !st.info) return false;
+  const entry = sel && st.doc.pages.find((p) => p.pageKey === sel.pageKey);
+  if (!sel || !entry || !st.info) return false;
   if (paragraphNudge) { paragraphNudge.dx += dx; paragraphNudge.dy += dy; return true; }
   const pending = (paragraphNudge = { dx, dy });
   const g = pageGeom(entry, st.info);
-  void materializeParagraph(sel.pageKey, sel.original, (box) => {
+  const move = (box: TextBox): TextBox => {
     const [x0, y0] = toPage([0, 0], g, 1), [x1, y1] = toPage([pending.dx, pending.dy], g, 1);
     return { ...box, rect: { ...box.rect, x: box.rect.x + x1 - x0, y: box.rect.y + y1 - y0 } };
-  }).finally(() => { paragraphNudge = null; });
+  };
+  const done = sel.ocr ? materializeOcr(sel.pageKey, sel.ocr, move) : materializeParagraph(sel.pageKey, sel.original!, move);
+  void done.finally(() => { paragraphNudge = null; });
   return true;
 }
 

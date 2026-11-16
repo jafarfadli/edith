@@ -21,7 +21,7 @@ import { contextMenuStore } from "../objects/layering";
 import { sizeBadge, snapTargets } from "../objects/snapTargets";
 import { SNAP_PX } from "../objects/useObjectDrag";
 import { runPageOcr } from "./ocrRun";
-import { materializeParagraph, paragraphPreview, paragraphStartBox, resizedParagraph, startOcrEdit, startParagraphEdit, textEditStore } from "./textEdit";
+import { materializeOcr, materializeParagraph, paragraphPreview, paragraphStartBox, resizedParagraph, startOcrEdit, startParagraphEdit, textEditStore } from "./textEdit";
 import { TextNode } from "./TextNode";
 import { CANVAS } from "@/lib/theme";
 
@@ -85,6 +85,23 @@ export function ParagraphLayer({ pageKey, geom, scale }: { pageKey: string; geom
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
+
+  const beginDrag = (ownParagraph: string) => { dragging.current = { targets: snapTargets(pageKey, new Set(), ownParagraph), page: pageBounds(geom) }; };
+  /** A paragraph being dragged, as an object: its box (`rect`, at rest) snaps to the page's guides (Cmd/Ctrl turns it
+   *  off) and shows its size. `origin` is where its node sits at rest. */
+  const dragMove = (e: Konva.KonvaEventObject<DragEvent>, rect: Box, origin: { x: number; y: number }) => {
+    const d = dragging.current, node = e.target;
+    if (!d) return;
+    let dx = node.x() - origin.x, dy = node.y() - origin.y;
+    let snap: ReturnType<typeof snapMove> | null = null;
+    if (!(e.evt.metaKey || e.evt.ctrlKey)) {
+      snap = snapMove({ ...rect, x: rect.x + dx, y: rect.y + dy }, d.targets, d.page, SNAP_PX / scale);
+      dx += snap.dx; dy += snap.dy;
+      node.position({ x: origin.x + dx, y: origin.y + dy });
+    }
+    const box = { ...rect, x: rect.x + dx, y: rect.y + dy };
+    snapStore.getState().show({ pageKey, guides: snap?.guides ?? [], gaps: snap?.gaps ?? [], badge: { at: sizeBadge(box, geom, scale), text: `${fmtPt(box.w)} × ${fmtPt(box.h)}` } });
+  };
 
   const paragraphs = entry ? paragraphsOf(entry.src, pages) : [];
   // Edited paragraph → its op's box (lines it keeps stay uncovered); undefined while its rich editor is open.
@@ -235,21 +252,8 @@ export function ParagraphLayer({ pageKey, geom, scale }: { pageKey: string; geom
           onDblClick={(e) => { setCursor(e, ""); void startParagraphEdit(pageKey, p); }}
           onDblTap={(e) => { setCursor(e, ""); void startParagraphEdit(pageKey, p); }}
           onContextMenu={(e) => openMenu(e, p)}
-          onDragStart={() => { dragging.current = { targets: snapTargets(pageKey, new Set(), p.id), page: pageBounds(geom) }; }}
-          onDragMove={(e) => {
-            // As an object drag: the box snaps to the page's guides (Cmd/Ctrl turns it off) and shows its size.
-            const d = dragging.current, node = e.target;
-            if (!d) return;
-            let dx = node.x() - p.rect.x, dy = node.y() - p.rect.y;
-            let snap: ReturnType<typeof snapMove> | null = null;
-            if (!(e.evt.metaKey || e.evt.ctrlKey)) {
-              snap = snapMove({ ...p.rect, x: p.rect.x + dx, y: p.rect.y + dy }, d.targets, d.page, SNAP_PX / scale);
-              dx += snap.dx; dy += snap.dy;
-              node.position({ x: p.rect.x + dx, y: p.rect.y + dy });
-            }
-            const box = { ...p.rect, x: p.rect.x + dx, y: p.rect.y + dy };
-            snapStore.getState().show({ pageKey, guides: snap?.guides ?? [], gaps: snap?.gaps ?? [], badge: { at: sizeBadge(box, geom, scale), text: `${fmtPt(box.w)} × ${fmtPt(box.h)}` } });
-          }}
+          onDragStart={() => beginDrag(p.id)}
+          onDragMove={(e) => dragMove(e, p.rect, p.rect)}
           onDragEnd={(e) => {
             dragging.current = null;
             snapStore.getState().clear();
@@ -292,15 +296,28 @@ export function ParagraphLayer({ pageKey, geom, scale }: { pageKey: string; geom
             stroke={interactive ? (low ? CANVAS.ocrLow : OUTLINE) : undefined}
             strokeWidth={on ? 1.5 : 1} strokeScaleEnabled={false} dash={selected === p.id ? undefined : [3, 2]}
             listening={interactive}
+            draggable={tool === "select" && selected === p.id}
+            dragDistance={DRAG_DISTANCE}
             onMouseEnter={(e) => { setHover(p.id); setCursor(e, "text"); }}
             onMouseLeave={(e) => { setHover((h) => (h === p.id ? null : h)); setCursor(e, ""); }}
             onPointerDown={(e) => {
-              if (tool !== "select") e.cancelBubble = true; // with the select tool a drag from here is a marquee
+              // With the select tool a drag from here is a marquee, unless the paragraph is selected (then it moves it).
+              if (tool !== "select" || selected === p.id) e.cancelBubble = true;
               if (tool === "text") { setCursor(e, ""); void startOcrEdit(pageKey, p); } else selectOcr(p);
             }}
             onDblClick={(e) => { setCursor(e, ""); void startOcrEdit(pageKey, p); }}
             onDblTap={(e) => { setCursor(e, ""); void startOcrEdit(pageKey, p); }}
             onContextMenu={(e) => openMenu(e, p)}
+            onDragStart={() => beginDrag(p.id)}
+            onDragMove={(e) => dragMove(e, p.rect, { x: p.rect.x - 1, y: p.rect.y - 1 })}
+            onDragEnd={(e) => {
+              dragging.current = null;
+              snapStore.getState().clear();
+              const node = e.target;
+              const dx = node.x() - (p.rect.x - 1), dy = node.y() - (p.rect.y - 1);
+              node.position({ x: p.rect.x - 1, y: p.rect.y - 1 });
+              if (dx || dy) void materializeOcr(pageKey, p, (box) => ({ ...box, rect: { ...box.rect, x: box.rect.x + dx, y: box.rect.y + dy } }));
+            }}
           />
         );
       })}

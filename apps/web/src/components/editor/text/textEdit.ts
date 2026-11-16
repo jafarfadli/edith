@@ -271,25 +271,35 @@ async function putParagraphEdit(pageKey: string, p: Paragraph, make: (box: TextB
   if (!textEditStore.getState().editing) st.select(id);
 }
 
-/** Deletes the text of paragraph `p` OCR read on `pageKey`: a text.ocr_edit op that paints its covers and draws
- *  nothing, selected. */
-export async function deleteOcrText(pageKey: string, p: OcrParagraph): Promise<void> {
+/** Turns paragraph `p` OCR read on `pageKey` into a text.ocr_edit op whose box `make` builds from the box that redraws
+ *  it (moved, deleted), selected. */
+async function putOcrEdit(pageKey: string, p: OcrParagraph, make: (box: TextBox) => TextBox): Promise<void> {
   let box: TextBox;
   try {
     box = await paragraphStartBox(p);
   } catch (err) {
-    console.warn("OCR paragraph delete: font load failed", err);
+    console.warn("OCR paragraph edit: font load failed", err);
     return;
   }
   const st = editorStore.getState();
   if (ocrEditFor(st.doc, pageKey, p.id) || !st.doc.pages.some((pg) => pg.pageKey === pageKey)) return;
-  const op = ocrEditOp(newId(), pageKey, p, blankBox(box, p.cover));
+  const op = ocrEditOp(newId(), pageKey, p, make(box));
   st.putObjects([op]);
   textEditStore.getState().selectParagraph(null);
   if (!textEditStore.getState().editing) st.select(op.id);
   // A photo or a gradient behind the text: one flat colour covers it, and may show.
   if (!p.coverUniform) noticeStore.getState().show({ kind: "info", text: t.ocr.uneven });
 }
+
+/** Deletes the text of paragraph `p` OCR read on `pageKey`: a text.ocr_edit op that paints its covers and draws
+ *  nothing, selected. */
+export const deleteOcrText = (pageKey: string, p: OcrParagraph): Promise<void> =>
+  putOcrEdit(pageKey, p, (box) => blankBox(box, p.cover));
+
+/** Turns OCR paragraph `p` into a text.ocr_edit op changed by `change` (moved), selected. The covers stay where the
+ *  print was; the text moves off them. */
+export const materializeOcr = (pageKey: string, p: OcrParagraph, change: (box: TextBox) => TextBox): Promise<void> =>
+  putOcrEdit(pageKey, p, (box) => relayout(change(box), (f) => fontStore.get(f)));
 
 /** The paragraph (original, or one OCR read) selected with the select tool, if it can still be edited. */
 export function selectedParagraph(): { pageKey: string; original?: Paragraph; ocr?: OcrParagraph } | null {
