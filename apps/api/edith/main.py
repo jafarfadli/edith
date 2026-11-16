@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from edith.errors import UnhandledErrors, install_error_handlers
 from edith.fonts import FontRegistry
 from edith.hidden_cache import HiddenTextCache
-from edith.routes import assets, documents, export, ocr, text
+from edith.routes import assets, documents, export, ocr, text, tools
 from edith.settings import Settings
 from edith.storage import Storage
 
@@ -60,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(export.router)
     app.include_router(text.router)
     app.include_router(ocr.router)
+    app.include_router(tools.router)
 
     @app.get("/health")
     def health() -> dict:
