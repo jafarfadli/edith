@@ -32,17 +32,19 @@ MIN_DPI = 96               # … or coarser, down to this, to stay within MAX_PI
 MAX_PIXELS = 12_000_000    # pixels one page's measurement may render
 REACH_EM = 0.6             # the picture's print is looked for this far (× size) above and below the invisible line
 ROW_SHARE = 0.01           # a pixel row with this share of the line's columns inked is a row of print
+BESIDE_EM = 0.4            # … or, beside the text, this far one way (a dash of a dashed line, a rule)
+INNER_GAP = 1.2            # under the invisible text, ink further apart than this × the band's height is two columns
 WORD_GAP = 0.9             # ink stretches closer than this × the ink band's height are one line of print
-START_EM = 1.0             # the print starts at most this far (× band height) right of where the invisible text does
 WIDTH_RANGE = (0.6, 1.6)   # the print's width over the invisible text's
 SIZE_RANGE = (0.5, 2.0)    # the measured size over the invisible text's
 H_RANGE = (0.7, 1.45)      # the print's width over the bundled face's at the measured size (else: not that text)
 LETTER_GAP = 0.15         # ink pieces closer than this × the band's height are one letter (or touching letters)
-FOREIGN_EM = 0.3           # a piece at the stretch's end, beside the text, reaching this far (× band height) past the
-                           # band is a graphic (a dot of a diagram, an icon, a rule), not print of the line
+FOREIGN_EM = 0.2           # a piece reaching this far (× band height) above and below the letters' band is a graphic (a dot of a
+                           # diagram, a box's edge, the paper around a dark box), not print of the line
 XLOW = set("acemnorsuvwxz")  # lower-case letters that stand no higher than the x-height
 CAPS_TOP = 0.15            # a letter whose top is within this share of the cap height of the top is a capital
-LOW_MARKS = set(".,·-–_:;")  # marks that stand lower than a capital
+TALL = set("bdfhklt")      # lower-case letters that reach about the cap height
+MARK_SHARE = 0.5           # ink less tall than this × the cap height is a mark (full stop, comma, dot), not a letter
 CAPS_PIECES = 0.7          # … judged only where the print shows at least this share of the letters apart
 TRACK_EM = 0.5             # spacing between letters (× size) at most, for print wider than its text at H_SCALE[1]
 H_SCALE = (0.8, 1.25)      # the horizontal scale a line is drawn with to keep the print's width, within these bounds
@@ -201,7 +203,15 @@ def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face
         return None
     t = _otsu(grey)
     dark = grey < t
-    ink = ~dark if dark.mean() > 0.5 else dark  # ink is the fewer pixels: dark print on paper, or light on dark
+    # Ink is the fewer pixels where the text stands (dark print on paper, or light print in a dark box), judged there
+    # only: a row of the slide may be mostly dark boxes, or mostly paper, elsewhere.
+    s0 = render.scale
+    lx0 = max(int(round((inv.x0 - render.rect.x0) / s0)) - x0, 0)
+    lx1 = min(int(round((inv.x1 - render.rect.x0) / s0)) - x0, grey.shape[1])
+    ly0 = max(int(round((line["baseline"] - 0.75 * size - render.rect.y0) / s0)) - y0, 0)
+    ly1 = min(int(round((line["baseline"] + 0.1 * size - render.rect.y0) / s0)) - y0, grey.shape[0])
+    local = dark[ly0:ly1, lx0:lx1]
+    ink = ~dark if (local.mean() if local.size else dark.mean()) > 0.5 else dark
     if not ink.any() or ink.all():
         return None
     if abs(float(grey[ink].mean()) - float(grey[~ink].mean())) < CONTRAST:
@@ -233,13 +243,11 @@ def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face
     if overlap < 0.25 * (b - a):
         return None
     band_h = b - a
-    # The stretch of ink columns on that band that starts where the invisible text does, as far as the print goes on.
-    cols = ink[a:b].any(axis=0)
-    stretches = _runs(cols, gap=int(WORD_GAP * band_h))
-    start = next((st for st in stretches if st[0] <= c0 + START_EM * band_h and st[1] > c0 - START_EM * band_h), None)
-    if start is None:
+    # The stretch of ink columns on that band that holds the invisible text's print, as far as the print goes on.
+    found = _line_stretch(ink, (a, b), (c0, c1))
+    if found is None:
         return None
-    ix0, ix1 = _trim_foreign(ink, start, (a, b), (c0, c1))
+    ix0, ix1 = found
     # The rows of that stretch (taller letters further right: the whole stretch counts).
     rows = ink[:, ix0:ix1].any(axis=1)
     near = [(p, q) for p, q in _runs(rows, gap=1) if q > a and p < b]
@@ -301,12 +309,15 @@ def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face
 
 
 def _all_caps(ink: np.ndarray, stretch: tuple[int, int], rows: tuple[int, int], text: str) -> bool:
-    """True when the print of `text` (ink columns `stretch`, rows `rows`) is that text in capitals: it has lower-case
-    letters that stand no higher than the x-height, yet every letter of the print reaches the cap height (bar the few
-    marks that stand low: a full stop, a middle dot). Judged only where the print's letters stand apart (spaced-out
-    labels, headings): touching letters hide the short ones."""
+    """True when the print of `text` (ink columns `stretch`, rows `rows`) is that text in capitals: the text has letters
+    that stand no higher than the x-height and others that reach the cap height (a capital, a digit, an ascender: the
+    measure), yet no letter of the print stands short. Marks (a full stop, a comma, a middle dot) are small and do not
+    count. Judged only where the print's letters stand apart (spaced-out labels, headings): touching letters hide the
+    short ones."""
     if text.upper() == text or len(text.upper()) != len(text) or not any(c in XLOW for c in text):
         return False
+    if not any(c.isupper() or c.isdigit() or c in TALL for c in text):
+        return False  # all short ("spine"): in capitals or not, every letter would stand as high
     top, bottom = rows
     x0, x1 = stretch
     letters = [c for c in text if not c.isspace()]
@@ -321,35 +332,46 @@ def _all_caps(ink: np.ndarray, stretch: tuple[int, int], rows: tuple[int, int], 
     cap = baseline - min(u for u, _ in spans)
     if cap <= 0:
         return False
-    low = sum(u > CAPS_TOP * cap for u, _ in spans)
-    return low <= sum(c in LOW_MARKS for c in letters)
+    # A short letter: its top well below the cap height, and itself no mark (at least half as tall as a capital).
+    return not any(u > CAPS_TOP * cap and v - u >= MARK_SHARE * cap for u, v in spans)
 
 
-def _trim_foreign(ink: np.ndarray, stretch: tuple[int, int], band: tuple[int, int],
-                  text: tuple[int, int]) -> tuple[int, int]:
-    """`stretch` (ink columns) without the pieces at its ends that are no print of the line: wholly beside the invisible
-    text's columns `text`, and reaching well above or below the band of its letters (a diagram's dot set right next to
-    a label, an icon before it). A letter never does: the band holds the line's ascenders and descenders."""
+def _line_stretch(ink: np.ndarray, band: tuple[int, int], text: tuple[int, int]) -> tuple[int, int] | None:
+    """The ink columns of the print of a line whose invisible text spans columns `text` and whose letters stand in rows
+    `band`: the pieces of ink on the band under the text (all of them, however far apart: a monospace line's wide
+    spaces), and beyond it each next piece still close enough to be the same line, up to the first that is a graphic
+    beside it (a box's edge, the paper around a dark label box, a diagram's dot: it reaches well above and below the
+    letters' band, as no letter does). None when no letter stands under the text, or a
+    graphic or a gap wider than a space stands amid it."""
     a, b = band
-    reach = FOREIGN_EM * (b - a)
-    x0, x1 = stretch
-    pieces = [(x0 + p, x0 + q) for p, q in _runs(ink[a:b, x0:x1].any(axis=0), gap=max(1, int(LETTER_GAP * (b - a))))]
+    band_h = b - a
+    reach = FOREIGN_EM * band_h
+    pieces = _runs(ink[a:b].any(axis=0), gap=max(1, int(LETTER_GAP * band_h)))
 
-    def foreign(p: int, q: int) -> bool:
-        if not (q <= text[0] or p >= text[1]):
-            return False
-        rows = np.nonzero(ink[:, p:q].any(axis=1))[0]
+    def tall(p: int, q: int, both: bool = True) -> bool:
+        """Reaching well past the band: above and below (no letter does: under the text, where the band may miss a
+        rare descender), or, beside the text, either way (a dash of a dashed line, a rule)."""
         near = [(u, v) for u, v in _runs(ink[:, p:q].any(axis=1), gap=1) if v > a and u < b]
-        if not rows.size or not near:
+        if not near:
             return False
-        top, bottom = min(u for u, _ in near), max(v for _, v in near)
-        return a - top > reach or bottom - b > reach
+        over, under = a - min(u for u, _ in near), max(v for _, v in near) - b
+        # Beside the text also far past it one way, further than an ascender or a descender of letters beyond it.
+        return (over > reach and under > reach) or (not both and max(over, under) > BESIDE_EM * band_h)
 
-    while len(pieces) > 1 and foreign(*pieces[0]):
-        pieces.pop(0)
-    while len(pieces) > 1 and foreign(*pieces[-1]):
-        pieces.pop()
-    return pieces[0][0], pieces[-1][1]
+    under = [i for i, (p, q) in enumerate(pieces) if q > text[0] and p < text[1] and not tall(p, q)]
+    if not under:
+        return None
+    lo, hi = min(under), max(under)
+    if any(tall(*pieces[i]) for i in range(lo, hi + 1)):
+        return None  # a graphic amid the text (a table's rule between two cells read as one line): a cover would take it
+    if any(pieces[i + 1][0] - pieces[i][1] > INNER_GAP * band_h for i in range(lo, hi)):
+        return None  # a gap wider than any space: two columns (table cells) read as one line
+    gap = WORD_GAP * band_h
+    while lo > 0 and pieces[lo][0] - pieces[lo - 1][1] <= gap and not tall(*pieces[lo - 1], both=False):
+        lo -= 1
+    while hi < len(pieces) - 1 and pieces[hi + 1][0] - pieces[hi][1] <= gap and not tall(*pieces[hi + 1], both=False):
+        hi += 1
+    return pieces[lo][0], pieces[hi][1]
 
 
 def _clear_of(cover: pymupdf.Rect, ink: pymupdf.Rect, others: list[pymupdf.Rect], gap: float) -> pymupdf.Rect:
