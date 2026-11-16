@@ -209,6 +209,15 @@ body { background: var(--panel); color: var(--ink); }
   background: linear-gradient(transparent 44%, oklch(81% 0.155 80 / 0.55) 50%, transparent 56%);
   animation: scan 2.4s ease-in-out 2s infinite alternate both;
 }
+/* On a wide screen the two words of the headline drift apart as the page scrolls away from them. */
+@keyframes part-left { to { translate: -12vw 0; opacity: 0.35; } }
+@keyframes part-right { to { translate: 12vw 0; opacity: 0.35; } }
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll()) {
+    .hero-edit { animation: part-left linear both; animation-timeline: scroll(root); animation-range: 0 75vh; }
+    .hero-pdf { animation: part-right linear both; animation-timeline: scroll(root); animation-range: 0 75vh; }
+  }
+}
 /* Crumbs on the bench drifting a few pixels. */
 @keyframes drift { 50% { translate: 6px -9px; } }
 .crumb { animation: drift 8s ease-in-out infinite; }

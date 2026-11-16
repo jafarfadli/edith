@@ -2,16 +2,16 @@ import { t } from "@/lib/strings";
 import { DotWord } from "./DotWord";
 import { PaperLetter } from "./PaperLetter";
 
-/** The start page's headline, "EDIT PDF", made of things on the bench and set as one tight block: "EDIT" printed in
- *  dots exactly as wide as "PDF" under it, the "D" of "PDF" a sheet being edited, and the "F" cut through by the
- *  snap-off cutter, its top half slipping along the cut. */
-export function Headline() {
+/** The start page's headline, "EDIT PDF", as one block filling the width it is given: "EDIT" printed in dots across
+ *  the full width, and "PDF" under it sized to the same width (a container query), its "D" a sheet being edited and its
+ *  "F" cut through by the snap-off cutter, the top half slipping along the cut. On a wide screen the two words drift
+ *  apart as the page scrolls. */
+export function Headline({ className }: { className?: string }) {
   return (
-    <h1 className="relative inline-flex select-none flex-col text-[clamp(4.4rem,21vw,8.5rem)] lg:text-[10.5rem]">
+    <h1 className={`@container select-none ${className ?? ""}`}>
       <span className="sr-only">{t.upload.title}</span>
-      {/* No width of its own (w-0), so the "PDF" line sets the block's width and the dots fill it. */}
-      <DotWord className="block w-0 min-w-full" />
-      <span aria-hidden className="-mt-[0.2em] -mb-[0.1em] flex items-center font-wide font-extrabold leading-[0.86] tracking-[-0.045em] text-accent">
+      <span aria-hidden className="hero-edit block"><DotWord className="block w-full" /></span>
+      <span aria-hidden className="hero-pdf -mt-[6.5cqw] -mb-[3cqw] flex items-center font-wide text-[45cqw] font-extrabold leading-[0.86] tracking-[-0.045em] text-accent">
         <span className="pdf-rise">P</span>
         <span className="pdf-rise [animation-delay:.08s]"><PaperLetter /></span>
         <span className="cut-letter pdf-rise relative [animation-delay:.16s]">
