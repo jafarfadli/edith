@@ -104,3 +104,18 @@ export function fields(tool: ToolDef, o: ToolOptions, password: string): Record<
     default: return out;
   }
 }
+
+/** How many of a document's `total` pages a page list ("1-3, 5, 8-"; empty: all) takes, each page once; null when
+ *  the list does not parse. */
+export function countPages(spec: string, total: number): number | null {
+  if (!spec.trim()) return total;
+  if (!PAGES.test(spec)) return null;
+  const taken = new Set<number>();
+  for (const part of spec.split(",")) {
+    const [a, b] = part.split("-").map((x) => x.trim());
+    const from = a ? Number(a) : 1;
+    const to = part.includes("-") ? (b ? Number(b) : total) : from;
+    for (let p = Math.max(1, from); p <= Math.min(total, to); p++) taken.add(p);
+  }
+  return taken.size;
+}

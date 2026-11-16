@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accepted, DEFAULT_OPTIONS, fields, invalid, toolBySlug, TOOLS } from "./tools";
+import { accepted, countPages, DEFAULT_OPTIONS, fields, invalid, toolBySlug, TOOLS } from "./tools";
 import { t } from "./strings";
 
 const tool = (slug: string) => toolBySlug(slug)!;
@@ -48,5 +48,14 @@ describe("PDF tools", () => {
     expect(fields(tool("nomor-halaman"), { ...o, position: "top-right", numberFormat: "n_of", start: 3 }, "")).toEqual(
       { position: "top-right", number_format: "n_of", start: "3", pages: "" });
     expect(fields(tool("pdf-bisa-dicari"), o, "")).toEqual({});
+  });
+
+  it("counts the pages a page list takes, each once and only those the document has", () => {
+    expect(countPages("", 7)).toBe(7);
+    expect(countPages("2-3", 7)).toBe(2);
+    expect(countPages("1-3, 2, 8-", 9)).toBe(5); // 1, 2, 3, 8, 9
+    expect(countPages("-2, 6-", 7)).toBe(4);
+    expect(countPages("5-9", 6)).toBe(2);
+    expect(countPages("1,,2", 6)).toBeNull();
   });
 });

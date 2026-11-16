@@ -55,7 +55,8 @@ function kindOf(op: ContentOp | undefined, tool: string): Kind {
   return null;
 }
 
-const BAR = "absolute left-1/2 top-3 z-30 h-10 max-w-[calc(100%-1.5rem)] -translate-x-1/2 overflow-x-auto rounded-lg bg-panel px-3 text-sm shadow-pop [scrollbar-width:none]";
+// On a phone the row is wider than the screen: it scrolls, and its right edge fades out to say so.
+const BAR = "absolute left-1/2 top-3 z-30 h-10 max-w-[calc(100%-1.5rem)] -translate-x-1/2 overflow-x-auto rounded-lg bg-panel px-3 text-sm shadow-pop [scrollbar-width:none] max-sm:pr-8 max-sm:[mask-image:linear-gradient(to_right,#000_calc(100%-2.5rem),transparent)]";
 
 const DRAG_SHAPES: ReadonlySet<string> = new Set(["rect", "ellipse", "line", "arrow"]);
 /** Room the bar loses inside the canvas: its `max-w-[calc(100%-1.5rem)]` margins and its `px-3` padding. */

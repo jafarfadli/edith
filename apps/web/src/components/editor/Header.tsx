@@ -102,7 +102,7 @@ export function Header({ onNotice }: { onNotice: (n: NoticeMsg | null) => void }
       <input
         aria-label={t.editor.fileName}
         value={fileName}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => { setName(e.target.value); downloadStore.setState({ fileName: e.target.value }); }}
         className="h-8 w-36 min-w-0 flex-1 truncate rounded-md font-medium sm:flex-none xl:w-60 border border-transparent bg-transparent px-2 text-sm text-muted hover:border-line-strong focus:border-accent focus:text-ink focus:outline-none focus:ring-1 focus:ring-accent"
       />
       <div className="hidden flex-1 sm:block" />
@@ -135,8 +135,9 @@ export function Header({ onNotice }: { onNotice: (n: NoticeMsg | null) => void }
               data-testid="download-options"
               onClick={() => downloadStore.getState().open()}
               disabled={busy || !info}
-              className="grid w-7 place-items-center border-l border-accent-ink/25 transition-colors hover:bg-accent-hover disabled:opacity-60"
+              className="flex items-center gap-1 border-l border-accent-ink/20 px-2 text-xs font-semibold transition-colors hover:bg-accent-hover disabled:opacity-60"
             >
+              <span aria-hidden className="hidden md:inline">{t.downloadOptions.short}</span>
               <ChevronDownIcon {...ICON} />
             </button>
           </Tip>

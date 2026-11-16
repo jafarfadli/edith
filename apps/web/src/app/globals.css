@@ -95,6 +95,13 @@
   @keyframes slide-in {
     from { translate: 70px 30px; }
   }
+  /* A panel pulled in from the right edge, or up from the bottom on a phone; the backdrop fades in under it. */
+  --animate-drawer-right: drawer-right 0.38s var(--ease-out-expo) both;
+  --animate-drawer-up: drawer-up 0.38s var(--ease-out-expo) both;
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  @keyframes drawer-right { from { translate: 100% 0; } }
+  @keyframes drawer-up { from { translate: 0 100%; } }
+  @keyframes fade-in { from { opacity: 0; } }
 }
 
 html, body { overflow-x: clip; }
