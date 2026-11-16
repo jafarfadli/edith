@@ -16,8 +16,8 @@ async function open(page: Page) {
 test("a canvas click right after another tool selects the object under it", async ({ page }) => {
   const box = await open(page);
   const miniBar = page.getByTestId("mini-bar");
-  const check = page.getByRole("button", { name: "Centang", exact: true });
-  const select = page.getByRole("button", { name: "Pilih", exact: true });
+  const check = page.getByRole("button", { name: "Check", exact: true });
+  const select = page.getByRole("button", { name: "Select", exact: true });
 
   // Two check marks (the tool stays active), then straight back to Pilih and a click on the first one.
   await check.click();
@@ -35,7 +35,7 @@ test("a canvas click right after another tool selects the object under it", asyn
   }
 
   // Draw a rectangle (selects it), then click the first check mark immediately.
-  await page.getByRole("button", { name: "Bentuk pilihan" }).click();
+  await page.getByRole("button", { name: "Shape pilihan" }).click();
   await page.getByRole("menuitem", { name: "Persegi", exact: true }).click();
   await page.mouse.move(box.x + 100, box.y + 300);
   await page.mouse.down();

@@ -30,17 +30,17 @@ test("edit and download a PDF", async ({ page }) => {
   await expect(page.getByTestId("page")).toHaveCount(2);
 
   // Redact "Page 0" on page 1 (zoom 100%: 1 pt = 1 px; text at x=72, baseline y=72).
-  await page.getByRole("button", { name: "Penghapus pilihan" }).click();
-  await page.getByRole("menuitem", { name: "Redaksi" }).click();
+  await page.getByRole("button", { name: "Erase pilihan" }).click();
+  await page.getByRole("menuitem", { name: "Redact" }).click();
   await dragOnPage(page, 0, [60, 50], [180, 80]);
 
   // Rectangle on page 1.
-  await page.getByRole("button", { name: "Bentuk pilihan" }).click();
+  await page.getByRole("button", { name: "Shape pilihan" }).click();
   await page.getByRole("menuitem", { name: "Persegi" }).click();
   await dragOnPage(page, 0, [100, 200], [250, 300]);
 
   // Text box on page 1.
-  await page.getByRole("button", { name: "Teks", exact: true }).click();
+  await page.getByRole("button", { name: "Text", exact: true }).click();
   const p1 = (await page.getByTestId("page").first().boundingBox())!;
   await page.mouse.click(p1.x + 100, p1.y + 400);
   const editor = page.getByTestId("text-editor");
@@ -54,7 +54,7 @@ test("edit and download a PDF", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+Shift+z");
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const download = await downloadPromise;
   const file = path.join(test.info().outputDir, "out.pdf");
   await download.saveAs(file);
@@ -79,12 +79,12 @@ test("place an Indonesian preset stamp and a custom stamp with date", async ({ p
   await page.getByTestId("file-input").setInputFiles(SAMPLE);
   await expect(page.getByTestId("page")).toHaveCount(3);
 
-  await page.getByRole("button", { name: "Gambar pilihan" }).click();
+  await page.getByRole("button", { name: "Image pilihan" }).click();
   await page.getByRole("menuitem", { name: "Stamp" }).click();
   const dialog = page.getByRole("dialog", { name: "Pilih stamp" });
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await page.getByRole("button", { name: "Gambar pilihan" }).click();
+  await page.getByRole("button", { name: "Image pilihan" }).click();
   await page.getByRole("menuitem", { name: "Stamp" }).click();
   await expect(dialog.getByRole("button", { name: "TANDA TANGAN DI SINI", exact: true })).toBeVisible();
   await expect(dialog.getByRole("radio", { name: "Indonesia" })).toHaveAttribute("aria-checked", "true");
@@ -97,7 +97,7 @@ test("place an Indonesian preset stamp and a custom stamp with date", async ({ p
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("radiogroup", { name: "Warna" })).toBeVisible(); // stamp selected: color swatches
 
-  await page.getByRole("button", { name: "Gambar pilihan" }).click();
+  await page.getByRole("button", { name: "Image pilihan" }).click();
   await page.getByRole("menuitem", { name: "Stamp" }).click();
   await page.getByRole("tab", { name: "Kustom" }).click();
   await page.getByRole("textbox", { name: "Teks stamp" }).fill("DIPERIKSA");
@@ -110,8 +110,8 @@ test("Kelola Halaman: Escape closes the dialog even after a button was disabled,
   await page.goto("/");
   await page.getByTestId("file-input").setInputFiles(SAMPLE);
   await expect(page.getByTestId("page")).toHaveCount(3);
-  await page.getByRole("button", { name: "Kelola Halaman" }).click();
-  const dlg = page.getByRole("dialog", { name: "Kelola Halaman" });
+  await page.getByRole("button", { name: "Manage Pages" }).click();
+  const dlg = page.getByRole("dialog", { name: "Manage Pages" });
   await expect(dlg.getByTestId("manage-page")).toHaveCount(3);
   await dlg.getByTestId("manage-page").nth(2).click();
   await dlg.getByRole("button", { name: /Hapus/ }).click(); // selection clears, so the button disables and loses focus

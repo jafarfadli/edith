@@ -10,7 +10,7 @@ test("the font picker lists document fonts by their familiar names; choosing one
   await expect(page).toHaveURL(/\/edit\//);
   await expect(page.getByTestId("page").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Teks", exact: true }).click();
+  await page.getByRole("button", { name: "Text", exact: true }).click();
   const box = (await page.getByTestId("page").first().boundingBox())!;
   const editor = page.getByTestId("text-editor");
   await expect(async () => { // a click before the overlay (loaded on demand) is mounted is lost: click again
@@ -48,7 +48,7 @@ test("the font picker lists document fonts by their familiar names; choosing one
   expect(await draft()).not.toContain("Georgia");
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const file = path.join(test.info().outputDir, "fonts.pdf");
   await (await downloadPromise).saveAs(file);
   const span = pdfSpans(file)[0].find((s) => s.text.includes("Surat Dinas"))!;

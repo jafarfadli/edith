@@ -145,6 +145,13 @@ body { background: var(--panel); color: var(--ink); }
   stroke-dashoffset: 1;
   animation: draw 0.9s var(--ease-out-expo) forwards;
 }
+/* Scissors running round a rectangle (the cut line's box is their containing block), in step with `draw-in`. */
+@keyframes cut-round { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+@utility cut-blade {
+  offset-path: inset(0);
+  offset-rotate: auto 90deg;
+  animation: cut-round 1.4s var(--ease-out-expo) forwards;
+}
 /* The cut line around a drop target: the dashes run while a file is held over it. */
 @keyframes march { to { stroke-dashoffset: -16; } }
 @utility marching { animation: march 0.6s linear infinite; }

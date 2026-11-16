@@ -12,7 +12,7 @@ async function pageBox(page: Page, index = 0) {
 
 async function download(page: Page, name: string): Promise<string> {
   const pending = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const file = path.join(test.info().outputDir, name);
   await (await pending).saveAs(file);
   return file;
@@ -29,7 +29,7 @@ test("highlight, signature, stamp and form, then download", async ({ page }) => 
   // Highlight "penting": the highlight tool loads the page's character boxes, then a drag selects the word.
   const [x0, , x1] = wordBox(ANNOTS_PDF, "penting");
   const chars = page.waitForResponse((r) => /\/pages\/0\/chars$/.test(r.url()) && r.ok());
-  await page.getByRole("button", { name: "Penanda", exact: true }).click(); // default sub-tool: Stabilo
+  await page.getByRole("button", { name: "Markup", exact: true }).click(); // default sub-tool: Stabilo
   await chars;
   await page.mouse.move(box.x + x0 + 1, box.y + 76);
   await page.mouse.down();
@@ -42,23 +42,23 @@ test("highlight, signature, stamp and form, then download", async ({ page }) => 
   await expect(page.getByRole("button", { name: "Link", exact: true })).toHaveCount(0);
 
   // Typed signature (saved to the library), then the same signature again from the library.
-  await page.getByRole("button", { name: "Tanda Tangan", exact: true }).click();
+  await page.getByRole("button", { name: "Signature", exact: true }).click();
   const modal = page.getByRole("dialog", { name: "Tanda tangan" });
   await modal.getByRole("textbox", { name: "Nama Anda" }).fill("Budi Santoso");
   await modal.getByRole("radio", { name: "Great Vibes" }).click();
   await modal.getByRole("button", { name: "Tambahkan", exact: true }).click();
   await expect(modal).toHaveCount(0);
-  await page.getByRole("button", { name: "Tanda Tangan", exact: true }).click();
+  await page.getByRole("button", { name: "Signature", exact: true }).click();
   await modal.getByRole("button", { name: "Pakai tanda tangan" }).first().click();
   await expect(modal).toHaveCount(0);
 
   // Preset stamps: the Indonesian one (default language), then the English one.
   const picker = page.getByRole("dialog", { name: "Pilih stamp" });
-  await page.getByRole("button", { name: "Gambar pilihan" }).click();
+  await page.getByRole("button", { name: "Image pilihan" }).click();
   await page.getByRole("menuitem", { name: "Stamp" }).click();
   await picker.getByRole("button", { name: "DISETUJUI", exact: true }).click();
   await expect(picker).toHaveCount(0);
-  await page.getByRole("button", { name: "Gambar pilihan" }).click();
+  await page.getByRole("button", { name: "Image pilihan" }).click();
   await page.getByRole("menuitem", { name: "Stamp" }).click();
   await picker.getByRole("radio", { name: "English", exact: true }).click();
   await picker.getByRole("button", { name: "APPROVED", exact: true }).click();
@@ -88,7 +88,7 @@ test("highlight, signature, stamp and form, then download", async ({ page }) => 
   expect(Object.fromEntries(p1.widgets.map((w) => [w.name, w.value]))).toEqual({ nama: "Budi Santoso", setuju: "Yes" });
 
   // Flattened: the fields become page content, the annotations stay.
-  await page.getByRole("checkbox", { name: "Ratakan form" }).check();
+  await page.getByRole("checkbox", { name: "Flatten form" }).check();
   const flat = pdfReport(await download(page, "annots-flat.pdf"));
   expect(flat.isForm).toBe(false);
   expect(flat.pages[0].widgets).toEqual([]);

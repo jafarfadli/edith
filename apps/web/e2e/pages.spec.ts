@@ -13,7 +13,7 @@ async function pageBox(page: Page, index: number) {
 }
 
 async function shapeTool(page: Page, name: string) {
-  await page.getByRole("button", { name: "Bentuk pilihan" }).click();
+  await page.getByRole("button", { name: "Shape pilihan" }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
 }
 
@@ -25,8 +25,8 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   await expect(page.getByTestId("page")).toHaveCount(3);
 
   // Kelola Halaman: rotate page 3, duplicate page 1, delete page 2, then Simpan (one undo step).
-  await page.getByRole("button", { name: "Kelola Halaman" }).click();
-  const modal = page.getByRole("dialog", { name: "Kelola Halaman" });
+  await page.getByRole("button", { name: "Manage Pages" }).click();
+  const modal = page.getByRole("dialog", { name: "Manage Pages" });
   const tile = (key: string) => modal.locator(`[data-testid="manage-page"][data-page-key="${key}"]`);
   // Multi-select: page 1 .. 3 together (click + Shift+click), one rotation turns all of them ...
   await tile("o0").click();
@@ -80,14 +80,14 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   box = await pageBox(page, 3);
   const [w0, , w1] = wordBox(IMPORT_PDF, "penting");
   const chars = page.waitForResponse((r) => /\/pages\/0\/chars$/.test(r.url()) && r.ok());
-  await page.getByRole("button", { name: "Penanda", exact: true }).click();
+  await page.getByRole("button", { name: "Markup", exact: true }).click();
   await chars;
   await page.mouse.move(box.x + w0 + 1, box.y + 196);
   await page.mouse.down();
   await page.mouse.move(box.x + (w0 + w1) / 2, box.y + 196, { steps: 3 });
   await page.mouse.move(box.x + w1 - 1, box.y + 196, { steps: 3 });
   await page.mouse.up();
-  await page.getByRole("button", { name: "Pilih", exact: true }).click();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
   await page.getByTestId("page").nth(3).getByRole("textbox", { name: "nama", exact: true }).fill("Impor Budi");
 
   // Back to page 1 (its thumbnail scrolls it to the top); fill the main PDF's `nama` (same name, other field).
@@ -122,9 +122,9 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   await page.keyboard.press("Enter");
 
   // A check mark, deleted again from the Anotasi panel.
-  await page.getByRole("button", { name: "Centang", exact: true }).click();
+  await page.getByRole("button", { name: "Check", exact: true }).click();
   await page.mouse.click(box.x + 500, box.y + 600);
-  await page.getByRole("button", { name: "Pilih", exact: true }).click();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
 
   // Anotasi panel: a click selects the rectangle; copy it, paste it on page 2, line it up with the page's left edge.
   await page.getByRole("tab", { name: /Anotasi/ }).click();
@@ -144,13 +144,13 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
   // A highlight on page 2 ("Halaman" of "Halaman satu", baseline 72), inside the coming crop: it stays in the export.
   // (Sticky notes have no tool since M5, so annotations entirely outside a crop are covered by the API tests only.)
   box = await pageBox(page, 1);
-  await page.getByRole("button", { name: "Penanda", exact: true }).click();
+  await page.getByRole("button", { name: "Markup", exact: true }).click();
   await page.mouse.move(box.x + 73, box.y + 67);
   await page.mouse.down();
   await page.mouse.move(box.x + 100, box.y + 67, { steps: 3 });
   await page.mouse.move(box.x + 125, box.y + 67, { steps: 3 });
   await page.mouse.up();
-  await page.getByRole("button", { name: "Pilih", exact: true }).click();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
   await expect(items).toHaveCount(8);
 
   // Crop page 2 (the default crop: 5 % in from every edge).
@@ -168,7 +168,7 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
 
   const download = async (name: string) => {
     const pending = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Unduh", exact: true }).click();
+    await page.getByRole("button", { name: "Download", exact: true }).click();
     const f = path.join(test.info().outputDir, name);
     await (await pending).saveAs(f);
     return f;

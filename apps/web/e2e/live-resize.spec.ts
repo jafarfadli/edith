@@ -40,7 +40,7 @@ test("resizing a text box re-wraps live, Escape cancels, release is one undo ste
   await page.waitForTimeout(500); // the page settles in its place (the layout moves it while it loads)
   const box = (await page.getByTestId("page").first().boundingBox())!; // zoom 100 %: 1 pt = 1 px
 
-  await page.getByRole("button", { name: "Teks", exact: true }).click();
+  await page.getByRole("button", { name: "Text", exact: true }).click();
   const editor = page.getByTestId("text-editor");
   await expect(async () => { // the overlay takes the click once it is mounted
     await page.mouse.click(box.x + 100, box.y + 400);

@@ -162,7 +162,6 @@ function Dialog({ pages: initialPages }: { pages: string }) {
           </div>
           <div className="flex flex-col gap-3 border-t border-line-strong bg-panel px-5 pb-5 pt-4">
             <div className="flex flex-col gap-0.5" data-testid="download-summary" aria-live="polite">
-              <span className="font-condensed text-2xs font-semibold uppercase tracking-[0.14em] text-faint">{o.result}</span>
               <span className={`truncate text-sm ${count ? "font-medium text-ink" : "text-danger-text"}`}>{summary[0]}</span>
               {summary.length > 1 && <span className="text-xs text-muted">{summary.slice(1).join(" · ")}</span>}
             </div>

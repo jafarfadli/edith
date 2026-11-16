@@ -97,7 +97,7 @@ export function Header({ onNotice }: { onNotice: (n: NoticeMsg | null) => void }
   return (
     <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-line bg-panel px-2 sm:gap-2">
       <Link href="/" aria-label={t.appName} title={t.appName} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-hover sm:w-[3.75rem]">
-        <LogoMark size={34} />
+        <LogoMark size={30} />
       </Link>
       <input
         aria-label={t.editor.fileName}

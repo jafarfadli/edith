@@ -34,7 +34,7 @@ async function rect(page: Page, box: Box, a: [number, number], b: [number, numbe
 
 async function download(page: Page, name: string): Promise<string> {
   const pending = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const file = path.join(test.info().outputDir, name);
   await (await pending).saveAs(file);
   return file;
@@ -221,7 +221,7 @@ test("the object menu works from the keyboard and stays inside the window", asyn
   await page.keyboard.press("r");
   await page.keyboard.press("Delete");
   await expect(menu(page)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Pilih", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Select", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(item(page, "Mundur satu lapis")).toBeFocused();
   // A scroll inside the menu (a long list) does not close it.
   await menu(page).evaluate((el) => el.dispatchEvent(new Event("scroll")));

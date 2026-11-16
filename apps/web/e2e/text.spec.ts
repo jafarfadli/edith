@@ -56,15 +56,15 @@ test("edit an original paragraph, find & replace, download", async ({ page }) =>
 
   // Replace All is one undo step.
   await page.getByRole("button", { name: "Tutup" }).click();
-  await page.getByRole("button", { name: "Urungkan" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
   await page.keyboard.press("ControlOrMeta+f");
   await page.getByRole("textbox", { name: "Cari teks" }).fill("lama");
   await expect(page.getByTestId("find-bar")).toContainText("1 dari 2");
   await page.getByRole("button", { name: "Tutup" }).click();
-  await page.getByRole("button", { name: "Ulangi" }).click();
+  await page.getByRole("button", { name: "Redo" }).click();
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const file = path.join(test.info().outputDir, "text.pdf");
   await (await downloadPromise).saveAs(file);
 

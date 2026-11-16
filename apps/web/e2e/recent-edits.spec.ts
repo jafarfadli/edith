@@ -23,7 +23,7 @@ async function upload(page: Page) {
 
 async function addText(page: Page, text: string) {
   const box = (await page.getByTestId("page").first().boundingBox())!;
-  await page.getByRole("button", { name: "Teks", exact: true }).click();
+  await page.getByRole("button", { name: "Text", exact: true }).click();
   const editor = page.getByTestId("text-editor");
   await expect(async () => {
     await page.mouse.click(box.x + 100, box.y + 400);

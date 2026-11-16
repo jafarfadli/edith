@@ -139,7 +139,7 @@ test("a drag on the empty page selects what it touches; Shift toggles; a click o
 test("the marquee works at another zoom and does not leave its page", async ({ page }) => {
   let box = await open(page);
   await threeRects(page, box);
-  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Perbesar" }).click();
+  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Zoom in" }).click();
   await expect(page.getByText("150%")).toBeVisible();
   box = (await page.getByTestId("page").first().boundingBox())!;
   const z = 1.5;
@@ -293,7 +293,7 @@ test("Alt over another object shows the distances to it", async ({ page }) => {
 test("Space+drag and the middle button pan the canvas", async ({ page }) => {
   let box = await open(page);
   await rect(page, box, ...A);
-  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Perbesar" }).click();
+  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Zoom in" }).click();
   await expect(page.getByText("150%")).toBeVisible();
   box = (await page.getByTestId("page").first().boundingBox())!;
   const scroller = page.locator("#page-scroller");
