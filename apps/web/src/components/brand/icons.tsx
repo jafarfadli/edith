@@ -60,3 +60,45 @@ export const ArrowDownIcon = icon("ArrowDown", <path d="M12 5v13.5M6.5 13l5.5 5.
 export const ScissorsIcon = icon("Scissors", <><circle cx="7" cy="17.5" r="2.75" /><circle cx="17" cy="17.5" r="2.75" /><path d="M8.75 15.4 16 3.5M15.25 15.4 8 3.5" /></>);
 /** Busy: a quarter of a circle turning (add `animate-spin`). */
 export const SpinnerIcon = icon("Spinner", <><circle cx="12" cy="12" r="8" opacity=".25" /><path d="M20 12a8 8 0 0 0-8-8" /></>);
+
+/* The editor's tools. */
+export const PointerIcon = icon("Pointer", <path d="M5.5 4 18 10.5l-5.5 1.75L10 18z" />);
+export const TextIcon = icon("Text", <path d="M5.5 7V4.5h13V7M12 4.5v15M9.5 19.5h5" />);
+/** Reading text in an area: the area's corners around two lines. */
+export const OcrAreaIcon = icon("OcrArea", <><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" /><path d="M8 10h8M8 14h5" /></>);
+/** Whiteout: a block of correction tape over the line. */
+export const WhiteoutIcon = icon("Whiteout", <><path d="M3.5 12h3M17.5 12h3" /><rect x="6.5" y="8" width="11" height="8" rx="1.5" /><path d="m9.5 16 2.5-2.5" /></>);
+/** Redaction: a solid bar across the text. */
+export const RedactIcon = icon("Redact", <><path d="M4 7h7M4 17h12" /><rect x="4" y="10" width="16" height="4" rx="1" fill="currentColor" /></>);
+/** A highlighter's chisel tip over its band. */
+export const HighlightIcon = icon("Highlight", <><path d="m14.5 4.5 5 5-7.5 7.5H7v-5z" /><path d="m7 17-2.5 2.5M12 9.5l2.5 2.5" /><path d="M3.5 21h17" /></>);
+export const UnderlineIcon = icon("Underline", <path d="M7 4.5v6a5 5 0 0 0 10 0v-6M5.5 20h13" />);
+export const StrikeIcon = icon("Strike", <path d="M16.5 7.5c-.6-1.8-2.4-3-4.6-3-2.6 0-4.4 1.5-4.4 3.5 0 4 9.5 2.5 9.5 7.25 0 2.2-2 3.75-4.9 3.75-2.5 0-4.4-1.2-5.1-3.25M4 12h16" />);
+/** A pencil, the same one lying on the bench. */
+export const PencilIcon = icon("Pencil", <><path d="M15.5 4.5 19.5 8.5 9 19H5v-4z" /><path d="m13 7 4 4M5 15l4 4" /></>);
+export const RectIcon = icon("Rect", <rect x="4.5" y="5.5" width="15" height="13" rx="1.5" />);
+export const EllipseIcon = icon("Ellipse", <ellipse cx="12" cy="12" rx="8" ry="6.5" />);
+export const LineIcon = icon("Line", <path d="M5 19 19 5" />);
+export const ArrowIcon = icon("Arrow", <path d="M5 19 18.5 5.5M10.5 5.5h8v8" />);
+export const PolygonIcon = icon("Polygon", <path d="m12 4 8 6-3 9.5H7L4 10z" />);
+export const PolylineIcon = icon("Polyline", <path d="M3.5 17.5 9 8.5l5 7 6.5-10" />);
+export const CloudIcon = icon("Cloud", <path d="M7 18.5h10a4 4 0 0 0 .5-8 5.5 5.5 0 0 0-10.6-1A4.5 4.5 0 0 0 7 18.5z" />);
+/** A picture with a plus at its corner. */
+export const ImageAddIcon = icon("ImageAdd", <><path d="M20 13v4.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-11A1.5 1.5 0 0 1 5.5 5H12" /><path d="m4.5 17 4.5-4.5 3 3 2-2 5.5 5" /><circle cx="9" cy="9.5" r="1.25" /><path d="M18 3.5v5M15.5 6h5" /></>);
+/** A rubber stamp, from the side. */
+export const StampIcon = icon("Stamp", <><path d="M9.5 10.5V9a2.5 2.5 0 1 1 5 0v1.5" /><path d="M5 13.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2V16H5z" /><path d="M7 19.5h10" /></>);
+/** A signature on its line. */
+export const SignatureIcon = icon("Signature", <><path d="M4 15.5c2.5-.5 3.5-8 5.5-8s.5 7 2.5 7 1.5-3 3-3 1 2.5 2.5 2.5H20" /><path d="M4 19.5h16" /></>);
+export const CheckIcon = icon("Check", <path d="m5 12.5 4.5 4.5L19 7" />);
+export const CrossIcon = icon("Cross", <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />);
+/** The pages laid out as sheets. */
+export const PagesIcon = icon("Pages", <><path d="M4 4h5.5l1.5 1.5V11H4z" /><path d="M13 4h5.5L20 5.5V11h-7z" /><path d="M4 13h5.5l1.5 1.5V20H4z" /><path d="M13 13h5.5l1.5 1.5V20h-7z" /></>);
+/** Crop marks. */
+export const CropIcon = icon("Crop", <path d="M7 3.5V17h13.5M3.5 7H17v13.5" />);
+export const UndoIcon = icon("Undo", <path d="M9 14 4.5 9.5 9 5M4.5 9.5h10a5 5 0 0 1 0 10H11" />);
+export const RedoIcon = icon("Redo", <path d="m15 14 4.5-4.5L15 5M19.5 9.5h-10a5 5 0 0 0 0 10H13" />);
+export const SearchIcon = icon("Search", <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5 5" /></>);
+/** The sheet coming down to you. */
+export const DownloadIcon = icon("Download", <><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" /><path d="M4.5 15.5v2.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2.5" /></>);
+export const ChevronDownIcon = icon("ChevronDown", <path d="m7 10 5 5 5-5" />);
+export const ChevronRightIcon = icon("ChevronRight", <path d="m10 7 5 5-5 5" />);

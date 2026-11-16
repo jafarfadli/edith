@@ -1,6 +1,5 @@
 "use client";
 
-import { ChevronDown, Download, LoaderCircle, Search } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { ExportOutput, Op } from "@edith/ops";
@@ -13,15 +12,20 @@ import { downloadError, downloadName, isPdfBlob, openBlob, savedNotice, saveBlob
 import type { NoticeMsg } from "@/lib/notices";
 import { t } from "@/lib/strings";
 import { editorStore, useEditor } from "@/store/editor";
+import { LogoMark } from "../brand/Logo";
+import { ChevronDownIcon, DownloadIcon, RedoIcon, SearchIcon, SpinnerIcon, UndoIcon } from "../brand/icons";
 import { ICON } from "../ui/icon";
 import { IconButton } from "../ui/IconButton";
 import { Tip } from "../ui/Tooltip";
 import { openFind } from "./find/findStore";
-import { whenTextCommitted } from "./text/textEdit";
+import { afterTextCommitted, whenTextCommitted } from "./text/textEdit";
 
-/** The editor's one top bar: wordmark and file name, the tools (`children`), then Cari, Ratakan form and Unduh. */
-export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null) => void; children?: React.ReactNode }) {
+/** The editor's top bar: the mark (home) and the file name, then Urungkan/Ulangi, Cari, Ratakan form and Unduh. The
+ *  tools are on the rail (Toolbar). */
+export function Header({ onNotice }: { onNotice: (n: NoticeMsg | null) => void }) {
   const info = useEditor((s) => s.info);
+  const canUndo = useEditor((s) => s.past.length > 0);
+  const canRedo = useEditor((s) => s.future.length > 0);
   const [name, setName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [flatten, setFlatten] = useState(false);
@@ -91,20 +95,22 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null)
   }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-panel px-2">
-      <Link href="/" className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 font-semibold tracking-tight text-ink hover:bg-hover">
-        <span aria-hidden className="h-2.5 w-2.5 rounded-[3px] bg-accent" />
-        {t.appName}
+    <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-line bg-panel px-2 sm:gap-2">
+      <Link href="/" aria-label={t.appName} title={t.appName} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-hover sm:w-[3.75rem]">
+        <LogoMark size={34} />
       </Link>
       <input
         aria-label={t.editor.fileName}
         value={fileName}
         onChange={(e) => setName(e.target.value)}
-        className="h-8 w-36 min-w-0 shrink truncate rounded-md xl:w-52 border border-transparent bg-transparent px-2 text-sm text-muted hover:border-line-strong focus:border-accent focus:text-ink focus:outline-none focus:ring-1 focus:ring-accent"
+        className="h-8 w-36 min-w-0 flex-1 truncate rounded-md font-medium sm:flex-none xl:w-60 border border-transparent bg-transparent px-2 text-sm text-muted hover:border-line-strong focus:border-accent focus:text-ink focus:outline-none focus:ring-1 focus:ring-accent"
       />
-      {children}
-      <div className="flex shrink-0 items-center gap-1">
-        <IconButton label={t.find.open} icon={Search} keys="Mod+F" disabled={!info} onClick={openFind} />
+      <div className="hidden flex-1 sm:block" />
+      <div className="flex shrink-0 items-center gap-0.5">
+        <IconButton label={t.editor.undo} icon={UndoIcon} keys="Mod+Z" disabled={!canUndo} onClick={() => afterTextCommitted(() => editorStore.getState().undo())} />
+        <IconButton label={t.editor.redo} icon={RedoIcon} keys="Mod+Shift+Z" disabled={!canRedo} onClick={() => afterTextCommitted(() => editorStore.getState().redo())} />
+        <span aria-hidden className="mx-1 h-5 w-px bg-line" />
+        <IconButton label={t.find.open} icon={SearchIcon} keys="Mod+F" disabled={!info} onClick={openFind} />
         {hasForm && (
           // Below xl only the checkbox shows (its name in the tooltip), so every tool still fits the bar at 1024 px.
           <Tip label={`${t.form.flatten}. ${t.form.flattenHint}.`} wide>
@@ -114,14 +120,14 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null)
             </label>
           </Tip>
         )}
-        <div className="ml-1 flex h-8 items-stretch overflow-hidden rounded-md bg-accent text-accent-ink">
+        <div className="ml-1.5 flex h-9 items-stretch overflow-hidden rounded-md bg-accent text-accent-ink shadow-[0_1px_0_oklch(100%_0_0/0.3)_inset]">
           <button
             onClick={() => download()}
             disabled={busy || !info}
-            className="flex items-center gap-2 px-3 text-sm font-medium transition-colors hover:bg-accent-hover disabled:opacity-60"
+            className="flex items-center gap-2 px-3 text-sm font-semibold transition-colors hover:bg-accent-hover disabled:opacity-60"
           >
-            {busy ? <LoaderCircle {...ICON} className="animate-spin" /> : <Download {...ICON} />}
-            {busy ? t.editor.downloading : t.editor.download}
+            {busy ? <SpinnerIcon {...ICON} className="animate-spin" /> : <DownloadIcon {...ICON} />}
+            <span className={busy ? "hidden sm:inline" : undefined}>{busy ? t.editor.downloading : t.editor.download}</span>
           </button>
           <Tip label={t.downloadOptions.open}>
             <button
@@ -131,7 +137,7 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null)
               disabled={busy || !info}
               className="grid w-7 place-items-center border-l border-accent-ink/25 transition-colors hover:bg-accent-hover disabled:opacity-60"
             >
-              <ChevronDown {...ICON} />
+              <ChevronDownIcon {...ICON} />
             </button>
           </Tip>
         </div>
