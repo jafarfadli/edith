@@ -5,6 +5,8 @@ import type { ExportOutput } from "@edith/ops";
  *  menu), and a download asked from elsewhere (`request`, taken by the Header that runs it). */
 export const downloadStore = createStore<{
   dialog: { pages: string } | null;
+  /** The file name typed in the top bar (null: the document's own), shown in the dialog's summary. */
+  fileName: string | null;
   request: ExportOutput | null;
   open(pages?: string): void;
   close(): void;
@@ -12,6 +14,7 @@ export const downloadStore = createStore<{
   take(): ExportOutput | null;
 }>()((set, get) => ({
   dialog: null,
+  fileName: null,
   request: null,
   open: (pages = "") => set({ dialog: { pages } }),
   close: () => set({ dialog: null }),
