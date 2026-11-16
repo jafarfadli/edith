@@ -35,6 +35,7 @@ import { ZoomPill } from "./ZoomPill";
 import { useShortcuts } from "./useShortcuts";
 import { useWheelZoom } from "./useWheelZoom";
 import { CrossPageGhost } from "./objects/CrossPageGhost";
+import { DownloadDialog } from "./DownloadDialog";
 import { runPageOcr } from "./text/ocrRun";
 
 // The text tool's hooks live in the Konva overlay chunk (Konva must stay out of SSR), so install them when it loads.
@@ -206,6 +207,7 @@ export function Editor({ docId: editId, initialName }: { docId: string; initialN
     <div className="flex h-dvh flex-col bg-panel">
       <Header onNotice={setNotice}><Toolbar onNotice={setNotice} /></Header>
       <CrossPageGhost />
+      <DownloadDialog />
       <div className="flex min-h-0 flex-1">
         {pdf ? <Sidebar /> : <aside className="w-52 shrink-0 border-r border-line bg-panel" />}
         <div className="relative min-w-0 flex-1">

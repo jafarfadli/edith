@@ -174,3 +174,42 @@ def test_a_locked_pdf_uploads_with_its_password_and_is_stored_unlocked(client):
     doc_id = r.json()["doc_id"]
     stored = pymupdf.open(stream=client.get(f"/documents/{doc_id}/file").content)
     assert not stored.needs_pass and texts(stored) == ["Halaman 1", "Halaman 2"]
+
+
+def export(client, data: bytes, output: dict | None, filename: str = "Surat Saya.pdf"):
+    doc_id = upload(client, data).json()["doc_id"]
+    body = {"ops": [], "filename": filename, **({"output": output} if output is not None else {})}
+    return client.post(f"/documents/{doc_id}/export", json=body)
+
+
+def test_export_of_some_pages_only(client):
+    r = export(client, make_pdf(4), {"pages": "3, 1"})
+    assert texts(pdf_of(r)) == ["Halaman 3", "Halaman 1"]
+
+
+def test_export_as_pictures_named_after_the_file(client):
+    r = export(client, make_pdf(2), {"format": "png", "dpi": 72, "pages": "2"})
+    assert r.headers["content-type"] == "image/png" and "Surat%20Saya.png" in r.headers["content-disposition"]
+    r = export(client, make_pdf(2), {"format": "jpg"})
+    assert r.headers["content-type"] == "application/zip"
+    assert zipfile.ZipFile(io.BytesIO(r.content)).namelist() == ["Surat Saya-1.jpg", "Surat Saya-2.jpg"]
+
+
+def test_export_compressed_and_locked(client):
+    r = export(client, make_pdf(2, image=True), {"compress": "high", "password": "kunci", "allow_copy": False})
+    doc = pymupdf.open(stream=r.content)
+    assert doc.needs_pass
+    doc = pymupdf.open(stream=r.content)
+    assert doc.authenticate("kunci") and texts(doc) == ["Halaman 1", "Halaman 2"]
+    assert not doc.permissions & pymupdf.PDF_PERM_COPY
+
+
+@pytest.mark.parametrize("output", [{"format": "gif"}, {"dpi": 96}, {"password": ""}, {"compress": "max"}, {"extra": 1}])
+def test_export_refuses_unknown_output_options(client, output):
+    r = export(client, make_pdf(1), output)
+    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request"
+
+
+def test_export_refuses_pages_past_the_end(client):
+    r = export(client, make_pdf(2), {"pages": "3"})
+    assert r.status_code == 400 and r.json()["error"]["field"] == "pages"

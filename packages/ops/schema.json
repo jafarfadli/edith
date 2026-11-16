@@ -214,6 +214,88 @@
       "title": "DocSrc",
       "type": "object"
     },
+    "ExportOutput": {
+      "additionalProperties": false,
+      "description": "What the export gives back besides the plain PDF (edith.tools after the bake): only some pages (\"1-3, 5\", of the\nexported document), pictures of them, a smaller PDF, a PDF locked with a password.",
+      "properties": {
+        "format": {
+          "default": "pdf",
+          "enum": [
+            "pdf",
+            "png",
+            "jpg"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "dpi": {
+          "default": 150,
+          "enum": [
+            72,
+            150,
+            300
+          ],
+          "title": "Dpi",
+          "type": "integer"
+        },
+        "pages": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pages"
+        },
+        "compress": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compress"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Password"
+        },
+        "allow_print": {
+          "default": true,
+          "title": "Allow Print",
+          "type": "boolean"
+        },
+        "allow_copy": {
+          "default": true,
+          "title": "Allow Copy",
+          "type": "boolean"
+        }
+      },
+      "title": "ExportOutput",
+      "type": "object"
+    },
     "ExportRequest": {
       "additionalProperties": false,
       "properties": {
@@ -295,6 +377,17 @@
           "default": false,
           "title": "Flatten Forms",
           "type": "boolean"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExportOutput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "filename": {
           "default": "document.pdf",

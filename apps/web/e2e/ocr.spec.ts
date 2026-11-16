@@ -81,7 +81,7 @@ test("OCR reads a scanned page; an OCR paragraph edits in place, survives a relo
   await page.reload();
   await expect(page.getByTestId("ocr-button")).toBeVisible();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, "ocr.pdf");
   await (await download).saveAs(file);
   expect(ocrCalls).toBe(0);

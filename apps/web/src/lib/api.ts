@@ -196,6 +196,17 @@ export async function exportPdf(docId: string, body: ExportRequest): Promise<Blo
   }
 }
 
+/** The export with `body.output` (only some pages, pictures, compressed, locked): the file and its name as the server
+ *  gives it (a ZIP or PNG is named after the PDF). */
+export async function exportFile(docId: string, body: ExportRequest): Promise<{ blob: Blob; name: string }> {
+  const res = await request(`/documents/${docId}/export`, { ...json({ paragraphs_version: PARAGRAPHS_VERSION, ...body }), signal: AbortSignal.timeout(EXPORT_TIMEOUT_MS) });
+  try {
+    return { blob: await res.blob(), name: dispositionName(res.headers.get("Content-Disposition"), body.filename ?? "document.pdf") };
+  } catch (e) {
+    throw new ApiError(e instanceof DOMException && e.name === "TimeoutError" ? "timeout" : "network", 0);
+  }
+}
+
 export async function renderPage(docId: string, body: RenderPageRequest): Promise<Blob> {
   return (await request(`/documents/${docId}/render-page`, json({ paragraphs_version: PARAGRAPHS_VERSION, ...body }))).blob();
 }

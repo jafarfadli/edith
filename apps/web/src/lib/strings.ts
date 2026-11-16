@@ -300,6 +300,18 @@ export const t = {
       ocr_too_complex: "Halaman ini terlalu rumit untuk OCR (terlalu banyak gambar atau tulisan).",
     },
   },
+  /** The editor's download options (the chevron beside Unduh, a page's menu). */
+  downloadOptions: {
+    title: "Opsi unduhan",
+    open: "Opsi unduhan lainnya",
+    as: "Unduh sebagai",
+    images: "Gambar",
+    levels: { none: "Tanpa", low: "Ringan", medium: "Sedang", high: "Kuat" } as Record<string, string>,
+    lock: "Pasang kata sandi",
+    cancel: "Batal",
+    close: "Tutup",
+    page: "Unduh halaman ini…",
+  },
   /** Upload of a locked PDF. */
   locked: {
     title: "PDF ini terkunci",

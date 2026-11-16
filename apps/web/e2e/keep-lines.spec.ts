@@ -69,7 +69,7 @@ test("a one-character edit keeps the paragraph's other lines exactly where they 
   expect(op.box.layout.map((l) => l.source ?? null)).toEqual([0, null, 2]);
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, "keep-lines.pdf");
   await (await downloadPromise).saveAs(file);
 
@@ -182,7 +182,7 @@ test("a mark on a kept line stays, and goes (with a notice, one undo step) once 
   await expect.poll(marks).toBe(0);
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, "keep-lines-moved.pdf");
   await (await downloadPromise).saveAs(file);
   expect(pdfReport(file).pages[0].annots).toEqual([]); // no highlight floating over the moved text

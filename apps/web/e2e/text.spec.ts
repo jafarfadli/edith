@@ -64,7 +64,7 @@ test("edit an original paragraph, find & replace, download", async ({ page }) =>
   await page.getByRole("button", { name: "Ulangi" }).click();
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, "text.pdf");
   await (await downloadPromise).saveAs(file);
 

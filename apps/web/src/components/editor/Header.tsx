@@ -1,10 +1,12 @@
 "use client";
 
-import { Download, LoaderCircle, Search } from "lucide-react";
+import { ChevronDown, Download, LoaderCircle, Search } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { Op } from "@edith/ops";
-import { ApiError, exportPdf } from "@/lib/api";
+import type { ExportOutput, Op } from "@edith/ops";
+import { useStore } from "zustand";
+import { ApiError, exportFile, exportPdf } from "@/lib/api";
+import { downloadStore } from "@/store/download";
 import { checkAlive, isGone } from "@/lib/session";
 import { compact, failedOpId } from "@/lib/compact";
 import { downloadError, downloadName, isPdfBlob, openBlob, savedNotice, saveBlob } from "@/lib/download";
@@ -30,9 +32,13 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null)
   const inFlight = useRef(false);
   // "Coba lagi" runs the download of the latest render: the file name or "Ratakan form" may have changed since.
   const latest = useRef<() => Promise<void>>(async () => {});
+  // The options of the latest download, which "Coba lagi" repeats.
+  const lastOutput = useRef<ExportOutput | undefined>(undefined);
 
-  async function download() {
+  /** `output`: only some pages, pictures, compressed or locked (the options dialog); none: the plain PDF. */
+  async function download(output?: ExportOutput) {
     if (inFlight.current || !editorStore.getState().info) return;
+    lastOutput.current = output;
     inFlight.current = true;
     setBusy(true);
     onNotice(null); // the previous attempt's notice no longer applies
@@ -43,9 +49,16 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null)
       s = editorStore.getState();
       if (!s.info) return;
       sent = compact(s.doc, s.info);
-      const name = downloadName(fileName, s.info.fileName);
-      const blob = await exportPdf(s.info.docId, { ops: sent, flatten_forms: hasForm && flatten, filename: name });
-      if (!(await isPdfBlob(blob))) throw new ApiError("bad_response", 200);
+      let name = downloadName(fileName, s.info.fileName);
+      let blob: Blob;
+      if (output) {
+        const got = await exportFile(s.info.docId, { ops: sent, flatten_forms: hasForm && flatten, filename: name, output });
+        blob = got.blob;
+        name = got.name;
+      } else {
+        blob = await exportPdf(s.info.docId, { ops: sent, flatten_forms: hasForm && flatten, filename: name });
+      }
+      if ((!output || (output.format ?? "pdf") === "pdf") && !(await isPdfBlob(blob))) throw new ApiError("bad_response", 200);
       // A download the browser blocks silently still leaves the notice's "Buka di tab baru" (a fresh click: no popup block).
       const openTab = { label: t.download.openTab, run: () => { if (!openBlob(blob)) onNotice({ kind: "error", text: t.download.blocked }); } };
       onNotice(savedNotice(saveBlob(blob, name), name, openTab));
@@ -68,7 +81,14 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null)
       setBusy(false);
     }
   }
-  useEffect(() => { latest.current = download; });
+  useEffect(() => { latest.current = () => download(lastOutput.current); });
+  // A download the options dialog asked for.
+  const asked = useStore(downloadStore, (x) => x.request);
+  useEffect(() => {
+    if (!asked) return;
+    const output = downloadStore.getState().take();
+    if (output) void download(output);
+  }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-panel px-2">
@@ -94,14 +114,27 @@ export function Header({ onNotice, children }: { onNotice: (n: NoticeMsg | null)
             </label>
           </Tip>
         )}
-        <button
-          onClick={download}
-          disabled={busy || !info}
-          className="ml-1 flex h-8 items-center gap-2 rounded-md bg-accent px-3 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:opacity-60"
-        >
-          {busy ? <LoaderCircle {...ICON} className="animate-spin" /> : <Download {...ICON} />}
-          {busy ? t.editor.downloading : t.editor.download}
-        </button>
+        <div className="ml-1 flex h-8 items-stretch overflow-hidden rounded-md bg-accent text-accent-ink">
+          <button
+            onClick={() => download()}
+            disabled={busy || !info}
+            className="flex items-center gap-2 px-3 text-sm font-medium transition-colors hover:bg-accent-hover disabled:opacity-60"
+          >
+            {busy ? <LoaderCircle {...ICON} className="animate-spin" /> : <Download {...ICON} />}
+            {busy ? t.editor.downloading : t.editor.download}
+          </button>
+          <Tip label={t.downloadOptions.open}>
+            <button
+              aria-label={t.downloadOptions.open}
+              data-testid="download-options"
+              onClick={() => downloadStore.getState().open()}
+              disabled={busy || !info}
+              className="grid w-7 place-items-center border-l border-accent-ink/25 transition-colors hover:bg-accent-hover disabled:opacity-60"
+            >
+              <ChevronDown {...ICON} />
+            </button>
+          </Tip>
+        </div>
       </div>
     </header>
   );

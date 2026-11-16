@@ -80,7 +80,7 @@ test("one letter in the widest line of a justified, a centred and a right-aligne
   expect(ops.g3.box.layout.map((l) => l.source ?? null)).toEqual([0, null, 2]);
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, "wrap.pdf");
   await (await downloadPromise).saveAs(file);
   const before = pdfChars(PDF)[0], after = pdfChars(file)[0];

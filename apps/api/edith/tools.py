@@ -237,3 +237,19 @@ def images_to_pdf(images: list[tuple[bytes, str]], size: str, margin: float, max
         x0, y0 = room.x0 + (room.width - w) / 2, room.y0 + (room.height - h) / 2
         page.show_pdf_page(pymupdf.Rect(x0, y0, x0 + w, y0 + h), one, 0)
     return pdf(out.tobytes(garbage=3, deflate=True))
+
+
+def finish(doc: pymupdf.Document, stem: str, *, fmt: str = "pdf", dpi: int = 150, pages: str | None = None,
+           compress_level: str | None = None, password: str | None = None, allow_print: bool = True,
+           allow_copy: bool = True) -> Output:
+    """An edited document as the editor's "Unduh" asks for it: only `pages`, then pictures of them (`fmt` png/jpg), or a
+    PDF compressed and/or locked."""
+    chosen = parse_pages(pages, doc.page_count) if pages and pages.strip() else None
+    if fmt != "pdf":
+        return to_images(doc, fmt, dpi, chosen or list(range(doc.page_count)), stem)
+    if chosen is not None:
+        doc = pymupdf.open("pdf", _pages_pdf(doc, chosen))
+    data = compress(doc, compress_level).data if compress_level else plain_bytes(doc)
+    if password:
+        return protect(pymupdf.open("pdf", data), password, allow_print, allow_copy)
+    return pdf(data)

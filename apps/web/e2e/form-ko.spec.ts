@@ -79,7 +79,7 @@ test("edit one cell of a Korean form in its own font and download it", async ({ 
   expect(op.box.rect.x + op.box.rect.w).toBeLessThanOrEqual(CELL_RIGHT);
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, "form-ko.pdf");
   await (await downloadPromise).saveAs(file);
 

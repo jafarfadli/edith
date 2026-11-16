@@ -5,6 +5,7 @@ from urllib.parse import quote
 import pymupdf
 from fastapi import APIRouter, Request, Response
 
+from edith import tools
 from edith.bake import bake
 from edith.bake.context import BakeContext
 from edith.errors import DocExpired, InvalidOp, TextOutdated
@@ -82,16 +83,25 @@ def export(request: Request, doc_id: str, body: ExportRequest) -> Response:
     _check_text_version(body)
     source = _read_source(request, doc_id)
     doc = bake(source, body.ops, _ctx(request, doc_id), flatten_forms=body.flatten_forms, subset_fonts=True)
+    name = safe_filename(body.filename)
+    out_opts = body.output
     try:
-        data = doc.tobytes(garbage=3, deflate=True)
+        if out_opts is None:
+            out = tools.pdf(doc.tobytes(garbage=3, deflate=True))
+        else:
+            stem = re.sub(r"(?i)\.pdf$", "", name) or "document"
+            out = tools.finish(doc, stem, fmt=out_opts.format, dpi=out_opts.dpi, pages=out_opts.pages,
+                               compress_level=out_opts.compress, password=out_opts.password,
+                               allow_print=out_opts.allow_print, allow_copy=out_opts.allow_copy)
     finally:
         doc.close()
-    name = safe_filename(body.filename)
+    if out.extension != "pdf":
+        name = f"{re.sub(r'(?i)\.pdf$', '', name) or 'document'}.{out.extension}"
     ascii_name = name.encode("ascii", "ignore").decode()
-    if not re.sub(r"(?i)\.pdf$", "", ascii_name).strip(". "):
-        ascii_name = "document.pdf"
+    if not re.sub(r"(?i)\.[a-z]+$", "", ascii_name).strip(". "):
+        ascii_name = f"document.{out.extension}"
     disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
-    return Response(data, media_type="application/pdf", headers={"Content-Disposition": disposition})
+    return Response(out.data, media_type=out.media_type, headers={"Content-Disposition": disposition})
 
 
 @router.post("/documents/{doc_id}/render-page")

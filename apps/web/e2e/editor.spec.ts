@@ -54,7 +54,7 @@ test("edit and download a PDF", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+Shift+z");
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const download = await downloadPromise;
   const file = path.join(test.info().outputDir, "out.pdf");
   await download.saveAs(file);
