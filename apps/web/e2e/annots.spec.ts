@@ -12,7 +12,7 @@ async function pageBox(page: Page, index = 0) {
 
 async function download(page: Page, name: string): Promise<string> {
   const pending = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, name);
   await (await pending).saveAs(file);
   return file;

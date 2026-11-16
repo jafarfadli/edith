@@ -168,7 +168,7 @@ test("manage pages, import, crop, shapes, copy/paste, align and the annotations 
 
   const download = async (name: string) => {
     const pending = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Unduh" }).click();
+    await page.getByRole("button", { name: "Unduh", exact: true }).click();
     const f = path.join(test.info().outputDir, name);
     await (await pending).saveAs(f);
     return f;

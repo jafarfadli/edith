@@ -97,7 +97,7 @@ test("the letterhead's text under its picture edits in place: the old print is c
   await expect(page.getByTestId("page").first()).toBeVisible();
   await expect.poll(() => draftOps(page)).toHaveLength(1);
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, "kop.pdf");
   await (await download).saveAs(file);
   if (SHOTS) sideBySide(PDF, file, path.join(SHOTS, "kop-3-export-vs-original.png"));

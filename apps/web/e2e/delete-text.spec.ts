@@ -36,7 +36,7 @@ const edits = async (page: Page) => (await draftOps(page)).filter((o) => o.type.
 
 async function download(page: Page, name: string): Promise<string> {
   const d = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, name);
   await (await d).saveAs(file);
   return file;

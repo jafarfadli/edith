@@ -205,6 +205,13 @@ export type Ops = (
   | PagesLayout
 )[];
 export type FlattenForms = boolean;
+export type Format = "pdf" | "png" | "jpg";
+export type Dpi = 72 | 150 | 300;
+export type Pages1 = string | null;
+export type Compress = ("low" | "medium" | "high") | null;
+export type Password = string | null;
+export type AllowPrint = boolean;
+export type AllowCopy = boolean;
 export type Filename = string;
 export type ParagraphsVersion = number | null;
 export type Pagekey15 = string;
@@ -241,6 +248,7 @@ export interface EdithSchema {
 export interface ExportRequest {
   ops: Ops;
   flatten_forms?: FlattenForms;
+  output?: ExportOutput | null;
   filename?: Filename;
   paragraphs_version?: ParagraphsVersion;
 }
@@ -641,6 +649,22 @@ export interface CropRect {
   y: Y1;
   w: W1;
   h: H1;
+}
+/**
+ * What the export gives back besides the plain PDF (edith.tools after the bake): only some pages ("1-3, 5", of the
+ * exported document), pictures of them, a smaller PDF, a PDF locked with a password.
+ *
+ * This interface was referenced by `EdithSchema`'s JSON-Schema
+ * via the `definition` "ExportOutput".
+ */
+export interface ExportOutput {
+  format?: Format;
+  dpi?: Dpi;
+  pages?: Pages1;
+  compress?: Compress;
+  password?: Password;
+  allow_print?: AllowPrint;
+  allow_copy?: AllowCopy;
 }
 /**
  * This interface was referenced by `EdithSchema`'s JSON-Schema

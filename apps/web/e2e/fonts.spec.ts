@@ -48,7 +48,7 @@ test("the font picker lists document fonts by their familiar names; choosing one
   expect(await draft()).not.toContain("Georgia");
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, "fonts.pdf");
   await (await downloadPromise).saveAs(file);
   const span = pdfSpans(file)[0].find((s) => s.text.includes("Surat Dinas"))!;

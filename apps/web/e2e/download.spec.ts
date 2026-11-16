@@ -10,7 +10,7 @@ test("a failing download says why and can be retried", async ({ page }) => {
   await page.evaluate(() => localStorage.clear());
   await page.getByTestId("file-input").setInputFiles(SAMPLE);
   await expect(page.getByTestId("page").first()).toBeVisible();
-  const unduh = page.getByRole("button", { name: "Unduh" });
+  const unduh = page.getByRole("button", { name: "Unduh", exact: true });
   const alert = page.getByRole("alert").filter({ hasText: /./ }); // not Next.js's empty route announcer
 
   // A proxy error page instead of the API's JSON error.

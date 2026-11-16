@@ -397,9 +397,22 @@ def _check_ops(ops: list) -> None:
         raise ValueError("at most one form.set per (doc, fieldName)")
 
 
+class ExportOutput(Model):
+    """What the export gives back besides the plain PDF (edith.tools after the bake): only some pages ("1-3, 5", of the
+    exported document), pictures of them, a smaller PDF, a PDF locked with a password."""
+    format: Literal["pdf", "png", "jpg"] = "pdf"
+    dpi: Literal[72, 150, 300] = 150
+    pages: str | None = Field(default=None, max_length=500)
+    compress: Literal["low", "medium", "high"] | None = None
+    password: str | None = Field(default=None, min_length=1, max_length=200)
+    allow_print: bool = True
+    allow_copy: bool = True
+
+
 class ExportRequest(Model):
     ops: list[Op] = Field(max_length=MAX_OPS)
     flatten_forms: bool = False
+    output: ExportOutput | None = None
     filename: str = Field(default="document.pdf", max_length=200)
     # Paragraph segmentation the client's text.edit ids come from (GET /text paragraphsVersion); None = before M5 (1).
     paragraphs_version: int | None = None

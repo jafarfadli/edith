@@ -105,7 +105,7 @@ test("a pictured letterhead shows, its invisible text is locked, and a pictured 
   await expect(editor).toHaveCount(0);
 
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   const file = path.join(test.info().outputDir, "picture-text.pdf");
   await (await download).saveAs(file);
   const text = (await pdfInfo(file)).pages[0].text;
@@ -149,6 +149,6 @@ test("a draft's edit of text that turned out to be a picture is dropped on load,
   await expect(page.getByRole("button", { name: "Urungkan" })).toBeDisabled(); // no undo step brings it back
 
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh" }).click();
+  await page.getByRole("button", { name: "Unduh", exact: true }).click();
   await (await download).saveAs(path.join(test.info().outputDir, "dropped.pdf"));
 });
