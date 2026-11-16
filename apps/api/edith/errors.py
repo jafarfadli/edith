@@ -27,6 +27,16 @@ class PdfEncrypted(EdithError):
     status, code = 400, "pdf_encrypted"
 
 
+class PdfPasswordWrong(EdithError):
+    """A locked PDF and a password that does not open it."""
+    status, code = 400, "pdf_password_wrong"
+
+
+class BadOptions(EdithError):
+    """A tool's options that make no sense (a page past the end, an unknown format): `field` names the option."""
+    status, code = 400, "bad_options"
+
+
 class TooLarge(EdithError):
     status, code = 413, "too_large"
 
