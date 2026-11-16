@@ -1,9 +1,20 @@
-import { FileType2, FileInput, Droplet, FileImage, FileOutput, FileSearch, FileText, Hash, Images, Layers, Lock, LockOpen, Minimize2, Scissors, type LucideIcon } from "lucide-react";
+import {
+  CompressIcon, ExtractIcon, FromImagesIcon, LockIcon, MergeIcon, OfficeIcon, PageNumberIcon, SearchableIcon, SplitIcon,
+  ToImagesIcon, ToTextIcon, ToWordIcon, UnlockIcon, WatermarkIcon, type Icon,
+} from "../brand/icons";
 import type { ToolSlug } from "@/lib/tools";
 
-export const TOOL_ICONS: Record<ToolSlug, LucideIcon> = {
-  "gabung-pdf": Layers, "pisah-pdf": Scissors, "ambil-halaman": FileOutput, "kompres-pdf": Minimize2,
-  "pdf-ke-gambar": FileImage, "gambar-ke-pdf": Images, "pdf-ke-teks": FileText, "buka-kunci-pdf": LockOpen, "kunci-pdf": Lock,
-  "office-ke-pdf": FileInput, "pdf-ke-word": FileType2,
-  "watermark-pdf": Droplet, "nomor-halaman": Hash, "pdf-bisa-dicari": FileSearch,
+export const TOOL_ICONS: Record<ToolSlug, Icon> = {
+  "gabung-pdf": MergeIcon, "pisah-pdf": SplitIcon, "ambil-halaman": ExtractIcon, "kompres-pdf": CompressIcon,
+  "pdf-ke-gambar": ToImagesIcon, "gambar-ke-pdf": FromImagesIcon, "pdf-ke-teks": ToTextIcon, "buka-kunci-pdf": UnlockIcon, "kunci-pdf": LockIcon,
+  "office-ke-pdf": OfficeIcon, "pdf-ke-word": ToWordIcon,
+  "watermark-pdf": WatermarkIcon, "nomor-halaman": PageNumberIcon, "pdf-bisa-dicari": SearchableIcon,
 };
+
+/** The start page's tray: the tools grouped by what they do to the PDF. */
+export const TOOL_GROUPS: { name: "pages" | "convert" | "security" | "size"; tools: ToolSlug[] }[] = [
+  { name: "pages", tools: ["gabung-pdf", "pisah-pdf", "ambil-halaman", "nomor-halaman"] },
+  { name: "convert", tools: ["pdf-ke-word", "office-ke-pdf", "pdf-ke-gambar", "gambar-ke-pdf", "pdf-ke-teks", "pdf-bisa-dicari"] },
+  { name: "security", tools: ["kunci-pdf", "buka-kunci-pdf", "watermark-pdf"] },
+  { name: "size", tools: ["kompres-pdf"] },
+];

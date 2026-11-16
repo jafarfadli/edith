@@ -1,39 +1,42 @@
-/* Hallmark · genre: modern-minimal (dark tool) · theme: custom "dark design app" · accent hue: 262 (electric blue)
- * paper band: dark · type: Geist (single sans family) + Geist Mono for numbers and shortcut keys
+/* Edith · workbench: a graphite bench, a faint cutting grid, white paper, and one accent, the snap-off cutter's yellow.
+ * type: Archivo (width axis: condensed labels, normal text, wide display) + Geist Mono for numbers and measures.
  */
 @import "tailwindcss";
 
 :root {
   color-scheme: dark;
 
-  /* Surfaces: neutral greys with a trace of the accent hue; a higher surface is lighter. */
-  --base: oklch(19% 0.005 260);          /* behind everything (landing page) */
-  --panel: oklch(22.5% 0.006 260);       /* top bar, sidebar, context bar */
-  --raised: oklch(27% 0.007 260);        /* menus, popovers, dialogs, tooltips */
-  --canvas: oklch(32% 0.004 260);        /* the grey area the pages sit on */
-  --hover: oklch(98% 0.003 260 / 0.07);  /* hover overlay on any surface */
-  --line: oklch(31% 0.007 260);          /* hairlines between panels */
-  --line-strong: oklch(40% 0.008 260);   /* control borders */
+  /* Surfaces: graphite greys without a hue; a higher surface is lighter. */
+  --base: oklch(20.5% 0.002 80);         /* the bench: behind everything */
+  --panel: oklch(23.5% 0.002 80);        /* top bar, rails, sidebars */
+  --raised: oklch(28.5% 0.003 80);       /* menus, popovers, dialogs, tooltips */
+  --canvas: oklch(26% 0.002 80);         /* the area the pages sit on */
+  --hover: oklch(98% 0.003 80 / 0.07);   /* hover overlay on any surface */
+  --line: oklch(32% 0.003 80);           /* hairlines between panels */
+  --line-strong: oklch(41% 0.004 80);    /* control borders */
+  --grid: oklch(98% 0 0 / 0.045);        /* the cutting grid's fine lines */
+  --grid-strong: oklch(98% 0 0 / 0.08);  /* its every fifth line */
 
   /* Text. */
-  --ink: oklch(95% 0.004 260);
-  --muted: oklch(72% 0.01 260);
-  --faint: oklch(65% 0.01 260);          /* ≥ 4.5:1 on panel and raised (secondary text, page numbers) */
+  --ink: oklch(94.5% 0.003 80);
+  --muted: oklch(74% 0.004 80);
+  --faint: oklch(66.5% 0.004 80);        /* ≥ 4.5:1 on panel and raised (secondary text, page numbers) */
+  --chalk: oklch(90% 0.01 85);           /* pencil marks and drawn objects on the bench */
 
-  /* The one accent: fills (white text on it ≥ 4.5:1), text and icons on dark, selection on the white page. */
-  --accent: oklch(57% 0.22 262);
-  --accent-hover: oklch(51% 0.2 262);    /* darker on hover: white on it 5.8:1 (on --accent 4.5:1) */
-  --accent-text: oklch(76% 0.13 258);
-  --accent-ink: oklch(99% 0.003 260);
+  /* The one accent, the cutter's yellow: fills (dark text on it), text and icons on the bench. */
+  --accent: oklch(81% 0.155 80);
+  --accent-hover: oklch(86% 0.14 86);    /* lighter on hover; the dark ink stays ≥ 9:1 */
+  --accent-text: oklch(85% 0.135 84);
+  --accent-ink: oklch(21% 0.01 80);
 
   /* Status. */
-  --danger: oklch(65% 0.2 22);
-  --danger-text: oklch(74% 0.15 22);
-  --warn: oklch(80% 0.15 75);
+  --danger: oklch(65% 0.2 25);
+  --danger-text: oklch(75% 0.15 25);
+  --warn: oklch(76% 0.15 55);
 
   /* The PDF page and what the editor draws on it (always light). */
   --paper: oklch(100% 0 0);
-  --paper-ink: oklch(20% 0.005 260);
+  --paper-ink: oklch(21% 0.004 80);
 }
 
 @theme inline {
@@ -54,10 +57,11 @@
   --color-danger: var(--danger);
   --color-danger-text: var(--danger-text);
   --color-warn: var(--warn);
+  --color-chalk: var(--chalk);
   --color-paper: var(--paper);
   --color-paper-ink: var(--paper-ink);
 
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
   /* Type scale for a dense tool UI: 11 · 12 · 13 (base) · 15 · 20 · display. */
@@ -76,6 +80,21 @@
   --shadow-page: 0 1px 2px oklch(0% 0 0 / 0.35), 0 4px 16px oklch(0% 0 0 / 0.25);
 
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* A sheet lying on the bench, and lifted off it. */
+  --shadow-sheet: 0 1px 2px oklch(0% 0 0 / 0.4), 0 18px 40px -18px oklch(0% 0 0 / 0.65);
+  --shadow-sheet-lifted: 0 2px 4px oklch(0% 0 0 / 0.3), 0 34px 60px -20px oklch(0% 0 0 / 0.7);
+
+  /* Arrivals on the bench: the sheet settles flat, a tool slides into place. Both start where they end up visible. */
+  --animate-settle: settle 0.9s var(--ease-out-expo) both;
+  --animate-slide-in: slide-in 1.1s var(--ease-out-expo) 0.15s both;
+  @keyframes settle {
+    from { transform: translateY(-18px) rotate(-1.6deg); box-shadow: var(--shadow-sheet-lifted); }
+  }
+  @keyframes slide-in {
+    from { translate: 70px 30px; }
+  }
 }
 
 html, body { overflow-x: clip; }
@@ -91,6 +110,42 @@ body { background: var(--panel); color: var(--ink); }
   input[type="range"], input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 }
 
+/* The cutting grid: fine squares, every fifth line stronger. `bench-fade` lets it run out towards the edges, so the
+ * grid sits under the work instead of filling the screen. */
+@utility bench-grid {
+  background-image:
+    linear-gradient(var(--grid-strong) 1px, transparent 1px), linear-gradient(90deg, var(--grid-strong) 1px, transparent 1px),
+    linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+}
+@utility bench-fade {
+  mask-image: radial-gradient(ellipse 70% 65% at 60% 45%, #000 40%, transparent 100%);
+}
+/* A steel ruler's edge: millimetre-ish ticks, every fifth longer. */
+@utility ruler-edge {
+  background-image: linear-gradient(90deg, var(--line-strong) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 120px 100%, 12px 55%;
+  background-repeat: repeat-x;
+}
+/* Wide or condensed Archivo (labels printed on the bench, display headings). */
+@utility font-wide { font-variation-settings: "wdth" 112; }
+@utility font-condensed { font-variation-settings: "wdth" 78; }
+
+/* A pencil mark drawing itself once: the path carries pathLength="1". */
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@utility draw-in {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 0.9s var(--ease-out-expo) forwards;
+}
+/* The cut line around a drop target: the dashes run while a file is held over it. */
+@keyframes march { to { stroke-dashoffset: -16; } }
+@utility marching { animation: march 0.6s linear infinite; }
+
+::selection { background: oklch(81% 0.155 80 / 0.35); color: var(--ink); }
+html { scrollbar-color: var(--line-strong) transparent; caret-color: var(--accent); }
+
 @media (prefers-reduced-motion: reduce) {
+  .draw-in { stroke-dashoffset: 0; }
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }

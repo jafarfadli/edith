@@ -1,17 +1,20 @@
 "use client";
 
-import { FileUp, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { ApiError, getSourceFile, uploadDocument } from "@/lib/api";
 import { putSource, saveRecord } from "@/lib/library";
 import { errorMessage, t } from "@/lib/strings";
+import { ScissorsIcon, SpinnerIcon, UploadIcon } from "./brand/icons";
+import { BinderClip } from "./bench/Props";
 import { BTN_PRIMARY, BTN_QUIET, FIELD } from "./ui/styles";
 
 const MAX_BYTES = 50 * 1024 * 1024;
 
 const isPdf = (file: File) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
+/** A blank A4 sheet clipped to the bench: drop the PDF on it, or pick one. Its cut line runs while a file is held over
+ *  it and is cut through (drawn solid in the accent) while the PDF goes up. */
 export function UploadDropzone() {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -53,52 +56,57 @@ export function UploadDropzone() {
     }
   }
 
-  // Secondary text on the white sheet (≥ 4.5:1 there), or on the dark drag-over fill.
-  const secondary = over ? "text-muted" : "text-paper-ink/65";
-
   return (
-    // Narrower on phones so "Pilih file" stays above the fold; the error hangs under the sheet without moving it.
-    <div className="relative w-full max-w-[16rem] md:max-w-[22rem]">
+    // Narrower on phones so "Pilih PDF" stays above the fold; the error hangs under the sheet without moving it.
+    <div className="relative w-full max-w-[17rem] md:max-w-[23rem]">
       <div
         data-testid="dropzone"
         onDragOver={(e) => { e.preventDefault(); if (!busy && !inFlight.current) setOver(true); }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
         onDrop={(e) => { e.preventDefault(); setOver(false); if (!busy && !inFlight.current) handle(e.dataTransfer.files[0]); }}
-        // A blank page waiting on the canvas: the drop target has the proportions of an A4 sheet.
-        className={`flex aspect-[210/297] w-full flex-col items-center justify-center gap-5 rounded-sm px-8 text-center shadow-page transition-colors ${over ? "bg-accent/10 outline-2 outline-offset-4 outline-accent outline-dashed" : "bg-paper outline-1 outline-offset-4 outline-line-strong outline-dashed"}`}
+        className={`animate-settle relative flex aspect-[210/297] w-full flex-col items-center justify-center gap-5 rounded-[2px] bg-paper px-8 text-center text-paper-ink transition-[translate,box-shadow] duration-300 ease-out-expo ${over ? "-translate-y-1.5 shadow-sheet-lifted" : "shadow-sheet"}`}
       >
-        <span aria-hidden className={`grid h-12 w-12 place-items-center rounded-full ${over ? "bg-accent text-accent-ink" : "bg-accent/10 text-accent"}`}>
-          <FileUp size={22} strokeWidth={1.75} />
-        </span>
-        <div className="flex flex-col gap-1">
-          <p className={`text-base font-medium ${over ? "text-ink" : "text-paper-ink"}`}>{t.upload.drop}</p>
-          <p className={`text-xs ${secondary}`}>{t.upload.or}</p>
-        </div>
+        {/* The cut line, with the scissors at its start. */}
+        <svg aria-hidden className="pointer-events-none absolute inset-4 h-[calc(100%-2rem)] w-[calc(100%-2rem)] overflow-visible">
+          {busy ? (
+            <rect x="0" y="0" width="100%" height="100%" pathLength={1} fill="none" stroke="var(--accent)" strokeWidth="2" className="draw-in [animation-duration:1.4s]" />
+          ) : (
+            <rect x="0" y="0" width="100%" height="100%" fill="none" strokeDasharray="6 5" strokeWidth={over ? 1.5 : 1}
+              stroke={over ? "var(--paper-ink)" : "oklch(70% 0.004 80)"} className={over ? "marching" : ""} />
+          )}
+        </svg>
+        <span aria-hidden className="absolute left-7 top-[0.55rem] bg-paper px-1 text-paper-ink/60"><ScissorsIcon size={15} /></span>
+        <BinderClip className="pointer-events-none absolute -top-8 left-1/2 w-14 -translate-x-1/2" />
+
+        <UploadIcon size={38} strokeWidth={1.4} className={`transition-transform duration-300 ease-out-expo ${over ? "-translate-y-1" : ""}`} />
+        <p className="font-wide text-lg font-semibold tracking-tight">{t.upload.drop}</p>
         {locked ? (
           <form className="flex w-full flex-col items-stretch gap-2 text-left" data-testid="locked-form"
             onSubmit={(e) => { e.preventDefault(); if (password) void handle(locked, password); }}>
-            <p className="text-sm font-medium text-paper-ink">{t.locked.title}</p>
-            <p className={`text-2xs ${secondary}`}>{t.locked.hint}</p>
+            <p className="text-sm font-medium">{t.locked.title}</p>
+            <p className="text-2xs text-paper-ink/65">{t.locked.hint}</p>
             <input className={FIELD} type="password" autoFocus autoComplete="off" aria-label={t.locked.password}
               placeholder={t.locked.password} value={password} onChange={(e) => setPassword(e.target.value)} data-testid="locked-password" />
             <div className="flex justify-end gap-2">
-              <button type="button" className={BTN_QUIET} onClick={() => { setLocked(null); setError(null); }}>{t.locked.cancel}</button>
+              <button type="button" className={`${BTN_QUIET} text-paper-ink/70 hover:text-paper-ink`} onClick={() => { setLocked(null); setError(null); }}>{t.locked.cancel}</button>
               <button type="submit" disabled={busy || !password} className={BTN_PRIMARY}>
-                {busy && <LoaderCircle size={16} strokeWidth={1.75} aria-hidden className="animate-spin" />}
+                {busy && <SpinnerIcon size={16} className="animate-spin" />}
                 {t.locked.open}
               </button>
             </div>
           </form>
         ) : (
-          <button type="button" disabled={busy} onClick={() => input.current?.click()} className={BTN_PRIMARY}>
-            {busy && <LoaderCircle size={16} strokeWidth={1.75} aria-hidden className="animate-spin" />}
+          <button type="button" disabled={busy} onClick={() => input.current?.click()} className={`${BTN_PRIMARY} h-10 px-5 text-base`}>
+            {busy && <SpinnerIcon size={16} className="animate-spin" />}
             {t.upload.choose}
           </button>
         )}
-        {busy ? <p className={`text-2xs ${secondary}`} role="status">{t.upload.processing}</p> : <p className={`text-2xs ${secondary}`}>{t.upload.limit}</p>}
+        {busy
+          ? <p className="text-2xs text-paper-ink/65" role="status">{t.upload.processing}</p>
+          : <p className="font-mono text-2xs text-paper-ink/65">{t.upload.limit}</p>}
         <input ref={input} type="file" accept="application/pdf,.pdf" hidden data-testid="file-input" onChange={(e) => handle(e.target.files?.[0])} />
       </div>
-      {error && <p role="alert" className="absolute inset-x-0 top-full mt-4 text-center text-sm text-danger-text">{error}</p>}
+      {error && <p role="alert" className="absolute inset-x-0 top-full mt-5 text-center text-sm text-danger-text">{error}</p>}
     </div>
   );
 }
