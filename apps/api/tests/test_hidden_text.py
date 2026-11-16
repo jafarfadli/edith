@@ -369,3 +369,51 @@ def test_spaced_out_print_in_mixed_case_is_not_taken_for_capitals(registry):
     [p] = hidden_text(page, registry)
     assert text(p) == line
 
+
+@pytest.mark.parametrize(("print_", "text_", "caps"), [
+    ("DETECT", "Detect", True), ("NETWORKING RESEARCH · LECTURE", "Networking research · Lecture", True),
+    ("spine", "spine", False),  # no tall letter to measure against (Testing PPT.pdf)
+    ("x86_64, 32 GB DDR4", "x86_64, 32 GB DDR4", False),  # a short letter beside marks (Testing PPT.pdf)
+    ("Telp. (021) jalan raya", "Telp. (021) jalan raya", False),
+])
+def test_capitals_are_told_from_the_letters_heights(print_, text_, caps):
+    from edith.hiddentext import _all_caps, _runs
+    pix = drawn(lambda page: spaced(page, print_, 12, 4, 20, 1.0))
+    grey = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3).mean(axis=2)
+    ink = grey < 128
+    xs = np.nonzero(ink.any(axis=0))[0]
+    # The rows _measure hands over: the run of ink rows the line stands in (an i's dot apart from it is not in them).
+    rows = max(_runs(ink.any(axis=1), gap=1), key=lambda r: r[1] - r[0])
+    assert _all_caps(ink, (int(xs[0]), int(xs[-1]) + 1), rows, text_) is caps
+
+
+def test_a_light_label_in_a_dark_box_is_measured_with_the_box_colour_behind_it(registry):
+    # Testing PPT.pdf: "spine1" in white in a dark box, on a slide whose row is mostly paper.
+    def draw(page):
+        page.draw_rect(pymupdf.Rect(0, 4, 80, 30), color=None, fill=(0.1, 0.11, 0.13))
+        page.insert_text((8, 21), "spine1", fontname="hebo", fontsize=13, color=(0.98, 0.98, 0.97))
+    page = page_of(hidden_over(drawn(draw), "spine1"))
+    [p] = hidden_text(page, registry)
+    assert text(p) == "spine1"
+    assert p["runs"][0]["color"].lower() > "#e0e0e0" and p["coverColor"].lower() < "#303030"
+
+
+def test_a_label_beside_its_box_edge_is_measured_without_the_edge(registry):
+    # Testing PPT.pdf: "Telemetry" in an outlined box, its left edge close to the word.
+    def draw(page):
+        page.draw_rect(pymupdf.Rect(1, 3, 110, 33), color=(0.1, 0.1, 0.1), width=1.5, radius=0.1)
+        page.insert_text((6, 21), "Telemetry", fontname="hebo", fontsize=13)
+    page = page_of(hidden_over(drawn(draw), "Telemetry"))
+    [p] = hidden_text(page, registry)
+    assert R(p["cover"]).x0 > 72 + 1.5  # clear of the edge
+
+
+def test_two_cells_read_as_one_line_stay_locked(registry):
+    # Testing PPT.pdf: a table row whose cells the invisible text joins into one line, a faint rule between them: a
+    # cover over the whole would take the rule.
+    def draw(page):
+        page.insert_text((4, 20), "Classified fault set", fontname="helv", fontsize=12)
+        page.draw_line((128, 2), (128, 38), color=(0.9, 0.88, 0.8), width=0.8)
+        page.insert_text((150, 20), "Digital-twin dry run", fontname="helv", fontsize=12)
+    page = page_of(hidden_over(drawn(draw), "Classified fault set Digital-twin dry run", size=12))
+    assert hidden_text(page, registry) == []
