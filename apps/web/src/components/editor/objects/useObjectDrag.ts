@@ -3,13 +3,14 @@
 import { useRef, type MutableRefObject } from "react";
 import type Konva from "konva";
 import type { ContentOp, Rect } from "@edith/ops";
-import { pageBounds, type PageGeom } from "@/lib/coords";
+import { pageBounds, toPage, toScreen, type PageGeom, type Pt } from "@/lib/coords";
 import { newId } from "@/lib/id";
 import { copyOp, isCopyable } from "@/lib/objects";
 import { boundsUnion, fmtPt, snapMove, type Gap, type Guide } from "@/lib/snap";
 import { isMac } from "@/lib/keys";
 import { boundsOf, nextBelow } from "@/lib/zorder";
-import { editorStore } from "@/store/editor";
+import { crossPageStore } from "@/store/crossPage";
+import { editorStore, pageGeom } from "@/store/editor";
 import { snapStore } from "@/store/snap";
 import { textEditStore } from "../text/textEdit";
 import { moveBy } from "./group";
@@ -21,6 +22,53 @@ export const SNAP_PX = 5;
 interface Drag {
   ids: string[]; homes: Map<string, { x: number; y: number }>;
   base: Rect; targets: Rect[]; page: Rect; dup: boolean; dx: number; dy: number;
+  /** Where the press was (client px), and the selection's box on screen then: for a drag onto another page. */
+  start: Pt | null; startBox: { left: number; top: number; width: number; height: number } | null;
+  /** The other page the pointer is over (only when every dragged object can move to another page), and the pointer. */
+  cross: { pageKey: string; at: Pt } | null;
+}
+
+/** Within this many px of the top or bottom of the pages' scroller, a drag scrolls it (towards another page) … */
+const EDGE_PX = 48;
+/** … by up to this many px a frame, faster closer to the edge. */
+const EDGE_SPEED = 18;
+
+/** Scrolls the pages while a drag holds the pointer near the scroller's top or bottom edge; `stop` ends it. */
+function edgeScroller(): { move(at: Pt): void; stop(): void } {
+  let at: Pt | null = null, frame = 0;
+  const tick = () => {
+    frame = 0;
+    const el = document.getElementById("page-scroller");
+    if (!el || !at) return;
+    const r = el.getBoundingClientRect();
+    const v = at[1] < r.top + EDGE_PX ? -(r.top + EDGE_PX - at[1]) : at[1] > r.bottom - EDGE_PX ? at[1] - (r.bottom - EDGE_PX) : 0;
+    if (!v) return;
+    el.scrollTop += Math.sign(v) * Math.min(EDGE_SPEED, Math.ceil(Math.abs(v) / EDGE_PX * EDGE_SPEED));
+    frame = requestAnimationFrame(tick);
+  };
+  return {
+    move(p) { at = p; if (!frame) frame = requestAnimationFrame(tick); },
+    stop() { at = null; if (frame) cancelAnimationFrame(frame); frame = 0; },
+  };
+}
+
+/** The page (its key and box on screen) under client point (x, y), if any. */
+function pageUnder(x: number, y: number): { key: string; rect: DOMRect } | null {
+  for (const el of document.querySelectorAll<HTMLElement>('[data-testid="page"]')) {
+    const r = el.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom && el.dataset.pageKey) return { key: el.dataset.pageKey, rect: r };
+  }
+  return null;
+}
+
+/** The point of page `key` under client point `at`, in page points (its geometry and the zoom as drawn). */
+function pagePoint(key: string, at: Pt): Pt | null {
+  const s = editorStore.getState();
+  const entry = s.doc.pages.find((p) => p.pageKey === key);
+  const el = document.querySelector<HTMLElement>(`[data-testid="page"][data-page-key="${key}"]`);
+  if (!entry || !s.info || !el) return null;
+  const r = el.getBoundingClientRect();
+  return toPage([at[0] - r.left, at[1] - r.top], pageGeom(entry, s.info), s.zoom);
 }
 
 /** What a press on an object started: whether the next drag copies (Alt), whether a release without a drag is a
@@ -40,6 +88,7 @@ export function useObjectDrag(args: {
 }) {
   const { pageKey, geom, scale, nodes, home, stackAt } = args;
   const drag = useRef<Drag | null>(null);
+  const edge = useRef(edgeScroller());
   const press = useRef<Press | null>(null);
 
   /** A press on object `id`: selects it; Shift toggles it in the selection; Alt selects the next object beneath the
@@ -84,17 +133,37 @@ export function useObjectDrag(args: {
     const ops = ids.map((x) => s.doc.objects[x]);
     const base = boundsUnion(ops.map(boundsOf));
     if (!base) return;
+    const start: Pt | null = e.evt && "clientX" in e.evt ? [e.evt.clientX, e.evt.clientY] : null;
+    const el = document.querySelector<HTMLElement>(`[data-testid="page"][data-page-key="${pageKey}"]`)?.getBoundingClientRect();
+    const corners = ([[base.x, base.y], [base.x + base.w, base.y], [base.x, base.y + base.h], [base.x + base.w, base.y + base.h]] as Pt[])
+      .map((c) => toScreen(c, geom, scale));
+    const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
     drag.current = {
       ids, base, dup: !!p?.dup, dx: 0, dy: 0,
       homes: new Map(ops.map((op) => [op.id, home(op)])),
       targets: snapTargets(pageKey, new Set(ids)),
       page: pageBounds(geom),
+      start,
+      startBox: el ? { left: el.left + Math.min(...xs), top: el.top + Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) } : null,
+      cross: null,
     };
   }
 
   function onDragMove(e: DragEvt, id: string) {
     const d = drag.current, g = e.currentTarget as Konva.Group, h = d?.homes.get(id);
     if (!d || !h) return;
+    // Over another page: the selection would land there (shown as a ghost: this page's canvas clips it).
+    const at: Pt | null = "clientX" in e.evt ? [e.evt.clientX, e.evt.clientY] : null;
+    if (at) edge.current.move(at);
+    const under = at ? pageUnder(at[0], at[1]) : null;
+    const s0 = editorStore.getState();
+    if (under && under.key !== pageKey && d.start && d.startBox && d.ids.every((x) => isCopyable(s0.doc.objects[x]))) {
+      d.cross = { pageKey: under.key, at: at! };
+      snapStore.getState().clear();
+      crossPageStore.getState().show({ pageKey: under.key, box: { ...d.startBox, left: d.startBox.left + at![0] - d.start[0], top: d.startBox.top + at![1] - d.start[1] } });
+      return;
+    }
+    if (d.cross) { d.cross = null; crossPageStore.getState().clear(); }
     let dx = g.x() - h.x, dy = g.y() - h.y;
     let guides: Guide[] = [], gaps: Gap[] = [];
     // Cmd/Ctrl while dragging turns snapping off.
@@ -112,11 +181,28 @@ export function useObjectDrag(args: {
     const d = drag.current;
     drag.current = null;
     snapStore.getState().clear();
+    crossPageStore.getState().clear();
+    edge.current.stop();
     if (!d) return;
     // The nodes go back home: the store's new positions redraw them (an undo then needs no stale node position).
     for (const [oid, at] of d.homes) nodes.current.get(oid)?.position(at);
-    if (!d.dx && !d.dy) return;
     const s = editorStore.getState();
+    if (d.cross && d.start) {
+      // Dropped on another page: there, as far from the pointer as it was from the press (one undo step; Alt: a copy).
+      const from = pagePoint(pageKey, d.start), to = pagePoint(d.cross.pageKey, d.cross.at);
+      if (from && to) {
+        const dx = to[0] - from[0], dy = to[1] - from[1];
+        const moved = d.ids.map((x) => s.doc.objects[x]).filter((op) => isCopyable(op))
+          .map((op) => copyOp(op, d.cross!.pageKey, d.dup ? newId() : op.id, dx, dy));
+        if (moved.length) {
+          s.putObjects(moved);
+          s.selectMany(moved.map((c) => c.id));
+          s.setCurrentPage(d.cross.pageKey);
+        }
+      }
+      return;
+    }
+    if (!d.dx && !d.dy) return;
     if (d.dup) {
       const copies = d.ids.map((x) => s.doc.objects[x]).filter((op) => isCopyable(op)).map((op) => copyOp(op, pageKey, newId(), d.dx, d.dy));
       if (copies.length) {
