@@ -7,21 +7,23 @@ from fastapi import APIRouter, Form, Request, UploadFile
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
-from edith import tools
-from edith.errors import BadOptions, TooLarge
+from edith import office, tools
+from edith.errors import BadOptions, OfficeUnavailable, TooLarge
+
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 from edith.routes.documents import read_limited
 
 router = APIRouter()
 
 TOOL_NAMES = {"unlock", "protect", "to-images", "to-text", "compress", "merge", "split", "extract", "images-to-pdf",
-              "watermark", "page-numbers", "ocr"}
+              "watermark", "page-numbers", "ocr", "office-to-pdf", "to-docx"}
 # A whole document read by OCR (POST /tools/ocr): at most this many pages without text, in one request.
 OCR_MAX_PAGES = 60
 MAX_FILES = 50
 
 
 def _stem(name: str | None) -> str:
-    stem = re.sub(r"(?i)\.(pdf|png|jpe?g)$", "", (name or "").strip()) or "dokumen"
+    stem = re.sub(r"(?i)\.(pdf|png|jpe?g|docx?|odt|rtf|pptx?|odp|xlsx?|ods)$", "", (name or "").strip()) or "dokumen"
     return re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", stem)[:120]
 
 
@@ -31,7 +33,7 @@ def _disposition(name: str) -> str:
     return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
 
 
-SUFFIX = {"watermark": "watermark", "page-numbers": "bernomor", "ocr": "bisa-dicari", "unlock": "terbuka", "protect": "terkunci", "compress": "kecil", "merge": "gabungan", "split": "terpisah",
+SUFFIX = {"office-to-pdf": "", "to-docx": "", "watermark": "watermark", "page-numbers": "bernomor", "ocr": "bisa-dicari", "unlock": "terbuka", "protect": "terkunci", "compress": "kecil", "merge": "gabungan", "split": "terpisah",
           "extract": "halaman", "to-images": "gambar", "to-text": "teks", "images-to-pdf": "gambar"}
 
 
@@ -75,6 +77,21 @@ async def run_tool(
     def sans(bold: bool) -> str:
         return str(registry.path(registry.fallback("sans"), bold, False))
 
+    def convert_office(data: bytes, name: str) -> tools.Output:
+        if (name.rsplit(".", 1)[-1].lower() if "." in name else "") not in office.OFFICE_TYPES:
+            raise BadOptions(f"{name}: not an office document", field="files", file=name)
+        cmd = office.soffice_cmd(s.soffice_cmd)
+        if cmd is None:
+            raise OfficeUnavailable("LibreOffice is not installed")
+        gate = request.app.state.office_gate
+        profile = gate.enter()
+        try:
+            pdf = office.office_to_pdf(data, name, cmd, profile, s.office_timeout_seconds)
+        finally:
+            gate.leave(profile)
+        tools.open_input(pdf, s.max_pages).close()  # what LibreOffice made is a PDF within the limits
+        return tools.pdf(pdf)
+
     def read_scan(doc) -> tools.Output:
         from edith import ocr
         from edith.errors import OcrUnavailable
@@ -93,6 +110,10 @@ async def run_tool(
     def _run() -> tools.Output:
         if tool == "images-to-pdf":
             return tools.images_to_pdf(blobs, size, margin or 0, s.max_pages)
+        if tool == "office-to-pdf":
+            if len(blobs) != 1:
+                raise BadOptions("office-to-pdf takes one file", field="files")
+            return convert_office(*blobs[0])
         docs = [tools.open_input(data, s.max_pages, password) for data, _ in blobs]
         try:
             if tool == "merge":
@@ -122,6 +143,9 @@ async def run_tool(
                                               colour or "#000000")
                 case "ocr":
                     return read_scan(doc)
+                case "to-docx":
+                    data = office.pdf_to_docx(doc)
+                    return tools.Output(data, DOCX, "docx")
                 case _:  # extract
                     if not pages or not pages.strip():
                         raise BadOptions("pages are empty", field="pages")
@@ -131,5 +155,5 @@ async def run_tool(
                 d.close()
 
     out = await run_in_threadpool(_run)
-    name = f"{stem}-{SUFFIX[tool]}.{out.extension}"
+    name = f"{stem}-{SUFFIX[tool]}.{out.extension}" if SUFFIX[tool] else f"{stem}.{out.extension}"
     return Response(out.data, media_type=out.media_type, headers={"Content-Disposition": _disposition(name)})

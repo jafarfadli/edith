@@ -117,6 +117,21 @@ class OcrFailed(EdithError):
     status, code = 500, "ocr_failed"
 
 
+class OfficeUnavailable(EdithError):
+    """LibreOffice (soffice) is not installed on this server."""
+    status, code = 503, "office_unavailable"
+
+
+class OfficeBusy(EdithError):
+    """Every conversion slot of the server is taken: try again shortly."""
+    status, code = 429, "office_busy"
+
+
+class OfficeFailed(EdithError):
+    """LibreOffice could not read the file (damaged, or not what its name says) or took too long."""
+    status, code = 422, "office_failed"
+
+
 def _body(code: str, message: str, **extra) -> dict:
     return {"error": {"code": code, "message": message, **extra}}
 

@@ -3,13 +3,13 @@
 
 export type ToolSlug =
   | "gabung-pdf" | "pisah-pdf" | "ambil-halaman" | "kompres-pdf" | "pdf-ke-gambar" | "gambar-ke-pdf" | "pdf-ke-teks"
-  | "buka-kunci-pdf" | "kunci-pdf" | "watermark-pdf" | "nomor-halaman" | "pdf-bisa-dicari";
+  | "buka-kunci-pdf" | "kunci-pdf" | "watermark-pdf" | "nomor-halaman" | "pdf-bisa-dicari" | "office-ke-pdf" | "pdf-ke-word";
 
 export interface ToolDef {
   slug: ToolSlug;
   api: string;
-  /** What it takes: PDFs or pictures (JPG/PNG). */
-  accepts: "pdf" | "images";
+  /** What it takes: PDFs, pictures (JPG/PNG) or office documents (Word, PowerPoint, Excel, OpenDocument). */
+  accepts: "pdf" | "images" | "office";
   /** At least this many files, at most `max` (1: one file). */
   min: number;
   max: number;
@@ -24,6 +24,8 @@ export const TOOLS: ToolDef[] = [
   { slug: "kompres-pdf", api: "compress", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "pdf-ke-gambar", api: "to-images", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "gambar-ke-pdf", api: "images-to-pdf", accepts: "images", min: 1, max: 50, password: false },
+  { slug: "office-ke-pdf", api: "office-to-pdf", accepts: "office", min: 1, max: 1, password: false },
+  { slug: "pdf-ke-word", api: "to-docx", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "pdf-ke-teks", api: "to-text", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "buka-kunci-pdf", api: "unlock", accepts: "pdf", min: 1, max: 1, password: true },
   { slug: "kunci-pdf", api: "protect", accepts: "pdf", min: 1, max: 1, password: false },
@@ -53,10 +55,21 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   text: "", strength: "medium", diagonal: true, colour: "#9ca3af", position: "bottom-center", numberFormat: "n", start: 1,
 };
 
+/** Office documents LibreOffice converts (apps/api/edith/office.py OFFICE_TYPES), by extension. */
+export const OFFICE_EXTENSIONS = ["doc", "docx", "odt", "rtf", "ppt", "pptx", "odp", "xls", "xlsx", "ods"];
+
+/** The file picker's `accept` of a tool. */
+export function acceptAttr(tool: ToolDef): string {
+  if (tool.accepts === "images") return "image/png,image/jpeg,.png,.jpg,.jpeg";
+  if (tool.accepts === "office") return OFFICE_EXTENSIONS.map((e) => `.${e}`).join(",");
+  return "application/pdf,.pdf";
+}
+
 /** A file the tool takes (by type, or by name when the browser gives no type). */
 export function accepted(tool: ToolDef, file: { name: string; type: string }): boolean {
   const name = file.name.toLowerCase();
   if (tool.accepts === "pdf") return file.type === "application/pdf" || name.endsWith(".pdf");
+  if (tool.accepts === "office") return OFFICE_EXTENSIONS.includes(name.split(".").pop() ?? "");
   return ["image/png", "image/jpeg"].includes(file.type) || /\.(png|jpe?g)$/.test(name);
 }
 
