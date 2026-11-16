@@ -218,6 +218,9 @@ body { background: var(--panel); color: var(--ink); }
     .hero-pdf { animation: part-right linear both; animation-timeline: scroll(root); animation-range: 0 75vh; }
   }
 }
+/* A dimension line growing out from its label. */
+@keyframes measure { from { scale: 0; } }
+.measure-grow { animation: measure 1s var(--ease-out-expo) 1.7s both; }
 /* Crumbs on the bench drifting a few pixels. */
 @keyframes drift { 50% { translate: 6px -9px; } }
 .crumb { animation: drift 8s ease-in-out infinite; }

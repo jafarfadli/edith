@@ -170,7 +170,7 @@ components:
 
 Edith is a dark graphite workbench. The PDF is a white sheet laid on a gridded cutting surface, with real tools lying around it: a snap-off cutter, a pencil, a binder clip, a steel ruler's edge, and a few pencil marks in chalk. The interface is the bench and the document is the work on it; the bench is quiet, hueless and dense, so the white page is always the brightest thing on screen.
 
-One accent carries the whole system: the cutter's yellow. It fills the single main action of a surface, the logo tile and the cutter's body, marks what is selected or active, and is the colour of every focus ring. Everything else is a step of graphite. Depth is literal: sheets cast a short contact shadow and lift when picked up, floating panels are hairline-ringed with a deep soft shadow.
+One accent carries the whole system: the cutter's yellow. It fills the single main action of a surface, the cutter's body, marks what is selected or active, and is the colour of every focus ring. Everything else is a step of graphite. Depth is literal: sheets cast a short contact shadow and lift when picked up, floating panels are hairline-ringed with a deep soft shadow.
 
 The type is one family, Bricolage Grotesque: its optical size follows the type size, so headings get its ink traps and slightly hand-cut shapes while small text stays plain; condensed (width 75) for small labels and tool captions. Geist Mono carries numbers and measures. Motion is physical and plays once: the sheet settles onto the bench, the tools slide into place, pencil marks draw themselves, and on upload the scissors run once round the sheet's cut line.
 
@@ -188,7 +188,7 @@ The type is one family, Bricolage Grotesque: its optical size follows the type s
 A hueless graphite ramp with one warm yellow accent, a chalk white for drawn marks, and true white reserved for paper.
 
 ### Primary
-- **Cutter Yellow** (accent): fills for the one primary action per surface (Pilih PDF, Unduh), the logo tile, the drawn cutter's body, the start page's "PDF" and its feature stickers, the cut line drawn during upload, and the 1.5px underline that sweeps under a tool name on hover. Text on it is always Bench Ink Dark (accent-ink).
+- **Cutter Yellow** (accent): fills for the one primary action per surface (Pilih PDF, Unduh), the drawn cutter's body, the start page's "PDF" and its feature stickers, the cut line drawn during upload, and the 1.5px underline that sweeps under a tool name on hover. Text on it is always Bench Ink Dark (accent-ink).
 - **Lit Yellow** (accent-hover): the hover state of yellow fills; lighter, so the dark ink keeps at least 9:1.
 - **Yellow Text** (accent-text): yellow used as text, icon colour or outline on dark surfaces: active rail tools, pressed toggles, the selected swatch ring, and the global focus ring.
 - **Bench Ink Dark** (accent-ink): text and icons placed on yellow.
@@ -265,7 +265,7 @@ Depth is physical. On the dark bench, surfaces step lighter as they rise (Bench,
 
 ## Shapes
 
-Small, practical corners. Paper is nearly square (2px). Controls are gently rounded (6px); floating panels, rail buttons and choice cards a step more (8px); dialogs 12px; a phone's bottom drawer 16px on its top edge only, and square when it docks to the right edge. Dots and swatches are full circles. The logo is a yellow tile with 25% corners.
+Small, practical corners. Paper is nearly square (2px). Controls are gently rounded (6px); floating panels, rail buttons and choice cards a step more (8px); dialogs 12px; a phone's bottom drawer 16px on its top edge only, and square when it docks to the right edge. Dots and swatches are full circles. The logo is the mascot alone, with no tile behind her.
 
 The recurring silhouette is the sheet with its top-right corner folded: every document icon, and the dashed cut line inset 16px inside the blank sheet with the scissors at its start.
 
@@ -308,7 +308,7 @@ Tactile and plain: flat fills, colour-only hover, no lift.
 - **Mobile:** below 640px the rail becomes a bottom bar that scrolls sideways and fades out at its right end.
 
 ### Navigation: Top Bar
-- **Style:** 56px Panel bar with a Hairline bottom border: logo tile (home), the file name as a borderless field that shows its edge on hover, quiet icon buttons, and the yellow Download split button at the end (the options half divided by a 20% ink rule).
+- **Style:** 56px Panel bar with a Hairline bottom border: the logo (home), the file name as a borderless field that shows its edge on hover, quiet icon buttons, and the yellow Download split button at the end (the options half divided by a 20% ink rule).
 
 ### Tool Tray
 - **Style:** on a Panel shelf under a ruler edge (ticks every 12px, longer every 120px). Tools are grouped under condensed Labels; each tool is a row of Muted 20px icon and Body Large name.
@@ -318,7 +318,7 @@ Tactile and plain: flat fills, colour-only hover, no lift.
 The blank A4 sheet (aspect 210/297) is where a PDF is dropped. Paper fill, 2px corners, Sheet shadow, clipped to the bench by a drawn binder clip, with a dashed cut line (6/5) inset 16px and the scissors at its start. While a file is held over it the sheet lifts and the dashes march; while uploading, the scissors run once round the line as it is drawn solid in yellow. Controls on it use the standard recipes with Paper Ink text.
 
 ### Signature: Drawn Props and Pencil Marks
-Flat SVG drawings of a cutter (yellow body, steel blade), a pencil and a binder clip lie around the work, sliding into place once on load; the pencil rests across the sheet's bottom-left corner rather than floating beside it. Pencil marks (a loose ring around a word, a curved arrow) are 1.6px Chalk strokes with round ends that draw themselves once, one after another. All are aria-hidden and never take the pointer.
+Flat SVG drawings of a cutter (yellow body, steel blade), a pencil and a binder clip lie around the work, sliding into place once on load; the pencil and the cutter rest across the sheet's bottom corners rather than floating beside it. From 1024px the start page's sheet also has a second sheet peeking out under it, a steel paper clip on its right edge, a faint mug ring on the bench, and its A4 size measured off in chalk as technical-drawing dimension lines (210 mm above, 297 mm beside it from 1280px), the lines growing out from their labels once. Pencil marks (a loose ring around a word, a curved arrow) are 1.6px Chalk strokes with round ends that draw themselves once, one after another. All are aria-hidden and never take the pointer.
 
 ### Icons
 Edith's own set: 24px grid, 1.75 stroke, round caps and joins, currentColor. Every document is the same 12 by 18 sheet with a 4-unit folded corner. UI icons render at 16px (14px small); rail icons at 20px; feature icons at 20-38px with lighter strokes (1.4-1.5) as they grow.
