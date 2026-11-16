@@ -1,6 +1,7 @@
 import { FormInput, LayoutGrid, Signature, Type } from "lucide-react";
 import { RecentEdits } from "@/components/RecentEdits";
 import { UploadDropzone } from "@/components/UploadDropzone";
+import { ToolsGrid } from "@/components/tools/ToolsGrid";
 import { t } from "@/lib/strings";
 
 const POINTS = [
@@ -40,6 +41,7 @@ export default function Home() {
           <UploadDropzone />
         </div>
       </main>
+      <ToolsGrid />
     </div>
   );
 }

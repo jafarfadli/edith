@@ -108,10 +108,34 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
 
 const json = (body: unknown): RequestInit => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-export async function uploadDocument(file: File | Blob, name = "document.pdf"): Promise<UploadResult> {
+/** `password`: of a locked PDF (the server then stores an unlocked copy; see getSourceFile). */
+export async function uploadDocument(file: File | Blob, name = "document.pdf", password?: string): Promise<UploadResult> {
   const form = new FormData();
   form.append("file", file, name);
+  if (password) form.append("password", password);
   return (await request("/documents", { method: "POST", body: form })).json();
+}
+
+/** The PDF the server stores for `docId` (for a locked upload: the unlocked copy). */
+export async function getSourceFile(docId: string): Promise<Blob> {
+  return (await request(`/documents/${docId}/file`)).blob();
+}
+
+/** The file name of a Content-Disposition header (filename*, else filename), or `fallback`. */
+export function dispositionName(header: string | null, fallback: string): string {
+  const star = header?.match(/filename\*=UTF-8''([^;]+)/i);
+  if (star) { try { return decodeURIComponent(star[1]); } catch { /* malformed: the plain one */ } }
+  return header?.match(/filename="([^"]+)"/i)?.[1] ?? fallback;
+}
+
+/** A tool of the "Alat PDF" (POST /tools/{tool}): the files and the options as form fields; the result and its name.
+ *  Five minutes: compressing or picturing a big PDF takes a while. */
+export async function runTool(tool: string, files: File[], fields: Record<string, string>): Promise<{ blob: Blob; name: string }> {
+  const form = new FormData();
+  for (const f of files) form.append("files", f, f.name);
+  for (const [k, v] of Object.entries(fields)) form.append(k, v);
+  const res = await request(`/tools/${tool}`, { method: "POST", body: form, signal: AbortSignal.timeout(300_000) });
+  return { blob: await res.blob(), name: dispositionName(res.headers.get("Content-Disposition"), "hasil") };
 }
 
 export async function getStructure(docId: string): Promise<Structure> {
