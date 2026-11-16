@@ -7,6 +7,7 @@ from fontTools.ttLib import TTFont
 from tests.pdfs import (BROKEN_TABLES, CID_TEXT, break_font_table, make_cid_subset_pdf, make_fonts_pdf, make_paragraphs_pdf, make_pdf,
                         make_pymupdf_subset_pdf, rename_font)
 from tests.test_documents import upload
+from edith.paragraphs import PARAGRAPHS_VERSION
 
 ARIMO = {"kind": "bundled", "family": "Arimo", "bold": False, "italic": False}
 
@@ -113,7 +114,7 @@ def test_paragraphs_per_page(client):
     page = body["pages"][0]
     assert page["index"] == 0
     assert [p["id"] for p in page["paragraphs"]] == [f"g{i}" for i in range(8)]
-    assert body["paragraphsVersion"] == 3
+    assert body["paragraphsVersion"] == PARAGRAPHS_VERSION
 
 
 def test_font_bytes(client):

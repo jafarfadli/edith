@@ -5,6 +5,7 @@ import pytest
 from fontTools.ttLib import TTFont
 
 from tests.pdfs import make_pdf
+from edith.paragraphs import PARAGRAPHS_VERSION
 
 
 def new_doc(client, **kw) -> str:
@@ -129,11 +130,11 @@ def test_export_text_edit(client):
     edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
         "rect": R(72, 88, 300, 16), "lineHeight": 12, "paragraphs": [[run]],
         "layout": [{"baseline": 12, "segments": [{"x": 0, "text": "Diganti", "runIndex": 0}]}]}}
-    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": 3})
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": PARAGRAPHS_VERSION})
     assert r.status_code == 200, r.text
     text = pymupdf.open(stream=r.content, filetype="pdf")[0].get_text()
     assert "Diganti" in text and "diedit" not in text and "tetangga" in text
-    r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}], "paragraphs_version": 3})
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [{**edit, "paragraphId": "g9"}], "paragraphs_version": PARAGRAPHS_VERSION})
     assert r.status_code == 422 and r.json()["error"] == {"code": "invalid_op", "message": "no paragraph g9 on o0", "op_index": 0}
 
 
@@ -147,7 +148,7 @@ def test_export_blank_text_edit_deletes_only_that_paragraph(client, layout):
     run = {"text": "", "font": {"kind": "bundled", "family": "Arimo"}, "size": 12, "color": "#000000"}
     edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
         "rect": R(72, 88, 300, 28), "lineHeight": 12, "paragraphs": [[run]], "layout": layout}}
-    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": 3})
+    r = client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": PARAGRAPHS_VERSION})
     assert r.status_code == 200, r.text
     out, before = pymupdf.open(stream=r.content, filetype="pdf")[0], pymupdf.open(stream=src, filetype="pdf")[0]
     text = " ".join(out.get_text().split())
@@ -280,7 +281,7 @@ def test_export_keeps_the_unicode_of_invisible_characters(client):
     assert text in out[0].get_text()
 
 
-@pytest.mark.parametrize("version", [None, 1, 2, 4])
+@pytest.mark.parametrize("version", [None, 1, 2, 3, PARAGRAPHS_VERSION + 1])
 def test_text_edits_of_another_segmentation_version_are_refused(client, version):
     """Ids g0, g1, … are positions in one segmentation: a draft or tab from before an update would edit
     the wrong paragraph."""

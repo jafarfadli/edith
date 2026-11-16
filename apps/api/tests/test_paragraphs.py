@@ -115,7 +115,7 @@ def test_line_ending_in_space_excludes_it_from_end():
 
 def test_paragraphs_version_is_pinned():
     from edith.paragraphs import PARAGRAPHS_VERSION
-    assert PARAGRAPHS_VERSION == 3  # shared with apps/web/src/lib/paragraphs.ts; bump both when ids can change
+    assert PARAGRAPHS_VERSION == 4  # shared with apps/web/src/lib/paragraphs.ts; bump both when ids can change
 
 
 def test_form_table_segments_like_a_form():
@@ -370,3 +370,31 @@ def test_a_border_just_below_or_above_a_line_limits_the_web_cover():
     assert line["baseline"] + 0.1 * line["size"] <= line["coverBottom"] < 130
     assert "coverTop" not in line
     assert "coverBottom" not in roomy["lines"][0] and "coverTop" not in roomy["lines"][0]
+
+
+def _cells_pdf(rows: list[list[tuple[float, str]]], size: float = 12) -> bytes:
+    """Each row: pieces of text (x, text) drawn one by one on one baseline, rows 24 pt apart, no rules drawn."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=600, height=400)
+    for r, row in enumerate(rows):
+        for x, t in row:
+            page.insert_text((x, 60 + 24 * r), t, fontname="helv", fontsize=size)
+    return doc.tobytes()
+
+
+def test_table_cells_close_together_stay_apart_when_their_columns_line_up():
+    # Testing PPT.pdf: a slide's table, its rules only in the picture: cells 1.5 em apart, each column's cells starting
+    # at one x on every row.
+    rows = [[(40, "Paradigm"), (150, "Detects"), (260, "Safety bound")],
+            [(40, "Static BGP"), (150, "Binary link"), (260, "Deterministic")],
+            [(40, "Classified fault set"), (150, "Digital-twin dry run"), (260, "High")]]
+    out = [text(p) for p in paragraphs(_cells_pdf(rows))]
+    assert "Classified fault set" in out and "Digital-twin dry run" in out
+    assert not any("set Digital" in t for t in out)
+
+
+def test_a_wide_gap_with_nothing_lined_up_under_it_stays_one_line():
+    # A justified line MuPDF splits at a wide gap: nothing else starts where its second piece does.
+    rows = [[(40, "Pada hari ini telah"), (155, "dilaksanakan rapat")], [(40, "koordinasi bersama seluruh pihak.")]]
+    out = [text(p) for p in paragraphs(_cells_pdf(rows))]
+    assert any("telah dilaksanakan" in t for t in out)

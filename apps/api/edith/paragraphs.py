@@ -13,16 +13,20 @@ from edith.doc_fonts import name_key
 from edith.rules import Rules, page_rules
 
 # Version of the segmentation: paragraph ids (g0, g1, …) of a page change when it does. Shared contract with
-# apps/web/src/lib/paragraphs.ts (drafts and exports carry it; 1 = M1–M4, 2 = rule/hard-break aware, M5; 3 = M5b: cells, rows, lists, ink rects).
+# apps/web/src/lib/paragraphs.ts (drafts and exports carry it; 1 = M1–M4, 2 = rule/hard-break aware, M5; 3 = M5b: cells, rows, lists, ink rects; 4 = table cells
+# a picture's rules separate, told by their aligned left edges).
 # Bump it on ANY change to how lines are split or measured (line start/end, rects, baselines), not only to ids: drafts
 # store LayoutLine.source indexes into a paragraph's lines, and the bake checks kept lines against those lines.
-PARAGRAPHS_VERSION = 3
+PARAGRAPHS_VERSION = 4
 # No TEXT_PRESERVE_LIGATURES: "ﬁ" comes out as "fi", which every font can draw.
 FLAGS = pymupdf.TEXT_PRESERVE_WHITESPACE | pymupdf.TEXT_MEDIABOX_CLIP
 GAP_FACTOR = 1.5     # a gap larger than this × the block's usual line spacing starts a paragraph
 SIZE_CHANGE = 0.08   # so does a dominant font size change larger than 8 %
 INDENT_EM = 0.5      # and a first-line indent of at least half an em
 JOIN_EM = 2.0        # pieces on one baseline closer than this many ems are one line (MuPDF splits wide justified gaps)
+COLUMN_EM = 0.8      # … unless the gap is at least this wide and the right piece starts a column (see _column_start):
+COLUMN_TOL = 1.0     # pt: where pieces of text on …
+COLUMN_ROWS = 2      # … at least this many other lines start too
 SPACE_EM = 0.25      # assumed width of the space before a wrapped word
 UNDERLINE_EM = 0.15  # a rule this close below a baseline underlines it rather than separating lines
 CAP_EM = 0.6         # a rule must lie this far above the next line's baseline to separate it
@@ -265,12 +269,22 @@ def _ruled(a: _Line, b: _Line, rules: Rules) -> bool:
     return False
 
 
-def _same_row(a: _Line, b: _Line, rules: Rules) -> bool:
+def _column_start(b: _Line, starts: list[tuple[float, float]]) -> bool:
+    """`b` starts where pieces of text on at least COLUMN_ROWS other lines start too (within COLUMN_TOL pt): the left
+    edge of a column, a table's cell, not a word a justified line spaced out (`starts`: every piece's (ink x0,
+    baseline) on the page)."""
+    rows = {round(y, 1) for x, y in starts if abs(x - b.ink_x0) <= COLUMN_TOL and abs(y - b.baseline) > 0.5}
+    return len(rows) >= COLUMN_ROWS
+
+
+def _same_row(a: _Line, b: _Line, rules: Rules, starts: list[tuple[float, float]] = ()) -> bool:
     gap = (b.ink_x0 - a.ink_x1) / max(a.size, b.size)
     return (a.horizontal and b.horizontal and abs(a.baseline - b.baseline) <= 0.5
             and -0.5 <= b.x0 - a.x1 <= JOIN_EM * max(a.size, b.size)
             and not rules.v_between(a.ink_x1, b.ink_x0, min(a.y0, b.y0), max(a.y1, b.y1))
-            and not _tab_gap(gap, list(a.gaps + b.gaps), a.text, b.text))
+            and not _tab_gap(gap, list(a.gaps + b.gaps), a.text, b.text)
+            # Table cells a picture's rules separate (no drawn rule to see): a wide gap before a column's left edge.
+            and not (gap >= COLUMN_EM and _column_start(b, list(starts))))
 
 
 def _join(a: _Line, b: _Line) -> _Line:
@@ -857,13 +871,14 @@ def extract_paragraphs(page: pymupdf.Page, resolve: FontResolver | None = None,
     rules = page_rules(page)
     marks = PageMarks(page)
     blocks: list[list[_Line]] = []
-    for block in page.get_text("rawdict", flags=FLAGS)["blocks"]:
-        if block.get("type", 0) != 0:
-            continue
+    raw_blocks = [[_lines(raw, rules) for raw in block.get("lines", [])]
+                  for block in page.get_text("rawdict", flags=FLAGS)["blocks"] if block.get("type", 0) == 0]
+    starts = [(line.ink_x0, line.baseline) for b in raw_blocks for ls in b for line in ls if line.horizontal]
+    for raw_lines in raw_blocks:
         starts_block = True
-        for raw in block.get("lines", []):
-            for line in _lines(raw, rules):
-                if blocks and _same_row(blocks[-1][-1], line, rules):
+        for pieces in raw_lines:
+            for line in pieces:
+                if blocks and _same_row(blocks[-1][-1], line, rules, starts):
                     blocks[-1][-1] = _join(blocks[-1][-1], line)
                 elif blocks and (not starts_block or _continues(blocks[-1], line, rules)):
                     blocks[-1].append(line)
