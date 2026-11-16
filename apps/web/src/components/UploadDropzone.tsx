@@ -3,10 +3,10 @@
 import { FileUp, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { ApiError, uploadDocument } from "@/lib/api";
+import { ApiError, getSourceFile, uploadDocument } from "@/lib/api";
 import { putSource, saveRecord } from "@/lib/library";
 import { errorMessage, t } from "@/lib/strings";
-import { BTN_PRIMARY } from "./ui/styles";
+import { BTN_PRIMARY, BTN_QUIET, FIELD } from "./ui/styles";
 
 const MAX_BYTES = 50 * 1024 * 1024;
 
@@ -19,24 +19,32 @@ export function UploadDropzone() {
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A locked PDF waiting for its password.
+  const [locked, setLocked] = useState<File | null>(null);
+  const [password, setPassword] = useState("");
 
-  async function handle(file: File | undefined) {
+  async function handle(file: File | undefined, pw?: string) {
     if (busy || inFlight.current) return;
     try {
       if (!file) return;
       setError(null);
+      if (!pw) setLocked(null);
       if (!isPdf(file)) return setError(errorMessage("pdf_corrupt"));
       if (file.size > MAX_BYTES) return setError(errorMessage("too_large"));
       inFlight.current = true;
       setBusy(true);
       try {
-        const res = await uploadDocument(file, file.name);
-        // A copy stays in this browser, so the edit goes on when the server has dropped its own (lib/session.ts).
+        const res = await uploadDocument(file, file.name, pw);
+        // A copy stays in this browser, so the edit goes on when the server has dropped its own (lib/session.ts): of a
+        // locked PDF, the unlocked copy the server made (the password is not kept).
         saveRecord({ id: res.doc_id, serverId: res.doc_id, name: file.name, pageCount: res.page_count, edited: false, updatedAt: Date.now() });
-        await putSource(res.doc_id, file).catch(() => undefined);
+        const copy = pw ? await getSourceFile(res.doc_id).catch(() => null) : file;
+        if (copy) await putSource(res.doc_id, copy).catch(() => undefined);
         router.push(`/edit/${res.doc_id}?name=${encodeURIComponent(file.name)}`);
       } catch (e) {
-        setError(errorMessage(e instanceof ApiError ? e.code : "generic"));
+        const code = e instanceof ApiError ? e.code : "generic";
+        if (code === "pdf_encrypted") { setLocked(file); setPassword(""); }
+        else setError(errorMessage(code));
         setBusy(false);
         inFlight.current = false;
       }
@@ -66,10 +74,27 @@ export function UploadDropzone() {
           <p className={`text-base font-medium ${over ? "text-ink" : "text-paper-ink"}`}>{t.upload.drop}</p>
           <p className={`text-xs ${secondary}`}>{t.upload.or}</p>
         </div>
-        <button type="button" disabled={busy} onClick={() => input.current?.click()} className={BTN_PRIMARY}>
-          {busy && <LoaderCircle size={16} strokeWidth={1.75} aria-hidden className="animate-spin" />}
-          {t.upload.choose}
-        </button>
+        {locked ? (
+          <form className="flex w-full flex-col items-stretch gap-2 text-left" data-testid="locked-form"
+            onSubmit={(e) => { e.preventDefault(); if (password) void handle(locked, password); }}>
+            <p className="text-sm font-medium text-paper-ink">{t.locked.title}</p>
+            <p className={`text-2xs ${secondary}`}>{t.locked.hint}</p>
+            <input className={FIELD} type="password" autoFocus autoComplete="off" aria-label={t.locked.password}
+              placeholder={t.locked.password} value={password} onChange={(e) => setPassword(e.target.value)} data-testid="locked-password" />
+            <div className="flex justify-end gap-2">
+              <button type="button" className={BTN_QUIET} onClick={() => { setLocked(null); setError(null); }}>{t.locked.cancel}</button>
+              <button type="submit" disabled={busy || !password} className={BTN_PRIMARY}>
+                {busy && <LoaderCircle size={16} strokeWidth={1.75} aria-hidden className="animate-spin" />}
+                {t.locked.open}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button type="button" disabled={busy} onClick={() => input.current?.click()} className={BTN_PRIMARY}>
+            {busy && <LoaderCircle size={16} strokeWidth={1.75} aria-hidden className="animate-spin" />}
+            {t.upload.choose}
+          </button>
+        )}
         {busy ? <p className={`text-2xs ${secondary}`} role="status">{t.upload.processing}</p> : <p className={`text-2xs ${secondary}`}>{t.upload.limit}</p>}
         <input ref={input} type="file" accept="application/pdf,.pdf" hidden data-testid="file-input" onChange={(e) => handle(e.target.files?.[0])} />
       </div>
