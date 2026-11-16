@@ -249,3 +249,31 @@ def test_a_scan_becomes_searchable_and_keeps_its_look(client):
     # A PDF with text already is left as it was.
     doc = pdf_of(run(client, "ocr", [("a.pdf", make_pdf(1))]))
     assert texts(doc) == ["Halaman 1"]
+
+
+def test_pdf_to_word(client):
+    r = run(client, "to-docx", [("surat.pdf", make_pdf(2))])
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("application/vnd.openxmlformats-officedocument.wordprocessingml")
+    assert "surat.docx" in r.headers["content-disposition"]
+    body = zipfile.ZipFile(io.BytesIO(r.content)).read("word/document.xml").decode()
+    assert "Halaman 1" in body and "Halaman 2" in body
+
+
+def has_soffice() -> bool:
+    from edith.office import soffice_cmd
+    return soffice_cmd() is not None
+
+
+@pytest.mark.skipif(not has_soffice() and os.environ.get("EDITH_REQUIRE_SOFFICE") != "1", reason="no LibreOffice")
+def test_word_to_pdf_and_back(client):
+    word = run(client, "to-docx", [("surat.pdf", make_pdf(2))]).content
+    r = run(client, "office-to-pdf", [("surat.docx", word)])
+    doc = pdf_of(r)
+    assert "surat.pdf" in r.headers["content-disposition"]
+    assert "Halaman 1" in doc[0].get_text() and "Halaman 2" in "".join(p.get_text() for p in doc)
+
+
+def test_office_to_pdf_takes_office_files_only(client):
+    r = run(client, "office-to-pdf", [("a.exe", b"MZ")])
+    assert r.status_code == 400 and r.json()["error"]["code"] == "bad_options"

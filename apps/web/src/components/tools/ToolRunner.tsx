@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 import { ApiError, runTool } from "@/lib/api";
 import { saveBlob } from "@/lib/download";
 import { errorMessage, t } from "@/lib/strings";
-import { accepted, DEFAULT_OPTIONS, fields, invalid, type ToolDef, type ToolOptions } from "@/lib/tools";
+import { acceptAttr, accepted, DEFAULT_OPTIONS, fields, invalid, type ToolDef, type ToolOptions } from "@/lib/tools";
 import { BTN_ICON, BTN_PRIMARY, BTN_SECONDARY, FIELD, SEGMENTED, segment } from "../ui/styles";
 import { TOOL_ICONS } from "./icons";
 
@@ -57,7 +57,7 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
     if (!list?.length) return;
     const chosen = [...list];
     const bad = chosen.find((f) => !accepted(tool, f));
-    setError(bad ? t.tools.wrongType(images) : null);
+    setError(bad ? t.tools.wrongType(tool.accepts) : null);
     const ok = chosen.filter((f) => accepted(tool, f));
     setFiles((cur) => (multiple ? [...cur, ...ok] : ok.slice(0, 1)).slice(0, tool.max));
     setResult(null);
@@ -180,6 +180,8 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
         );
       case "ocr":
         return <p className="text-xs text-muted">{t.tools.opts.ocrNote}</p>;
+      case "to-docx":
+        return <p className="text-xs text-muted">{t.tools.opts.wordNote}</p>;
       default:
         return null;
     }
@@ -219,13 +221,13 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
           className={`flex flex-col items-center gap-3 rounded-lg px-6 py-8 text-center outline-dashed outline-1 outline-offset-0 transition-colors ${over ? "bg-accent/10 outline-accent" : "bg-panel outline-line-strong"}`}
         >
           <FileUp size={22} strokeWidth={1.75} aria-hidden className="text-accent-text" />
-          <p className="text-sm text-ink">{t.tools.drop(images)}</p>
+          <p className="text-sm text-ink">{t.tools.drop(tool.accepts)}</p>
           <button type="button" className={files.length && multiple ? BTN_SECONDARY : BTN_PRIMARY} onClick={() => input.current?.click()}>
             {files.length && multiple ? <><Plus size={14} aria-hidden />{t.tools.add}</> : t.tools.choose}
           </button>
-          <p className="text-2xs text-faint">{images ? t.tools.limitImages : t.tools.limitPdf}</p>
+          <p className="text-2xs text-faint">{images ? t.tools.limitImages : tool.accepts === "office" ? t.tools.limitOffice : t.tools.limitPdf}</p>
           <input ref={input} type="file" hidden multiple={multiple} data-testid="tool-input"
-            accept={images ? "image/png,image/jpeg,.png,.jpg,.jpeg" : "application/pdf,.pdf"}
+            accept={acceptAttr(tool)}
             onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
         </div>
 

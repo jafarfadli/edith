@@ -24,3 +24,9 @@ class Settings(BaseSettings):
     tesseract_cmd: str | None = None
     ocr_slots: int = 2
     ocr_timeout_seconds: float = 30.0
+    # Office files to PDF (POST /tools/office-to-pdf): LibreOffice's soffice (none: found on PATH or in the macOS app),
+    # how many conversions run at once (each with its own LibreOffice profile, kept between runs: a fresh one costs
+    # seconds) and how long one may take.
+    soffice_cmd: str | None = None
+    office_slots: int = 2
+    office_timeout_seconds: float = 120.0

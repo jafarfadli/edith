@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 // The "Alat PDF": each tool's page takes files, asks its options and downloads the result; a locked PDF is opened with
@@ -23,7 +24,7 @@ const pageCount = (pdf: Buffer) => (pdf.toString("latin1").match(/\/Type\s*\/Pag
 test("the start page lists the tools; merging takes the PDFs in the order set", async ({ page }) => {
   await page.goto("/");
   const grid = page.getByTestId("tools-grid");
-  await expect(grid.getByRole("link")).toHaveCount(12);
+  await expect(grid.getByRole("link")).toHaveCount(14);
   await grid.getByRole("link", { name: /Gabung PDF/ }).click();
   await expect(page).toHaveURL(/\/tools\/gabung-pdf$/);
   await expect(page.getByRole("heading", { name: "Gabung PDF" })).toBeVisible();
@@ -118,4 +119,32 @@ test("watermark and page numbers: the options go with the PDF", async ({ page })
   await page.getByLabel("Mulai dari nomor").fill("3");
   const nums = await runAndDownload(page);
   expect(nums.name).toBe("sample-bernomor.pdf");
+});
+
+function hasSoffice(): boolean {
+  try {
+    execFileSync("soffice", ["--version"], { stdio: "ignore", timeout: 60_000 });
+    return true;
+  } catch {
+    return existsSync("/Applications/LibreOffice.app/Contents/MacOS/soffice");
+  }
+}
+
+test("PDF to Word, and the Word document back to PDF", async ({ page }) => {
+  test.skip(!hasSoffice() && process.env.EDITH_REQUIRE_SOFFICE !== "1", "LibreOffice is not installed");
+  test.setTimeout(120_000); // LibreOffice's first run makes its profile
+  await page.goto("/tools/pdf-ke-word");
+  await page.getByTestId("tool-input").setInputFiles(SAMPLE);
+  const word = await runAndDownload(page);
+  expect(word.name).toBe("sample.docx");
+  expect(word.data.subarray(0, 2).toString()).toBe("PK");
+
+  await page.goto("/tools/office-ke-pdf");
+  await page.getByTestId("tool-input").setInputFiles({ name: "kembali.docx", mimeType: "", buffer: word.data });
+  await page.getByTestId("tool-input").setInputFiles({ name: "salah.pdf", mimeType: "application/pdf", buffer: readFileSync(SAMPLE) });
+  await expect(page.locator("p[role=alert]")).toContainText("Hanya dokumen");
+  await page.getByTestId("tool-input").setInputFiles({ name: "kembali.docx", mimeType: "", buffer: word.data });
+  const back = await runAndDownload(page);
+  expect(back.name).toBe("kembali.pdf");
+  expect(back.data.subarray(0, 5).toString()).toBe("%PDF-");
 });
