@@ -7,7 +7,7 @@ export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:800
  *  apps/api/edith/paragraphs.py. Exports send it (the API refuses text.edit ops of another version) and drafts store it.
  *  Bump it on ANY change to how lines are split or measured (line start/end, rects, baselines), not only to ids: drafts
  *  store LayoutLine.source indexes into a paragraph's lines, and the bake checks kept lines against those lines. */
-export const PARAGRAPHS_VERSION = 3;
+export const PARAGRAPHS_VERSION = 4;
 
 export class ApiError extends Error {
   constructor(public code: string, public status: number, public extra: Record<string, unknown> = {}) {

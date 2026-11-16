@@ -47,6 +47,7 @@ TALL = set("bdfhklt")      # lower-case letters that reach about the cap height
 MARK_SHARE = 0.5           # ink less tall than this × the cap height is a mark (full stop, comma, dot), not a letter
 CAPS_PIECES = 0.7          # … judged only where the print shows at least this share of the letters apart
 TRACK_EM = 0.5             # spacing between letters (× size) at most, for print wider than its text at H_SCALE[1]
+SHORT_TEXT, H_SHORT = 3, 0.45  # text this short may be this much narrower than the bundled face's
 H_SCALE = (0.8, 1.25)      # the horizontal scale a line is drawn with to keep the print's width, within these bounds
 CONTRAST = 40              # grey levels between ink and paper, at least
 COVER_PAD_EM, COVER_PAD = 0.15, (1.0, 2.5)  # the cover reaches this far (× size, clamped in pt) past the ink
@@ -68,6 +69,33 @@ def _extents(path: Path) -> dict[int, tuple[float, float]]:
                 out[cp] = (g.yMin / upm, g.yMax / upm)
     font.close()
     return out
+
+
+@lru_cache(maxsize=16)
+def _bearings(path: Path) -> dict[int, tuple[float, float]]:
+    """Per character: the blank (in ems) its glyph leaves before its ink and after it, within its advance."""
+    font = TTFont(str(path), lazy=True)
+    upm = float(font["head"].unitsPerEm)
+    glyf = font["glyf"] if "glyf" in font else None
+    hmtx = font["hmtx"]
+    out: dict[int, tuple[float, float]] = {}
+    if glyf is not None:
+        for cp, name in font.getBestCmap().items():
+            g = glyf[name]
+            if getattr(g, "numberOfContours", 0) != 0 and hasattr(g, "xMin"):
+                out[cp] = (g.xMin / upm, (hmtx[name][0] - g.xMax) / upm)
+    font.close()
+    return out
+
+
+def _ink_length(text: str, face: pymupdf.Font, bearings: dict[int, tuple[float, float]], size: float) -> float:
+    """How wide `text`'s ink is at `size` in `face`: its advance less the blank before its first glyph and after its
+    last (a narrow "1" is mostly blank)."""
+    ink = text.strip()
+    if not ink:
+        return 0.0
+    first, last = bearings.get(ord(ink[0]), (0.0, 0.0)), bearings.get(ord(ink[-1]), (0.0, 0.0))
+    return face.text_length(ink, fontsize=size) - (first[0] + last[1]) * size
 
 
 def _text_extent(text: str, extents: dict[int, tuple[float, float]]) -> tuple[float, float] | None:
@@ -185,11 +213,13 @@ def _on_pictures(cover: pymupdf.Rect, ink: pymupdf.Rect, pictures: list[pymupdf.
 
 def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face: pymupdf.Font,
              extents: dict[int, tuple[float, float]], blocked: list[pymupdf.Rect],
-             pictures: list[pymupdf.Rect], caps: bool = False) -> _LineGeom | None:
+             pictures: list[pymupdf.Rect], caps: bool = False,
+             bearings: dict[int, tuple[float, float]] | None = None) -> _LineGeom | None:
     """The print of one invisible line in the picture (`picture`: the images under it, `pictures`, as one rect; covers
     keep to `pictures` themselves), or None. `caps`: the print is known to be in capitals (another line of the
     paragraph is)."""
     r, size = line["rect"], line["size"]
+    bearings = bearings or {}
     inv = pymupdf.Rect(r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"])
     if inv.width <= 0 or size <= 0:
         return None
@@ -263,7 +293,7 @@ def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face
     measured = ink_pt.height / (ext[1] - ext[0])
     if not SIZE_RANGE[0] <= measured / size <= SIZE_RANGE[1]:
         return None
-    natural = face.text_length(text, fontsize=measured)
+    natural = _ink_length(text, face, bearings, measured)
     h = ink_pt.width / natural if natural > 0 else 0
     # Print wider than the text drawn at the widest scale allowed: spaced-out letters, when the space between them
     # stays modest (the width already matches the invisible text's, so it is that text).
@@ -271,7 +301,10 @@ def _measure(line: dict, text: str, picture: pymupdf.Rect, render: _Render, face
     tracking = (ink_pt.width - natural) / (letters - 1) if h > H_SCALE[1] and letters > 1 else 0.0
     if tracking > TRACK_EM * measured:
         return None
-    if not tracking and not H_RANGE[0] <= h <= H_RANGE[1]:
+    # A number or two letters ("11", "E1"): digits differ most between faces (a "1" is a bar in one, flagged in
+    # another), and so little text matched by width to its invisible line can hardly be other text.
+    low = H_SHORT if len(text.strip()) <= SHORT_TEXT else H_RANGE[0]
+    if not tracking and not low <= h <= H_RANGE[1]:
         return None
     if tracking:
         h = 1.0
@@ -520,7 +553,7 @@ def hidden_text(page: pymupdf.Page, registry: FontRegistry) -> list[dict]:
         italic = any(r["font"]["italic"] for r in p["runs"])
         path = registry.path(sans, bold, italic)
         return _measure(ln, text, picture, render, registry.font(sans, bold, italic), _extents(path), visible,
-                        images, caps)
+                        images, caps, _bearings(path))
 
     for job in jobs:
         measured.setdefault(id(job[0]), []).append(measure(*job))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError } from "@/lib/api";
+import { ApiError, PARAGRAPHS_VERSION } from "@/lib/api";
 import { dropLockedTextEdits, dropStaleTextEdits, resolveImports, restoreDraft } from "@/lib/restore";
 
 describe("restoreDraft", () => {
@@ -110,7 +110,7 @@ describe("dropStaleTextEdits", () => {
   } as unknown as Parameters<typeof dropStaleTextEdits>[0];
 
   it("drops text edits of drafts from another segmentation (unstamped = version 1) and keeps the rest", () => {
-    for (const stamp of [undefined, 1, 2, 4]) {
+    for (const stamp of [undefined, 1, 2, 3, 5]) {
       const { doc: out, dropped } = dropStaleTextEdits({ ...doc, paragraphsVersion: stamp });
       expect(dropped).toBe(1);
       expect(out.order).toEqual(["w"]);
@@ -126,11 +126,11 @@ describe("dropStaleTextEdits", () => {
     const { doc: out, dropped } = dropStaleTextEdits({ ...withOcr, paragraphsVersion: 2 });
     expect(dropped).toBe(2);
     expect(out.order).toEqual(["w", "o"]);
-    expect(dropStaleTextEdits({ ...withOcr, paragraphsVersion: 3 }).dropped).toBe(0);
+    expect(dropStaleTextEdits({ ...withOcr, paragraphsVersion: PARAGRAPHS_VERSION }).dropped).toBe(0);
   });
 
   it("keeps text edits of the current segmentation", () => {
-    const { doc: out, dropped } = dropStaleTextEdits({ ...doc, paragraphsVersion: 3 });
+    const { doc: out, dropped } = dropStaleTextEdits({ ...doc, paragraphsVersion: PARAGRAPHS_VERSION });
     expect(dropped).toBe(0);
     expect(out.order).toEqual(["e", "w"]);
     expect(out).not.toHaveProperty("paragraphsVersion");

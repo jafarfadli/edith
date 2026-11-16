@@ -417,3 +417,13 @@ def test_two_cells_read_as_one_line_stay_locked(registry):
         page.insert_text((150, 20), "Digital-twin dry run", fontname="helv", fontsize=12)
     page = page_of(hidden_over(drawn(draw), "Classified fault set Digital-twin dry run", size=12))
     assert hidden_text(page, registry) == []
+
+
+def test_a_page_number_in_narrow_digits_is_measured(registry):
+    # Testing PPT.pdf: "11" in a face whose 1 is a bare bar, far narrower than the substitute's.
+    def draw(page):
+        for x in (4, 9):
+            page.draw_rect(pymupdf.Rect(x, 11, x + 1.6, 20), color=None, fill=(0.4, 0.4, 0.4))
+    page = page_of(hidden_over(drawn(draw), "11", size=10))
+    [p] = hidden_text(page, registry)
+    assert text(p) == "11"

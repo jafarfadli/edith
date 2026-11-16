@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from edith.main import create_app
 from edith.settings import Settings
 from tests.pdfs import make_edit_pdf, make_pdf
+from edith.paragraphs import PARAGRAPHS_VERSION
 
 ORIGIN = "https://web.example"
 
@@ -64,7 +65,7 @@ def test_font_subsetting_failure_is_bake_failed(cors_client, monkeypatch):
     edit = {"id": "e", "type": "text.edit", "pageKey": "o0", "paragraphId": "g0", "box": {
         "rect": {"x": 72, "y": 88, "w": 300, "h": 16}, "lineHeight": 12, "paragraphs": [[run]],
         "layout": [{"baseline": 12, "segments": [{"x": 0, "text": "Diganti", "runIndex": 0}]}]}}
-    r = cors_client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": 3},
+    r = cors_client.post(f"/documents/{doc_id}/export", json={"ops": [edit], "paragraphs_version": PARAGRAPHS_VERSION},
                          headers={"Origin": ORIGIN})
     assert r.status_code == 500
     assert r.json()["error"]["code"] == "bake_failed" and "bad glyf" in r.json()["error"]["message"]
@@ -75,5 +76,5 @@ def test_font_subsetting_failure_is_bake_failed(cors_client, monkeypatch):
 def test_paragraphs_version_is_accepted(client, path):
     """The web sends paragraphs_version (since M5): an API without the field would refuse every export (422)."""
     doc_id = client.post("/documents", files={"file": ("a.pdf", make_pdf(1), "application/pdf")}).json()["doc_id"]
-    body = {"ops": [], "paragraphs_version": 3, **({"pageKey": "o0"} if path == "render-page" else {})}
+    body = {"ops": [], "paragraphs_version": PARAGRAPHS_VERSION, **({"pageKey": "o0"} if path == "render-page" else {})}
     assert client.post(f"/documents/{doc_id}/{path}", json=body).status_code == 200
