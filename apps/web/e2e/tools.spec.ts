@@ -23,7 +23,7 @@ const pageCount = (pdf: Buffer) => (pdf.toString("latin1").match(/\/Type\s*\/Pag
 test("the start page lists the tools; merging takes the PDFs in the order set", async ({ page }) => {
   await page.goto("/");
   const grid = page.getByTestId("tools-grid");
-  await expect(grid.getByRole("link")).toHaveCount(9);
+  await expect(grid.getByRole("link")).toHaveCount(12);
   await grid.getByRole("link", { name: /Gabung PDF/ }).click();
   await expect(page).toHaveURL(/\/tools\/gabung-pdf$/);
   await expect(page.getByRole("heading", { name: "Gabung PDF" })).toBeVisible();
@@ -100,4 +100,22 @@ test("a PDF locked here asks its password to be unlocked, and on the start page 
   await page.getByRole("button", { name: "Buka" }).click();
   await expect(page).toHaveURL(/\/edit\//);
   await expect(page.getByTestId("thumb")).toHaveCount(3);
+});
+
+test("watermark and page numbers: the options go with the PDF", async ({ page }) => {
+  await page.goto("/tools/watermark-pdf");
+  await page.getByTestId("tool-input").setInputFiles(SAMPLE);
+  await expect(page.getByTestId("tool-run")).toBeDisabled(); // the text first
+  await page.getByLabel("Teks watermark").fill("RAHASIA");
+  await page.getByRole("button", { name: "Merah" }).click();
+  const wm = await runAndDownload(page);
+  expect(wm.name).toBe("sample-watermark.pdf");
+  expect(pageCount(wm.data)).toBe(3);
+
+  await page.goto("/tools/nomor-halaman");
+  await page.getByTestId("tool-input").setInputFiles(SAMPLE);
+  await page.getByRole("button", { name: "Halaman 1 dari 10" }).click();
+  await page.getByLabel("Mulai dari nomor").fill("3");
+  const nums = await runAndDownload(page);
+  expect(nums.name).toBe("sample-bernomor.pdf");
 });

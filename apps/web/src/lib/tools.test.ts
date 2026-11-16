@@ -38,4 +38,15 @@ describe("PDF tools", () => {
     expect(fields(tool("kunci-pdf"), { ...o, newPassword: "k", allowCopy: false }, "")).toEqual({ new_password: "k", allow_print: "true", allow_copy: "false" });
     expect(fields(tool("buka-kunci-pdf"), o, "s")).toEqual({ password: "s" });
   });
+
+  it("watermark and page numbers: their text, strength and numbering", () => {
+    const o = DEFAULT_OPTIONS;
+    expect(invalid(tool("watermark-pdf"), { ...o, text: " " })).toBe("text");
+    expect(fields(tool("watermark-pdf"), { ...o, text: " DRAFT ", strength: "strong", diagonal: false }, "")).toEqual(
+      { text: "DRAFT", opacity: "0.5", diagonal: "false", colour: "#9ca3af", pages: "" });
+    expect(invalid(tool("nomor-halaman"), { ...o, start: -1 })).toBe("start");
+    expect(fields(tool("nomor-halaman"), { ...o, position: "top-right", numberFormat: "n_of", start: 3 }, "")).toEqual(
+      { position: "top-right", number_format: "n_of", start: "3", pages: "" });
+    expect(fields(tool("pdf-bisa-dicari"), o, "")).toEqual({});
+  });
 });

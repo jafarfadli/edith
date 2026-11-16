@@ -4,6 +4,7 @@ edit (pictures of the pages, compression, a password).
 
 Every PDF input may be locked: `open_input` opens it with the password given, and refuses it without the right one."""
 import io
+import math
 import re
 import secrets
 import zipfile
@@ -253,3 +254,129 @@ def finish(doc: pymupdf.Document, stem: str, *, fmt: str = "pdf", dpi: int = 150
     if password:
         return protect(pymupdf.open("pdf", data), password, allow_print, allow_copy)
     return pdf(data)
+
+
+# ---- Tahap 2: searchable scans, watermark, page numbers ----------------------------------------------------------
+
+OCR_DPI = 300
+
+
+def searchable(doc: pymupdf.Document, cmd: str, langs: str, timeout: float, max_pages: int) -> tuple[Output, int]:
+    """`doc` with an invisible text layer on every page that has no text (a scan): tesseract reads a picture of the
+    page and its text-only PDF is laid over the page, which keeps everything it showed (as ocrmypdf does). Pages with
+    text are left alone. With the number of pages read. TooLarge past `max_pages` pages to read."""
+    import subprocess
+
+    from edith.errors import OcrFailed, OcrTimeout, OcrUnavailable
+    todo = [p.number for p in doc if not p.get_text("text").strip()]
+    if len(todo) > max_pages:
+        raise TooLarge(f"more than {max_pages} pages to read", max_pages=max_pages)
+    for i in todo:
+        page = doc[i]
+        turned = page.rotation
+        if turned:
+            page.set_rotation(0)  # read and lay the text in the page's own frame
+        png = page.get_pixmap(dpi=OCR_DPI, alpha=False).tobytes("png")
+        try:
+            out = subprocess.run([cmd, "stdin", "stdout", "-l", langs, "--dpi", str(OCR_DPI), "-c", "textonly_pdf=1", "pdf"],
+                                 input=png, capture_output=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired:
+            raise OcrTimeout(f"page {i + 1} took too long") from None
+        except OSError:
+            raise OcrUnavailable("cannot run tesseract") from None
+        if out.returncode != 0 or not out.stdout.startswith(b"%PDF"):
+            raise OcrFailed(f"tesseract failed on page {i + 1}")
+        layer = pymupdf.open("pdf", out.stdout)
+        page.show_pdf_page(page.rect, layer, 0, overlay=True)
+        if turned:
+            page.set_rotation(turned)
+    return pdf(plain_bytes(doc)), len(todo)
+
+
+def _hex_colour(value: str, field: str) -> tuple[float, float, float]:
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})", value or "")
+    if not m:
+        raise BadOptions(f"colour {value!r}", field=field)
+    h = m.group(1)
+    return tuple(int(h[k:k + 2], 16) / 255 for k in (0, 2, 4))  # type: ignore[return-value]
+
+
+def _write(page: pymupdf.Page, text: str, at: tuple[float, float], size: float, colour: tuple, opacity: float,
+           font: pymupdf.Font, fontname: str, angle: float = 0) -> None:
+    """`text` whose baseline starts at `at` (a point of the page as shown, rotation included), turned `angle` degrees
+    counter-clockwise as seen."""
+    p = pymupdf.Point(at) * page.derotation_matrix
+    # The page's own rotation turns what is drawn: turn the text back by it, plus the angle asked.
+    turn = angle + page.rotation
+    morph = (p, pymupdf.Matrix(turn)) if turn % 360 else None  # (positive: counter-clockwise as seen)
+    page.insert_text(p, text, fontsize=size, fontname=fontname, fontfile=None, color=colour, fill_opacity=opacity,
+                     morph=morph)
+
+
+def _face(page: pymupdf.Page, path: str, bold: bool) -> tuple[pymupdf.Font, str]:
+    name = "EdithB" if bold else "EdithR"
+    page.insert_font(fontname=name, fontfile=path)
+    return pymupdf.Font(fontfile=path), name
+
+
+def watermark(doc: pymupdf.Document, text: str, pages: list[int], font_path: str, size: float = 48,
+              colour: str = "#9ca3af", opacity: float = 0.35, diagonal: bool = True, bold: bool = True) -> Output:
+    """`text` across the middle of `pages` (diagonal, or level), see-through. Its size shrinks to fit a page."""
+    text = (text or "").strip()
+    if not text or len(text) > 120:
+        raise BadOptions("text is empty or longer than 120", field="text")
+    if not 8 <= size <= 200:
+        raise BadOptions("size outside 8-200", field="size")
+    if not 0.05 <= opacity <= 1:
+        raise BadOptions("opacity outside 0.05-1", field="opacity")
+    rgb = _hex_colour(colour, "colour")
+    for i in pages:
+        page = doc[i]
+        font, name = _face(page, font_path, bold)
+        r = page.rect
+        reach = (r.width ** 2 + r.height ** 2) ** 0.5 * 0.8 if diagonal else r.width * 0.85
+        s = min(size, size * reach / max(font.text_length(text, fontsize=size), 1))
+        w = font.text_length(text, fontsize=s)
+        angle = math.degrees(math.atan2(r.height, r.width)) if diagonal else 0
+        a = math.radians(angle)
+        # Start where the text's middle falls on the page's centre: half its width back along its direction (cos a,
+        # -sin a: y grows downwards), and its baseline half the cap height below the middle (sin a, cos a).
+        cx, cy = r.width / 2, r.height / 2
+        half, drop = w / 2, s * 0.35
+        x = cx - half * math.cos(a) + drop * math.sin(a)
+        y = cy + half * math.sin(a) + drop * math.cos(a)
+        _write(page, text, (x, y), s, rgb, opacity, font, name, angle)
+    return pdf(plain_bytes(doc))
+
+
+NUMBER_FORMATS = {"n": "{n}", "n_of": "{n} / {total}", "page_n": "Halaman {n}", "page_n_of": "Halaman {n} dari {total}"}
+POSITIONS = {"bottom-center", "bottom-right", "bottom-left", "top-center", "top-right", "top-left"}
+
+
+def page_numbers(doc: pymupdf.Document, pages: list[int], font_path: str, position: str = "bottom-center",
+                 fmt: str = "n", start: int = 1, size: float = 10, margin: float = 28, colour: str = "#000000") -> Output:
+    """A number on each of `pages`: `start` on the first of them, counting on; `{total}` is how many are numbered
+    (from `start`). Placed at `position` of the page as shown, `margin` pt from its edges."""
+    if position not in POSITIONS:
+        raise BadOptions(f"position {position!r}", field="position")
+    if fmt not in NUMBER_FORMATS:
+        raise BadOptions(f"format {fmt!r}", field="format")
+    if not 0 <= start <= 100000:
+        raise BadOptions("start outside 0-100000", field="start")
+    if not 6 <= size <= 48:
+        raise BadOptions("size outside 6-48", field="size")
+    if not 0 <= margin <= 144:
+        raise BadOptions("margin outside 0-144", field="margin")
+    rgb = _hex_colour(colour, "colour")
+    total = start + len(pages) - 1
+    for k, i in enumerate(sorted(pages)):
+        page = doc[i]
+        font, name = _face(page, font_path, False)
+        label = NUMBER_FORMATS[fmt].format(n=start + k, total=total)
+        w = font.text_length(label, fontsize=size)
+        r = page.rect
+        vert, horiz = position.split("-")
+        x = {"left": margin, "center": (r.width - w) / 2, "right": r.width - margin - w}[horiz]
+        y = margin + size * 0.75 if vert == "top" else r.height - margin
+        _write(page, label, (x, y), size, rgb, 1.0, font, name)
+    return pdf(plain_bytes(doc))
