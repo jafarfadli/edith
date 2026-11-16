@@ -95,7 +95,7 @@ export async function isPdfBlob(blob: Blob): Promise<boolean> {
 export interface DownloadFailure { code: string; message: string; retry: boolean }
 
 /** Codes worth a "Coba lagi": the same request may well work a moment later. */
-const RETRY = new Set(["network", "timeout", "internal", "bad_response", "generic"]);
+const RETRY = new Set(["network", "timeout", "internal", "bad_response", "generic", "rate_limited", "server_busy"]);
 
 /** The user-facing message for anything that went wrong while exporting, and whether a retry makes sense. */
 export function downloadError(e: unknown): DownloadFailure {

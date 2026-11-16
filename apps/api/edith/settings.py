@@ -30,3 +30,10 @@ class Settings(BaseSettings):
     soffice_cmd: str | None = None
     office_slots: int = 2
     office_timeout_seconds: float = 120.0
+    # A public server (edith/guard.py): per-address request limits (off by default: tests and local use), how many heavy
+    # jobs (PDF tools, exports) run at once and how long one more waits for a slot before 503 server_busy, and the free
+    # disk below which uploads get 507 storage_full.
+    rate_limit: bool = False
+    heavy_slots: int = 3
+    heavy_wait_seconds: float = 30.0
+    min_free_disk_bytes: int = 5 * 1024 * 1024 * 1024
