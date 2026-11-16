@@ -2,22 +2,16 @@ export const t = {
   appName: "Edith",
   tagline: "Edit PDF langsung di browser",
   upload: {
-    title: "Edit PDF dengan mudah",
-    drop: "Tarik & lepas PDF di sini",
-    or: "atau",
-    choose: "Pilih file",
-    limit: "Maksimal 50 MB atau 500 halaman",
+    title: "Ubah PDF.",
+    titleAfter: "Aslinya tetap rapi.",
+    facts: { free: "Gratis", signup: "Tanpa daftar", gone: "File dihapus setelah 1 jam" },
+    drop: "Letakkan PDF di sini",
+    choose: "Pilih PDF",
+    limit: "Maks. 50 MB · 500 halaman",
     processing: "Memproses dokumen…",
     recent: "Editan terakhir",
     recentRemove: "Hapus dari daftar",
     recentPages: (n: number) => `${n} halaman`,
-    lede: "Ubah teks, isi formulir, tanda tangani, dan atur halaman PDF tanpa memasang aplikasi apa pun.",
-    points: {
-      text: "Edit teks asli langsung di halaman",
-      forms: "Isi formulir PDF",
-      sign: "Tanda tangan, stempel, dan penanda",
-      pages: "Putar, susun, impor, dan crop halaman",
-    },
   },
   editor: {
     download: "Unduh",
@@ -323,7 +317,8 @@ export const t = {
   /** The PDF tools beside the editor ("Alat PDF"). */
   tools: {
     heading: "Alat PDF",
-    lede: "Ubah, gabungkan, atau amankan PDF tanpa membuka editor.",
+    lede: "Satu pekerjaan, tanpa membuka editor.",
+    groups: { pages: "Halaman", convert: "Ubah format", security: "Keamanan", size: "Ukuran" },
     back: "Kembali",
     drop: (kind: "pdf" | "images" | "office") => kind === "images" ? "Tarik & lepas gambar di sini" : kind === "office" ? "Tarik & lepas dokumen di sini" : "Tarik & lepas PDF di sini",
     choose: "Pilih file",

@@ -1,46 +1,49 @@
-import { FormInput, LayoutGrid, Signature, Type } from "lucide-react";
+import Link from "next/link";
+import { Logo } from "@/components/brand/Logo";
+import { Arrow, Ring } from "@/components/bench/Marks";
+import { Cutter, Pencil } from "@/components/bench/Props";
 import { RecentEdits } from "@/components/RecentEdits";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { ToolsGrid } from "@/components/tools/ToolsGrid";
 import { t } from "@/lib/strings";
 
-const POINTS = [
-  { icon: Type, text: t.upload.points.text },
-  { icon: FormInput, text: t.upload.points.forms },
-  { icon: Signature, text: t.upload.points.sign },
-  { icon: LayoutGrid, text: t.upload.points.pages },
-];
-
-/** The start page is the editor's empty canvas: the pitch on the left, a blank page to drop the PDF on at the right. */
+/** The start page is the bench: a blank sheet clipped down, waiting for the PDF, with the tools lying around it and a
+ *  few pencil marks; below it the tray of single-purpose PDF tools. */
 export default function Home() {
+  const { facts } = t.upload;
   return (
-    <div className="flex min-h-dvh flex-col bg-canvas">
-      <header className="flex h-12 shrink-0 items-center border-b border-line bg-panel px-4">
-        <span className="flex items-center gap-2 font-semibold tracking-tight text-ink">
-          <span aria-hidden className="h-2.5 w-2.5 rounded-[3px] bg-accent" />
-          {t.appName}
-        </span>
+    <div className="relative flex min-h-dvh flex-col overflow-x-clip bg-base">
+      <div aria-hidden className="bench-grid bench-fade pointer-events-none absolute inset-x-0 top-0 h-[52rem]" />
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 md:px-10">
+        <Link href="/" aria-label={t.appName} className="rounded-md"><Logo /></Link>
+        <a href="#alat" className="rounded-md px-2 py-1 text-sm text-muted transition-colors hover:text-ink">{t.tools.heading}</a>
       </header>
-      <main className="mx-auto grid w-full max-w-5xl flex-1 items-center gap-12 px-4 py-12 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] md:gap-16 md:px-8">
-        <section className="flex min-w-0 flex-col gap-6">
-          <h1 className="text-4xl font-semibold tracking-tight text-ink [overflow-wrap:anywhere] sm:text-5xl">{t.upload.title}</h1>
-          <p className="max-w-md text-base text-muted">{t.upload.lede}</p>
-          <ul className="flex flex-col gap-3">
-            {POINTS.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-center gap-3 text-sm text-ink">
-                <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-panel text-accent-text ring-1 ring-inset ring-line">
-                  <Icon size={16} strokeWidth={1.75} />
-                </span>
-                {text}
-              </li>
-            ))}
+
+      <main className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 items-center gap-16 px-5 pb-24 pt-14 md:grid-cols-[minmax(0,1fr)_minmax(0,23rem)] md:gap-10 md:px-10 md:pt-10 lg:gap-24">
+        <section className="flex min-w-0 flex-col gap-9">
+          <h1 className="font-wide text-[clamp(2.3rem,5.4vw,4.6rem)] font-extrabold leading-[0.95] tracking-[-0.035em] text-ink">
+            {t.upload.title}
+            <span className="block font-medium text-muted [font-variation-settings:'wdth'_96]">{t.upload.titleAfter}</span>
+          </h1>
+          <ul className="flex flex-wrap items-center gap-x-8 gap-y-3 text-base text-ink">
+            <li className="relative px-1">
+              {facts.free}
+              <Ring delay={900} className="pointer-events-none absolute -left-3 -top-2.5 h-[calc(100%+1.25rem)] w-[calc(100%+1.5rem)]" />
+            </li>
+            <li>{facts.signup}</li>
+            <li>{facts.gone}</li>
           </ul>
           <RecentEdits />
         </section>
-        <div className="flex justify-center md:justify-end">
+
+        <div className="relative w-full max-w-[17rem] justify-self-center md:max-w-[23rem] md:justify-self-end">
+          <Arrow delay={1100} className="pointer-events-none absolute -left-48 top-[calc(56%-5.5rem)] hidden w-44 -scale-y-100 lg:block" />
           <UploadDropzone />
+          <Cutter className="animate-slide-in pointer-events-none absolute -bottom-8 -right-14 w-52 rotate-[-30deg] md:-right-32 md:w-72" />
+          <Pencil className="animate-slide-in pointer-events-none absolute -bottom-14 -left-36 hidden w-56 rotate-[-5deg] [animation-delay:.3s] md:block" />
         </div>
       </main>
+
       <ToolsGrid />
     </div>
   );

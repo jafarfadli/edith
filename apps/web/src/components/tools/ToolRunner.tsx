@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowDown, ArrowLeft, ArrowUp, FileUp, LoaderCircle, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { ApiError, runTool } from "@/lib/api";
@@ -8,6 +7,11 @@ import { saveBlob } from "@/lib/download";
 import { errorMessage, t } from "@/lib/strings";
 import { acceptAttr, accepted, DEFAULT_OPTIONS, fields, invalid, type ToolDef, type ToolOptions } from "@/lib/tools";
 import { BTN_ICON, BTN_PRIMARY, BTN_SECONDARY, FIELD, SEGMENTED, segment } from "../ui/styles";
+import { Logo } from "../brand/Logo";
+import {
+  ArrowDownIcon as ArrowDown, ArrowLeftIcon as ArrowLeft, ArrowUpIcon as ArrowUp, CloseIcon as X, PlusIcon as Plus,
+  SpinnerIcon as LoaderCircle, UploadIcon as FileUp,
+} from "../brand/icons";
 import { TOOL_ICONS } from "./icons";
 
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -194,21 +198,19 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
   );
 
   return (
-    <div className="flex min-h-dvh flex-col bg-canvas">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-panel px-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight text-ink">
-          <span aria-hidden className="h-2.5 w-2.5 rounded-[3px] bg-accent" />
-          {t.appName}
-        </Link>
+    <div className="relative flex min-h-dvh flex-col overflow-x-clip bg-base">
+      <div aria-hidden className="bench-grid bench-fade pointer-events-none absolute inset-x-0 top-0 h-[40rem]" />
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center gap-3 px-5 pt-6 md:px-10">
+        <Link href="/" aria-label={t.appName} className="rounded-md"><Logo /></Link>
         <span aria-hidden className="text-faint">/</span>
-        <span className="text-sm text-muted">{t.tools.heading}</span>
+        <Link href="/#alat" className="text-sm text-muted hover:text-ink">{t.tools.heading}</Link>
       </header>
-      <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10" data-testid="tool-page">
+      <main className="relative z-10 mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 py-12" data-testid="tool-page">
         <Link href="/" className="flex w-fit items-center gap-1.5 text-xs text-muted hover:text-ink"><ArrowLeft size={14} aria-hidden />{t.tools.back}</Link>
         <div className="flex items-start gap-3">
           <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-accent/10 text-accent-text"><Icon size={20} strokeWidth={1.75} /></span>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-ink">{item.name}</h1>
+            <h1 className="font-wide text-3xl font-bold tracking-tight text-ink">{item.name}</h1>
             <p className="mt-1 text-sm text-muted">{item.desc}</p>
           </div>
         </div>
@@ -218,9 +220,9 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
           onDragOver={(e) => { e.preventDefault(); setOver(true); }}
           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
           onDrop={(e) => { e.preventDefault(); setOver(false); add(e.dataTransfer.files); }}
-          className={`flex flex-col items-center gap-3 rounded-lg px-6 py-8 text-center outline-dashed outline-1 outline-offset-0 transition-colors ${over ? "bg-accent/10 outline-accent" : "bg-panel outline-line-strong"}`}
+          className={`flex flex-col items-center gap-3 rounded-[3px] px-6 py-9 text-center outline-dashed outline-offset-[-10px] transition-[background-color,outline-color,translate,box-shadow] duration-300 ease-out-expo ${over ? "-translate-y-1 bg-raised shadow-sheet-lifted outline-2 outline-accent" : "bg-panel shadow-sheet outline-1 outline-line-strong"}`}
         >
-          <FileUp size={22} strokeWidth={1.75} aria-hidden className="text-accent-text" />
+          <FileUp size={30} strokeWidth={1.5} className="text-accent-text" />
           <p className="text-sm text-ink">{t.tools.drop(tool.accepts)}</p>
           <button type="button" className={files.length && multiple ? BTN_SECONDARY : BTN_PRIMARY} onClick={() => input.current?.click()}>
             {files.length && multiple ? <><Plus size={14} aria-hidden />{t.tools.add}</> : t.tools.choose}
