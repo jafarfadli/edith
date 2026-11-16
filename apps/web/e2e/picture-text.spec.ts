@@ -64,13 +64,13 @@ test("a pictured letterhead shows, its invisible text is locked, and a pictured 
   await expect(kop).toContainText("KEMENTERIAN CONTOH REPUBLIK");
   await page.mouse.click(box.x + 540, box.y + 760);
   await expect(kop).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Urungkan" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Undo" })).toBeDisabled();
 
   // A single click on text that is a picture is a click on the empty page: it deselects, and explains nothing.
   const miniBar = page.getByTestId("mini-bar");
-  await page.getByRole("button", { name: "Centang", exact: true }).click();
+  await page.getByRole("button", { name: "Check", exact: true }).click();
   await page.mouse.click(box.x + 540, box.y + 600);
-  await page.getByRole("button", { name: "Pilih", exact: true }).click();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
   await page.mouse.click(box.x + 540, box.y + 600);
   await expect(miniBar).toBeVisible();
   await page.mouse.click(box.x + 300, box.y + 400);
@@ -84,11 +84,11 @@ test("a pictured letterhead shows, its invisible text is locked, and a pictured 
   // Under the text tool a click there still adds a text box (Whiteout, then new text) and explains once.
   await scan.getByRole("button", { name: "Tutup" }).click();
   await expect(scan).toHaveCount(0);
-  await page.getByRole("button", { name: "Teks", exact: true }).click();
+  await page.getByRole("button", { name: "Text", exact: true }).click();
   await page.mouse.click(box.x + 300, box.y + 330);
   await expect(scan).toBeVisible();
   await expect(page.getByTestId("text-editor")).toBeVisible();
-  await page.getByRole("button", { name: "Pilih", exact: true }).click(); // the empty new box goes away
+  await page.getByRole("button", { name: "Select", exact: true }).click(); // the empty new box goes away
   await expect(page.getByTestId("text-editor")).toHaveCount(0);
 
   // The visible paragraph is still editable; the export keeps both pictures and does not draw the letterhead twice.
@@ -105,7 +105,7 @@ test("a pictured letterhead shows, its invisible text is locked, and a pictured 
   await expect(editor).toHaveCount(0);
 
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const file = path.join(test.info().outputDir, "picture-text.pdf");
   await (await download).saveAs(file);
   const text = (await pdfInfo(file)).pages[0].text;
@@ -146,9 +146,9 @@ test("a draft's edit of text that turned out to be a picture is dropped on load,
   await page.reload();
   await expect(page.getByRole("alert").filter({ hasText: "ternyata gambar dihapus" })).toBeVisible();
   await expect.poll(() => draftOps(page)).toEqual([]); // the autosave keeps the draft without it
-  await expect(page.getByRole("button", { name: "Urungkan" })).toBeDisabled(); // no undo step brings it back
+  await expect(page.getByRole("button", { name: "Undo" })).toBeDisabled(); // no undo step brings it back
 
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   await (await download).saveAs(path.join(test.info().outputDir, "dropped.pdf"));
 });

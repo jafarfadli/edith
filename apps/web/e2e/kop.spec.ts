@@ -97,7 +97,7 @@ test("the letterhead's text under its picture edits in place: the old print is c
   await expect(page.getByTestId("page").first()).toBeVisible();
   await expect.poll(() => draftOps(page)).toHaveLength(1);
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const file = path.join(test.info().outputDir, "kop.pdf");
   await (await download).saveAs(file);
   if (SHOTS) sideBySide(PDF, file, path.join(SHOTS, "kop-3-export-vs-original.png"));
@@ -158,26 +158,26 @@ test("any picture can be read: a picture's menu, its 'maybe' button and an area 
   await expect(editor).toHaveCount(0);
 
   // The OCR tool: drag around the logo's name.
-  await page.getByRole("button", { name: "Kenali teks di area (OCR)" }).click();
+  await page.getByRole("button", { name: "OCR (area)" }).click();
   await page.mouse.move(box.x + 44, box.y + 88);
   await page.mouse.down();
   await page.mouse.move(box.x + 80, box.y + 98, { steps: 4 });
   await page.mouse.move(box.x + 110, box.y + 108, { steps: 4 });
   await page.mouse.up();
   await expect(page.getByRole("status").filter({ hasText: /Hasil OCR: 1 paragraf|tidak menemukan teks/ })).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByRole("button", { name: "Pilih", exact: true })).toHaveAttribute("aria-pressed", "true"); // back to Pilih
+  await expect(page.getByRole("button", { name: "Select", exact: true })).toHaveAttribute("aria-pressed", "true"); // back to Pilih
 });
 
 test("Escape cancels an area being dragged with the OCR tool: nothing is read", async ({ page }) => {
   const box = await open(page);
   let ocrCalls = 0;
   page.on("request", (r) => { if (/\/ocr$/.test(r.url())) ocrCalls++; });
-  await page.getByRole("button", { name: "Kenali teks di area (OCR)" }).click();
+  await page.getByRole("button", { name: "OCR (area)" }).click();
   await page.mouse.move(box.x + 44, box.y + 88);
   await page.mouse.down();
   await page.mouse.move(box.x + 110, box.y + 108, { steps: 4 });
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Pilih", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Select", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.mouse.move(box.x + 120, box.y + 110, { steps: 2 });
   await page.mouse.up();
   await page.waitForTimeout(500);

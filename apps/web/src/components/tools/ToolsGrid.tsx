@@ -5,12 +5,11 @@ import { TOOL_GROUPS, TOOL_ICONS } from "./icons";
 /** The start page's tray of PDF tools, grouped by what they do, on a shelf with a ruler edge. */
 export function ToolsGrid() {
   return (
-    <section id="alat" aria-labelledby="tools-heading" data-testid="tools-grid" className="relative z-10 scroll-mt-4 border-t border-line bg-panel">
+    <section id="tools" aria-labelledby="tools-heading" data-testid="tools-grid" className="relative z-10 scroll-mt-4 border-t border-line bg-panel">
       <div aria-hidden className="ruler-edge h-3.5 border-b border-line/60" />
       <div className="mx-auto w-full max-w-6xl px-5 pb-20 pt-12 md:px-10">
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h2 id="tools-heading" className="font-wide text-2xl font-bold tracking-tight text-ink">{t.tools.heading}</h2>
-          <p className="text-sm text-faint">{t.tools.lede}</p>
         </div>
         <div className="mt-10 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-[1fr_1.25fr_1fr_0.8fr]">
           {TOOL_GROUPS.map((group) => (

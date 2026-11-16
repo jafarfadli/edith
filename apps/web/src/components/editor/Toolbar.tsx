@@ -61,7 +61,7 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
     <div className="order-last flex shrink-0 border-t border-line bg-panel sm:order-first sm:border-r sm:border-t-0" role="toolbar"
       aria-label={t.editor.tools} data-testid="tool-rail">
       {/* p-1.5: room for the focus ring, which the scroller would otherwise clip. */}
-      <div className="flex min-w-0 items-start gap-0.5 overflow-x-auto p-1.5 [scrollbar-width:none] sm:flex-col sm:items-center sm:overflow-y-auto sm:overflow-x-visible">
+      <div className="flex min-w-0 items-start gap-0.5 overflow-x-auto p-1.5 [scrollbar-width:none] max-sm:pr-10 max-sm:[mask-image:linear-gradient(to_right,#000_calc(100%-3rem),transparent)] sm:flex-col sm:items-center sm:overflow-y-auto sm:overflow-x-visible">
         <ToolButton tool="select" label={t.editor.select} caption={r.select} icon={PointerIcon} active={tool} />
         <ToolButton tool="text" label={t.editor.text} caption={r.text} icon={TextIcon} active={tool} />
         <ToolButton tool="ocr" label={t.ocr.areaTool} caption={r.ocr} icon={OcrAreaIcon} active={tool} />

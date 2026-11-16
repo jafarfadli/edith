@@ -203,7 +203,7 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
       <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center gap-3 px-5 pt-6 md:px-10">
         <Link href="/" aria-label={t.appName} className="rounded-md"><Logo /></Link>
         <span aria-hidden className="text-faint">/</span>
-        <Link href="/#alat" className="text-sm text-muted hover:text-ink">{t.tools.heading}</Link>
+        <Link href="/#tools" className="text-sm text-muted hover:text-ink">{t.tools.heading}</Link>
       </header>
       <main className="relative z-10 mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 py-12" data-testid="tool-page">
         <Link href="/" className="flex w-fit items-center gap-1.5 text-xs text-muted hover:text-ink"><ArrowLeft size={14} aria-hidden />{t.tools.back}</Link>

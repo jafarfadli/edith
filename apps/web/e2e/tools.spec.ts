@@ -25,9 +25,9 @@ test("the start page lists the tools; merging takes the PDFs in the order set", 
   await page.goto("/");
   const grid = page.getByTestId("tools-grid");
   await expect(grid.getByRole("link")).toHaveCount(14);
-  await grid.getByRole("link", { name: /Gabung PDF/ }).click();
+  await grid.getByRole("link", { name: /Merge PDF/ }).click();
   await expect(page).toHaveURL(/\/tools\/gabung-pdf$/);
-  await expect(page.getByRole("heading", { name: "Gabung PDF" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Merge PDF" })).toBeVisible();
 
   const run = page.getByTestId("tool-run");
   await page.getByTestId("tool-input").setInputFiles(SAMPLE);

@@ -64,7 +64,7 @@ export function UploadDropzone() {
         onDragOver={(e) => { e.preventDefault(); if (!busy && !inFlight.current) setOver(true); }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
         onDrop={(e) => { e.preventDefault(); setOver(false); if (!busy && !inFlight.current) handle(e.dataTransfer.files[0]); }}
-        className={`animate-settle relative flex aspect-[210/297] w-full flex-col items-center justify-center gap-5 rounded-[2px] bg-paper px-8 text-center text-paper-ink transition-[translate,box-shadow] duration-300 ease-out-expo ${over ? "-translate-y-1.5 shadow-sheet-lifted" : "shadow-sheet"}`}
+        className={`animate-settle relative flex aspect-[210/297] w-full flex-col items-center justify-center gap-5 rounded-[2px] bg-paper px-8 text-center text-paper-ink transition-[translate,box-shadow] duration-300 ease-out-expo ${over || busy ? "-translate-y-1.5 shadow-sheet-lifted" : "shadow-sheet"}`}
       >
         {/* The cut line, with the scissors at its start. */}
         <svg aria-hidden className="pointer-events-none absolute inset-4 h-[calc(100%-2rem)] w-[calc(100%-2rem)] overflow-visible">
@@ -75,7 +75,14 @@ export function UploadDropzone() {
               stroke={over ? "var(--paper-ink)" : "oklch(70% 0.004 80)"} className={over ? "marching" : ""} />
           )}
         </svg>
-        <span aria-hidden className="absolute left-7 top-[0.55rem] bg-paper px-1 text-paper-ink/60"><ScissorsIcon size={15} /></span>
+        {busy ? (
+          // The scissors run once round the cut line while the PDF goes up, the yellow cut following them.
+          <span aria-hidden className="pointer-events-none absolute inset-4">
+            <span className="cut-blade absolute bg-paper p-0.5 text-paper-ink"><ScissorsIcon size={15} /></span>
+          </span>
+        ) : (
+          <span aria-hidden className="absolute left-7 top-[0.55rem] bg-paper px-1 text-paper-ink/60"><ScissorsIcon size={15} /></span>
+        )}
         <BinderClip className="pointer-events-none absolute -top-8 left-1/2 w-14 -translate-x-1/2" />
 
         <UploadIcon size={38} strokeWidth={1.4} className={`transition-transform duration-300 ease-out-expo ${over ? "-translate-y-1" : ""}`} />

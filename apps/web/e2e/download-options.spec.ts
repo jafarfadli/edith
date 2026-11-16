@@ -36,19 +36,19 @@ test("download some pages, as pictures, or locked with a password", async ({ pag
   expect(pageCount(some.data)).toBe(2);
 
   await page.getByTestId("download-options").click();
-  await dialog.getByRole("button", { name: "Gambar" }).click();
+  await dialog.getByRole("button", { name: "Images" }).click();
   await dialog.getByRole("button", { name: "JPG" }).click();
   const pics = await go(page);
   expect(pics.name).toBe("sample.zip");
   expect(pics.data.subarray(0, 2).toString()).toBe("PK");
 
   await page.getByTestId("download-options").click();
-  await dialog.getByLabel("Pasang kata sandi").check();
+  await dialog.getByLabel("Add password").check();
   await dialog.getByLabel("Kata sandi baru").fill("kunci");
   await dialog.getByLabel("Ulangi kata sandi").fill("kunc");
   await expect(page.getByTestId("download-options-go")).toBeDisabled();
   await dialog.getByLabel("Ulangi kata sandi").fill("kunci");
-  await dialog.getByRole("button", { name: "Kuat" }).click();
+  await dialog.getByRole("button", { name: "High" }).click();
   const locked = await go(page);
   expect(locked.data.toString("latin1")).toContain("/Encrypt");
   await page.keyboard.press("Escape");
@@ -61,7 +61,7 @@ test("a page's menu downloads that page as a picture", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Unduh halaman ini…" }).click();
   const dialog = page.getByTestId("download-dialog");
   await expect(dialog.getByLabel("Halaman")).toHaveValue("2");
-  await dialog.getByRole("button", { name: "Gambar" }).click();
+  await dialog.getByRole("button", { name: "Images" }).click();
   const one = await go(page);
   expect(one.name).toBe("sample.png");
   expect(one.data.subarray(1, 4).toString()).toBe("PNG");

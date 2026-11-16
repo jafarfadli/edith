@@ -69,7 +69,7 @@ test("an edit inside an underlined bold italic name keeps its style; the underli
   await page.screenshot({ path: test.info().outputPath("committed.png"), clip: { x: box.x, y: box.y + 90, width: 420, height: 100 } });
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const file = test.info().outputPath("formatting.pdf");
   await (await downloadPromise).saveAs(file);
 

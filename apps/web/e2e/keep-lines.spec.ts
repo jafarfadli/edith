@@ -69,7 +69,7 @@ test("a one-character edit keeps the paragraph's other lines exactly where they 
   expect(op.box.layout.map((l) => l.source ?? null)).toEqual([0, null, 2]);
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const file = path.join(test.info().outputDir, "keep-lines.pdf");
   await (await downloadPromise).saveAs(file);
 
@@ -156,7 +156,7 @@ test("a mark on a kept line stays, and goes (with a notice, one undo step) once 
 
   // Highlight the start of line 1: it is still the page's own text, so it can be marked.
   const chars = page.waitForResponse((r) => /\/pages\/0\/chars$/.test(r.url()) && r.ok());
-  await page.getByRole("button", { name: "Penanda", exact: true }).click(); // default sub-tool: Stabilo
+  await page.getByRole("button", { name: "Markup", exact: true }).click(); // default sub-tool: Stabilo
   await chars;
   await page.mouse.move(box.x + 57, box.y + 116);
   await page.mouse.down();
@@ -167,7 +167,7 @@ test("a mark on a kept line stays, and goes (with a notice, one undo step) once 
   await expect.poll(marks).toBe(1);
 
   // Select the edited paragraph and nudge it: every line is redrawn now, so the mark on line 1 would float.
-  await page.getByRole("button", { name: "Pilih", exact: true }).click();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
   await page.mouse.click(box.x + 200, box.y + 134);
   await page.keyboard.press("ArrowRight");
   await expect(page.getByText("Penanda pada teks yang diedit dihapus")).toBeVisible();
@@ -176,13 +176,13 @@ test("a mark on a kept line stays, and goes (with a notice, one undo step) once 
   expect(op.box.layout.every((l) => l.source == null)).toBe(true);
 
   // One undo step brings both back.
-  await page.getByRole("button", { name: "Urungkan" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
   await expect.poll(marks).toBe(1);
-  await page.getByRole("button", { name: "Ulangi" }).click();
+  await page.getByRole("button", { name: "Redo" }).click();
   await expect.poll(marks).toBe(0);
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Unduh", exact: true }).click();
+  await page.getByRole("button", { name: "Download", exact: true }).click();
   const file = path.join(test.info().outputDir, "keep-lines-moved.pdf");
   await (await downloadPromise).saveAs(file);
   expect(pdfReport(file).pages[0].annots).toEqual([]); // no highlight floating over the moved text

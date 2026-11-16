@@ -21,14 +21,3 @@ export function Arrow({ className, delay = 0 }: { className?: string; delay?: nu
     </svg>
   );
 }
-
-/** Three short measuring ticks, as a pencil leaves at a mark, 40 × 16. */
-export function Ticks({ className, delay = 0 }: { className?: string; delay?: number }) {
-  return (
-    <svg viewBox="0 0 40 16" aria-hidden className={className}>
-      {[6, 18, 30].map((x, i) => (
-        <path key={x} {...STROKE} className="draw-in" style={{ animationDelay: `${delay + i * 120}ms` }} d={`M${x} 2v12`} />
-      ))}
-    </svg>
-  );
-}
