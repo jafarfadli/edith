@@ -21,13 +21,14 @@ export default function Home() {
       </header>
 
       {/* On a phone the sheet comes right after the headline, so uploading stays near the top; beside it from md. */}
-      <main className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 content-center gap-x-10 gap-y-14 px-5 pb-24 pt-12 md:grid-cols-[minmax(0,1fr)_minmax(0,23rem)] md:gap-y-12 md:px-10 md:pt-10 lg:gap-x-24">
+      <main className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 content-center gap-x-10 gap-y-12 px-5 pb-24 pt-10 md:grid-cols-[minmax(0,1fr)_minmax(0,23rem)] md:gap-y-7 md:px-10 md:pt-8 lg:gap-x-16">
         <div className="min-w-0 md:self-end"><Headline /></div>
 
         <div className="relative w-full max-w-[17rem] justify-self-center md:col-start-2 md:row-span-2 md:row-start-1 md:max-w-[23rem] md:self-center md:justify-self-end">
           <UploadDropzone />
           <Cutter className="animate-slide-in pointer-events-none absolute -bottom-8 -right-14 w-52 rotate-[-30deg] md:-right-32 md:w-72" />
-          <Pencil className="animate-slide-in pointer-events-none absolute -bottom-14 -left-36 hidden w-56 rotate-[-5deg] [animation-delay:.3s] md:block" />
+          {/* The pencil rests across the sheet's bottom-left corner, as if just put down after a mark. */}
+          <Pencil className="animate-slide-in pointer-events-none absolute -bottom-7 -left-24 z-10 hidden w-56 rotate-[-16deg] [animation-delay:.3s] md:block" />
         </div>
 
         <section className="flex min-w-0 flex-col gap-10 md:self-start">

@@ -2,15 +2,15 @@
 
 import { useRef } from "react";
 
-/** "Edit" set in dots, like a dot-matrix print: two dots per stroke on a 10-unit grid, 11 rows high (the "d" and "t"
- *  rise above the x-height, the "i" carries its dot in the accent). The dots pop in from left to right; under a mouse
- *  pointer the ones nearby swell, as under a loupe (the distance is worked out in CSS from --mx/--my). */
+/** "EDIT" set in dots, like a dot-matrix print: two dots per stroke on a 10-unit grid, 11 rows high. The "I" is a text
+ *  cursor in the accent, blinking once the word is in. The dots pop in from left to right; under a mouse pointer the
+ *  ones nearby swell, as under a loupe (the distance is worked out in CSS from --mx/--my). */
 
 const GLYPHS: string[][] = [
   [".######", "#######", "##.....", "##.....", "######.", "######.", "##.....", "##.....", "##.....", "#######", ".######"],
-  [".....##", ".....##", ".....##", "..#####", ".######", "##...##", "##...##", "##...##", "##...##", ".######", "..#####"],
-  ["@@", "@@", "..", "##", "##", "##", "##", "##", "##", "##", "##"],
-  ["......", ".##...", ".##...", "######", "######", ".##...", ".##...", ".##...", ".##...", ".#####", "..####"],
+  ["#####..", "######.", "##..###", "##...##", "##...##", "##...##", "##...##", "##...##", "##..###", "######.", "#####.."],
+  ["@@.@@", "..@..", "..@..", "..@..", "..@..", "..@..", "..@..", "..@..", "..@..", "..@..", "@@.@@"],
+  ["########", "########", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##...", "...##..."],
 ];
 
 const PITCH = 10;
@@ -26,9 +26,9 @@ const DOTS: Dot[] = (() => {
       if (c === ".") return;
       const x = (col + k) * PITCH + PITCH / 2;
       const y = r * PITCH + PITCH / 2;
-      // Left to right with a little scatter, the same on the server and in the browser; the i's dot lands last.
+      // Left to right with a little scatter, the same on the server and in the browser.
       const jitter = ((out.length * 73) % 97) / 97;
-      out.push({ x, y, accent: c === "@", delay: c === "@" ? 900 : Math.round((col + k) * 16 + jitter * 220) });
+      out.push({ x, y, accent: c === "@", delay: Math.round((col + k) * 16 + jitter * 220) });
     }));
     col += rows[0].length + GAP;
   }
@@ -56,7 +56,7 @@ export function DotWord({ className }: { className?: string }) {
     <svg ref={svg} viewBox={`-6 -6 ${WIDTH + 12} ${HEIGHT + 12}`} aria-hidden onPointerMove={move} onPointerLeave={leave}
       className={`dot-word overflow-visible ${className ?? ""}`}>
       {DOTS.map((d, i) => (
-        <circle key={i} cx={d.x} cy={d.y} r={4.2} fill={d.accent ? "var(--accent)" : "var(--ink)"}
+        <circle key={i} cx={d.x} cy={d.y} r={4.6} fill={d.accent ? "var(--accent)" : "var(--ink)"} className={d.accent ? "caret-dot" : undefined}
           style={{ "--x": d.x, "--y": d.y, animationDelay: `${d.delay}ms` } as React.CSSProperties} />
       ))}
     </svg>

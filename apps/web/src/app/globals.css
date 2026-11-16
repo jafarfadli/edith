@@ -1,5 +1,5 @@
 /* Edith · workbench: a graphite bench, a faint cutting grid, white paper, and one accent, the snap-off cutter's yellow.
- * type: Archivo (width axis: condensed labels, normal text, wide display) + Geist Mono for numbers and measures.
+ * type: Bricolage Grotesque (optical size follows the size; width axis for condensed labels) + Geist Mono for numbers and measures.
  */
 @import "tailwindcss";
 
@@ -61,7 +61,7 @@
   --color-paper: var(--paper);
   --color-paper-ink: var(--paper-ink);
 
-  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
   /* Type scale for a dense tool UI: 11 · 12 · 13 (base) · 15 · 20 · display. */
@@ -134,9 +134,9 @@ body { background: var(--panel); color: var(--ink); }
   background-size: 120px 100%, 12px 55%;
   background-repeat: repeat-x;
 }
-/* Wide or condensed Archivo (labels printed on the bench, display headings). */
-@utility font-wide { font-variation-settings: "wdth" 112; }
-@utility font-condensed { font-variation-settings: "wdth" 78; }
+/* Display headings at the face's full width, or condensed labels printed on the bench. */
+@utility font-wide { font-variation-settings: "wdth" 100; }
+@utility font-condensed { font-variation-settings: "wdth" 75; }
 
 /* A pencil mark drawing itself once: the path carries pathLength="1". */
 @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
@@ -180,6 +180,8 @@ body { background: var(--panel); color: var(--ink); }
 @keyframes cut-across { to { scale: 1 1; } }
 @keyframes fade-out { to { opacity: 0; } }
 @keyframes blink { 50% { opacity: 0; } }
+.dot-word circle.caret-dot { animation: dot-pop 0.55s var(--ease-out-expo) both, caret-fade 1.05s steps(1) 1.6s infinite; }
+@keyframes caret-fade { 50% { opacity: 0.25; } }
 .caret-blink { animation: blink 1.05s steps(1) infinite; }
 
 /* Feature stickers falling onto the bench, each to its own tilt; pushed around by the mouse. */

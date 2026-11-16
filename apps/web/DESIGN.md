@@ -26,49 +26,49 @@ colors:
   warn: "oklch(76% 0.15 55)"
 typography:
   display:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Bricolage Grotesque, ui-sans-serif, system-ui, sans-serif"
     fontSize: "clamp(2.6rem, 6vw, 4.75rem)"
     fontWeight: 800
     lineHeight: 0.95
     letterSpacing: "-0.035em"
-    fontVariation: "\"wdth\" 112"
+    fontVariation: "\"wdth\" 100"
   headline:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Bricolage Grotesque, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 700
     lineHeight: "2rem"
     letterSpacing: "-0.025em"
-    fontVariation: "\"wdth\" 112"
+    fontVariation: "\"wdth\" 100"
   title:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Bricolage Grotesque, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.125rem"
     fontWeight: 700
     lineHeight: "1.75rem"
     letterSpacing: "-0.025em"
-    fontVariation: "\"wdth\" 112"
+    fontVariation: "\"wdth\" 100"
   body-lg:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Bricolage Grotesque, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.9375rem"
     fontWeight: 400
     lineHeight: "1.5rem"
   body:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Bricolage Grotesque, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.8125rem"
     fontWeight: 400
     lineHeight: "1.25rem"
   label:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Bricolage Grotesque, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 600
     lineHeight: "1rem"
     letterSpacing: "0.14em"
-    fontVariation: "\"wdth\" 78"
+    fontVariation: "\"wdth\" 75"
   caption:
-    fontFamily: "Archivo, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Bricolage Grotesque, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.6875rem"
     fontWeight: 500
     lineHeight: "0.8125rem"
-    fontVariation: "\"wdth\" 78"
+    fontVariation: "\"wdth\" 75"
   mono:
     fontFamily: "Geist Mono, ui-monospace, monospace"
     fontSize: "0.6875rem"
@@ -172,14 +172,14 @@ Edith is a dark graphite workbench. The PDF is a white sheet laid on a gridded c
 
 One accent carries the whole system: the cutter's yellow. It fills the single main action of a surface, the logo tile and the cutter's body, marks what is selected or active, and is the colour of every focus ring. Everything else is a step of graphite. Depth is literal: sheets cast a short contact shadow and lift when picked up, floating panels are hairline-ringed with a deep soft shadow.
 
-The type is one family, Archivo, used across its width axis: wide and heavy for headings printed on the bench, normal width for reading, condensed for small labels and tool captions. Geist Mono carries numbers and measures. Motion is physical and plays once: the sheet settles onto the bench, the tools slide into place, pencil marks draw themselves, and on upload the scissors run once round the sheet's cut line.
+The type is one family, Bricolage Grotesque: its optical size follows the type size, so headings get its ink traps and slightly hand-cut shapes while small text stays plain; condensed (width 75) for small labels and tool captions. Geist Mono carries numbers and measures. Motion is physical and plays once: the sheet settles onto the bench, the tools slide into place, pencil marks draw themselves, and on upload the scissors run once round the sheet's cut line.
 
 **Key Characteristics:**
 - Graphite surfaces without hue; a higher surface is lighter.
 - One accent, the cutter's yellow, with dark ink on its fills.
 - White paper appears only as a document (or the blank sheet that receives one).
 - A faint square cutting grid, in regions only, fading out towards the edges.
-- Archivo across its width axis plus Geist Mono for figures.
+- Bricolage Grotesque (optical size and width axes) plus Geist Mono for figures.
 - Edith's own icon set: 24 grid, 1.75 stroke, round ends, documents drawn as the folded-corner sheet.
 - Drawn props and self-drawing pencil marks as the only decoration; all of it aria-hidden and pointer-transparent.
 
@@ -218,14 +218,14 @@ A hueless graphite ramp with one warm yellow accent, a chalk white for drawn mar
 
 ## Typography
 
-**Display Font:** Archivo, width 112 (with ui-sans-serif, system-ui)
-**Body Font:** Archivo, normal width
-**Label/Mono Font:** Archivo width 78 for labels; Geist Mono (with ui-monospace) for numbers and measures
+**Display Font:** Bricolage Grotesque, full width (100), optical size auto (with ui-sans-serif, system-ui)
+**Body Font:** Bricolage Grotesque
+**Label/Mono Font:** Bricolage Grotesque width 75 for labels; Geist Mono (with ui-monospace) for numbers and measures
 
 **Character:** One grotesque stretched three ways, like lettering stamped on tools: wide and heavy for the few headings, plain for reading, condensed where space is tight. The app type scale is small and dense (11, 12, 13 base, 15) because this is a tool, with display the only large size.
 
 ### Hierarchy
-- **Display** (900, clamp(4.6rem, 19vw, 8.25rem), 0.82, wide, accent): the "PDF" of the start page headline only. The headline is drawn, not set: "Edit" is a dot-matrix of 10-unit dots (two per stroke, the i's dot in accent) that pop in left to right and swell near the mouse like under a loupe; the "D" is a sheet of paper cut to the letter with a line of text on it being edited (a word selected, deleted and retyped); the "F" is cut through and its top half slips along the cut. Screen readers get the plain words.
+- **Display** (800, clamp(4.4rem, 21vw, 8.5rem), 10.5rem from 1024px, 0.86, accent): the "PDF" of the start page headline only. The headline is drawn, not set, as one tight block: "EDIT" is a dot-matrix of 10-unit dots (two per stroke) exactly as wide as "PDF" under it, its "I" a text cursor in accent that blinks; the dots pop in left to right and swell near the mouse like under a loupe; the "D" is a sheet of paper cut to the letter with a line of text on it being edited (a word selected, deleted and retyped); the "F" is cut through and its top half slips along the cut. Screen readers get the plain words.
 - **Headline** (700, 1.5rem, wide, tight tracking): section headings on the bench, such as the tool tray.
 - **Title** (700, 1.125rem, wide, tight tracking): panel and drawer titles, the wordmark beside the logo, the sheet's drop prompt (semibold there).
 - **Body Large** (400, 0.9375rem/1.5rem): start-page lists and tool names in the tray.
@@ -235,7 +235,7 @@ A hueless graphite ramp with one warm yellow accent, a chalk white for drawn mar
 - **Mono** (Geist Mono, 0.6875rem): limits, sizes, page counts, colour values.
 
 ### Named Rules
-**The Width Axis Rule.** Hierarchy comes from Archivo's width as much as its weight: wide for headings, normal for text, condensed for labels and captions. Do not add a second display family.
+**The Width Axis Rule.** Hierarchy comes from weight and size, with the width axis for labels: full width for headings and text, condensed for labels and captions. Do not add a second display family.
 
 **The Figures In Mono Rule.** Numbers that are measures or limits (50 MB, page ranges, hex values) are set in Geist Mono.
 
@@ -318,7 +318,7 @@ Tactile and plain: flat fills, colour-only hover, no lift.
 The blank A4 sheet (aspect 210/297) is where a PDF is dropped. Paper fill, 2px corners, Sheet shadow, clipped to the bench by a drawn binder clip, with a dashed cut line (6/5) inset 16px and the scissors at its start. While a file is held over it the sheet lifts and the dashes march; while uploading, the scissors run once round the line as it is drawn solid in yellow. Controls on it use the standard recipes with Paper Ink text.
 
 ### Signature: Drawn Props and Pencil Marks
-Flat SVG drawings of a cutter (yellow body, steel blade), a pencil and a binder clip lie around the work, sliding into place once on load. Pencil marks (a loose ring around a word, a curved arrow) are 1.6px Chalk strokes with round ends that draw themselves once, one after another. All are aria-hidden and never take the pointer.
+Flat SVG drawings of a cutter (yellow body, steel blade), a pencil and a binder clip lie around the work, sliding into place once on load; the pencil rests across the sheet's bottom-left corner rather than floating beside it. Pencil marks (a loose ring around a word, a curved arrow) are 1.6px Chalk strokes with round ends that draw themselves once, one after another. All are aria-hidden and never take the pointer.
 
 ### Icons
 Edith's own set: 24px grid, 1.75 stroke, round caps and joins, currentColor. Every document is the same 12 by 18 sheet with a 4-unit folded corner. UI icons render at 16px (14px small); rail icons at 20px; feature icons at 20-38px with lighter strokes (1.4-1.5) as they grow.
@@ -332,7 +332,7 @@ Arrivals use the expo ease-out (`cubic-bezier(0.16, 1, 0.3, 1)`): the sheet sett
 - **Do** keep every interface surface on the graphite ramp; step lighter to rise (Bench, Panel, Canvas, Raised).
 - **Do** use the cutter's yellow for one filled action per surface, with dark ink on it, and as the colour of active, selected and focused state.
 - **Do** draw new icons in Edith's set: 24 grid, 1.75 stroke, round ends, documents as the folded-corner sheet.
-- **Do** set headings in wide Archivo, labels and captions in condensed Archivo, and figures in Geist Mono.
+- **Do** set headings and text in Bricolage Grotesque, labels and captions in its condensed width, and figures in Geist Mono.
 - **Do** give floating surfaces the Pop or Modal shadow (hairline ring plus soft shadow).
 - **Do** keep decoration drawn, flat, aria-hidden and pointer-transparent, and let it animate once.
 - **Do** keep secondary text at Faint or lighter so it holds 4.5:1 on Panel and Raised.
