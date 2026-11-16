@@ -5,7 +5,7 @@ export const t = {
     title: "Edit PDF",
     /** What the editor does, listed on the start page. */
     can: ["Edit teks asli", "Isi form", "Signature & stamp", "Highlight & markup", "Atur & crop halaman", "OCR teks di gambar"],
-    kept: "File di server dihapus setelah 1 jam.",
+    kept: "Dihapus dari server setelah 1 jam",
     drop: "Letakkan PDF di sini",
     choose: "Upload PDF",
     limit: "Maks. 50 MB · 500 halaman",

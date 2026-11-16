@@ -188,7 +188,7 @@ The type is one family, Archivo, used across its width axis: wide and heavy for 
 A hueless graphite ramp with one warm yellow accent, a chalk white for drawn marks, and true white reserved for paper.
 
 ### Primary
-- **Cutter Yellow** (accent): fills for the one primary action per surface (Pilih PDF, Unduh), the logo tile, the drawn cutter's body, list bullets on the start page, the cut line drawn during upload, and the 1.5px underline that sweeps under a tool name on hover. Text on it is always Bench Ink Dark (accent-ink).
+- **Cutter Yellow** (accent): fills for the one primary action per surface (Pilih PDF, Unduh), the logo tile, the drawn cutter's body, the start page's "PDF" and its feature stickers, the cut line drawn during upload, and the 1.5px underline that sweeps under a tool name on hover. Text on it is always Bench Ink Dark (accent-ink).
 - **Lit Yellow** (accent-hover): the hover state of yellow fills; lighter, so the dark ink keeps at least 9:1.
 - **Yellow Text** (accent-text): yellow used as text, icon colour or outline on dark surfaces: active rail tools, pressed toggles, the selected swatch ring, and the global focus ring.
 - **Bench Ink Dark** (accent-ink): text and icons placed on yellow.
@@ -225,7 +225,7 @@ A hueless graphite ramp with one warm yellow accent, a chalk white for drawn mar
 **Character:** One grotesque stretched three ways, like lettering stamped on tools: wide and heavy for the few headings, plain for reading, condensed where space is tight. The app type scale is small and dense (11, 12, 13 base, 15) because this is a tool, with display the only large size.
 
 ### Hierarchy
-- **Display** (800, clamp(2.6rem, 6vw, 4.75rem), 0.95, wide): the start page headline only.
+- **Display** (900, clamp(4.6rem, 19vw, 8.25rem), 0.82, wide, accent): the "PDF" of the start page headline only. The headline is drawn, not set: "Edit" is a dot-matrix of 10-unit dots (two per stroke, the i's dot in accent) that pop in left to right and swell near the mouse like under a loupe; the "D" is a sheet of paper cut to the letter with a line of text on it being edited (a word selected, deleted and retyped); the "F" is cut through and its top half slips along the cut. Screen readers get the plain words.
 - **Headline** (700, 1.5rem, wide, tight tracking): section headings on the bench, such as the tool tray.
 - **Title** (700, 1.125rem, wide, tight tracking): panel and drawer titles, the wordmark beside the logo, the sheet's drop prompt (semibold there).
 - **Body Large** (400, 0.9375rem/1.5rem): start-page lists and tool names in the tray.
@@ -241,7 +241,7 @@ A hueless graphite ramp with one warm yellow accent, a chalk white for drawn mar
 
 ## Layout
 
-The start page is a centred container (72rem max) with 20px side gutters on phones and 40px from 768px. Above the fold it is two columns from 768px: text on the left, the A4 sheet (max 23rem; 17rem on phones so the primary action stays above the fold) on the right, with the drawn props overhanging the sheet's edges. Below it the tool tray is a full-width Panel shelf with a ruler edge on top, its groups laid in two columns from 640px and four uneven columns (1fr 1.25fr 1fr 0.8fr) from 1024px.
+The start page is a centred container (72rem max) with 20px side gutters on phones and 40px from 768px. Above the fold it is two columns from 768px: the headline and, under it, the feature stickers on the left (on a phone the sheet comes between them, so uploading stays near the top), the A4 sheet (max 23rem; 17rem on phones so the primary action stays above the fold) on the right, with the drawn props overhanging the sheet's edges. Below it the tool tray is a full-width Panel shelf with a ruler edge on top, its groups laid in two columns from 640px and four uneven columns (1fr 1.25fr 1fr 0.8fr) from 1024px.
 
 The editor fills the viewport: a 56px top bar, the tool rail (60px buttons) at the left of the canvas from 640px, and along the bottom of the screen on phones, within thumb reach, scrolling sideways with a fade at its end. The right sidebar appears from 1280px. Pages are centred on the gridded Canvas.
 
@@ -270,6 +270,9 @@ Small, practical corners. Paper is nearly square (2px). Controls are gently roun
 The recurring silhouette is the sheet with its top-right corner folded: every document icon, and the dashed cut line inset 16px inside the blank sheet with the scissors at its start.
 
 ## Components
+
+### Feature Stickers
+What the editor can do, as stickers under the start page headline, each showing its feature rather than naming it: a paper pill with a highlighted word, a chalk pill with a ticked box, a dashed pill with a signature drawing itself, a double-ruled yellow stamp, a yellow pill, a paper pill with a redacted number, a mono pill with a scan line, a word in crop marks. Mixed widths (wide, condensed, mono) and tilts between -13 and 10 degrees. They fall in one after another after the headline, settle with a small overshoot, lift 5% on hover and can be pushed around with the mouse (not on touch, so a phone still scrolls). Screen readers get the plain list.
 
 ### Buttons
 Tactile and plain: flat fills, colour-only hover, no lift.

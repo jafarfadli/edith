@@ -156,6 +156,61 @@ body { background: var(--panel); color: var(--ink); }
 @keyframes march { to { stroke-dashoffset: -16; } }
 @utility marching { animation: march 0.6s linear infinite; }
 
+/* The start page's headline. Dots of "Edit" pop in, then swell near the mouse like under a loupe. */
+@keyframes dot-pop { from { scale: 0; } 60% { scale: 1.25; } }
+.dot-word { --mx: -999; --my: -999; }
+.dot-word circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dot-pop 0.55s var(--ease-out-expo) both;
+  transform: scale(calc(1 + 0.9 * max(0, 1 - hypot(var(--mx) - var(--x), var(--my) - var(--y)) / 60)));
+  transition: transform 0.35s var(--ease-out-expo);
+}
+/* "PDF" rises into place after the dots; the F is then cut, its top half slipping along the cut. */
+@keyframes rise { from { translate: 0 0.35em; opacity: 0; } }
+.pdf-rise { display: inline-block; animation: rise 0.9s var(--ease-out-expo) 0.55s both; }
+.cut-low { clip-path: polygon(0 64%, 100% 40%, 100% 100%, 0 100%); }
+.cut-high { clip-path: polygon(0 0, 100% 0, 100% 40%, 0 64%); animation: slip 0.7s var(--ease-out-expo) 1.5s both; }
+@keyframes slip { to { translate: 0.05em -0.035em; rotate: -2.5deg; } }
+.cut-line {
+  left: -0.12em; right: -0.12em; top: 52%; height: 1.5px; background: var(--chalk);
+  rotate: -12deg; transform-origin: left center; scale: 0 1; opacity: 0.8;
+  animation: cut-across 0.45s var(--ease-out-expo) 1.2s forwards, fade-out 0.6s ease-out 1.8s forwards;
+}
+@keyframes cut-across { to { scale: 1 1; } }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes blink { 50% { opacity: 0; } }
+.caret-blink { animation: blink 1.05s steps(1) infinite; }
+
+/* Feature stickers falling onto the bench, each to its own tilt; pushed around by the mouse. */
+@keyframes sticker-drop {
+  from { translate: 0 -55vh; rotate: calc(var(--r) * -3); opacity: 0; }
+  10% { opacity: 1; }
+  70% { translate: 0 5px; rotate: calc(var(--r) * 1.3); }
+  to { translate: 0 0; rotate: var(--r); }
+}
+.sticker {
+  display: inline-block; position: relative; rotate: var(--r); cursor: grab; touch-action: auto;
+  animation: sticker-drop 0.85s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+  transition: scale 0.25s var(--ease-out-expo), box-shadow 0.25s var(--ease-out-expo);
+}
+.sticker:hover { scale: 1.05; }
+.sticker.is-held { cursor: grabbing; scale: 1.08; z-index: 10; box-shadow: var(--shadow-sheet-lifted); }
+@keyframes sweep { from { background-size: 0% 100%; } }
+.marker-sweep {
+  background: linear-gradient(var(--accent), var(--accent)) no-repeat left / 100% 100%;
+  animation: sweep 0.6s var(--ease-out-expo) 1.9s both;
+}
+@keyframes scan { from { translate: 0 -120%; } to { translate: 0 120%; } }
+.ocr-scan::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(transparent 44%, oklch(81% 0.155 80 / 0.55) 50%, transparent 56%);
+  animation: scan 2.4s ease-in-out 2s infinite alternate both;
+}
+/* Crumbs on the bench drifting a few pixels. */
+@keyframes drift { 50% { translate: 6px -9px; } }
+.crumb { animation: drift 8s ease-in-out infinite; }
+
 ::selection { background: oklch(81% 0.155 80 / 0.35); color: var(--ink); }
 html { scrollbar-color: var(--line-strong) transparent; caret-color: var(--accent); }
 
