@@ -58,7 +58,7 @@ export function Sidebar() {
     <button role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`flex-1 ${segment(tab === k)}`}>{label}</button>
   );
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-line bg-panel" aria-label={t.editor.pages}>
+    <aside className="hidden w-52 shrink-0 flex-col border-l border-line bg-panel xl:flex" aria-label={t.editor.pages}>
       <div role="tablist" className={`m-2 ${SEGMENTED}`}>
         {tabBtn("pages", t.panel.pages)}
         {tabBtn("annotations", count ? `${t.panel.annotations} (${count})` : t.panel.annotations)}

@@ -16,7 +16,7 @@ import { dropLockedTextEdits, dropStaleTextEdits, resolveImports, restoreDraft }
 import { errorMessage, t } from "@/lib/strings";
 import { createDebounced } from "@/lib/autosave";
 import { boxFonts } from "@/lib/textbox";
-import { editorStore, useEditor, type EditorDoc } from "@/store/editor";
+import { editorStore, pageGeom, useEditor, type EditorDoc } from "@/store/editor";
 import { pdfStore } from "@/store/pdfs";
 import { useSpaceHeld } from "@/store/view";
 import { charsStore } from "@/store/chars";
@@ -180,6 +180,20 @@ export function Editor({ docId: editId, initialName }: { docId: string; initialN
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, [editId, liveDoc]);
 
+  // On a narrow screen (a phone) the first page opens fitted to the width instead of at 100 %, wider than the screen.
+  const fitted = useRef(false);
+  useEffect(() => {
+    if (!info || !pdf || fitted.current) return;
+    fitted.current = true;
+    const el = document.getElementById("page-scroller");
+    const first = editorStore.getState().doc.pages[0];
+    if (!el || !first) return;
+    const g = pageGeom(first, info);
+    const width = g.rotation % 180 ? g.height : g.width;
+    const room = el.clientWidth - 24;
+    if (width > room) editorStore.getState().setZoom(Math.floor((room / width) * 100) / 100);
+  }, [info, pdf]);
+
   // Notices raised by store actions (e.g. a text commit that deleted marks).
   useEffect(() => noticeStore.subscribe((s, prev) => { if (s.notice && s.notice !== prev.notice) setNotice(s.notice); }), []);
 
@@ -205,15 +219,15 @@ export function Editor({ docId: editId, initialName }: { docId: string; initialN
 
   return (
     <div className="flex h-dvh flex-col bg-panel">
-      <Header onNotice={setNotice}><Toolbar onNotice={setNotice} /></Header>
+      <Header onNotice={setNotice} />
       <CrossPageGhost />
       <DownloadDialog />
-      <div className="flex min-h-0 flex-1">
-        {pdf ? <Sidebar /> : <aside className="w-52 shrink-0 border-r border-line bg-panel" />}
-        <div className="relative min-w-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+        <Toolbar onNotice={setNotice} />
+        <div className="relative min-h-0 min-w-0 flex-1">
           <PropertiesBar />
           <main
-            className="absolute inset-0 overflow-auto bg-canvas"
+            className="bench-grid absolute inset-0 overflow-auto bg-canvas"
             id="page-scroller"
             style={{ cursor: tool === "pan" || space ? "grab" : undefined }}
             // The middle button pans too (and must not start the browser's auto-scroll).
@@ -237,6 +251,9 @@ export function Editor({ docId: editId, initialName }: { docId: string; initialN
           {/* Over the canvas (centred on it, above the zoom pill), not on the window. */}
           {notice && <Notice kind={notice.kind} action={notice.action} onClose={() => setNotice(null)}>{notice.text}</Notice>}
         </div>
+        {/* The pages and annotations panel, right of the canvas; below xl the rail's Halaman takes its place
+            (the canvas keeps the room the properties bar needs). */}
+        {pdf ? <Sidebar /> : <aside className="hidden w-52 shrink-0 border-l border-line bg-panel xl:block" />}
       </div>
       <FindBar />
       <ObjectContextMenu />

@@ -13,6 +13,11 @@ export const t = {
     recentRemove: "Hapus dari daftar",
     recentPages: (n: number) => `${n} halaman`,
   },
+  /** Short names under the tools on the editor's rail (the full name is the button's label and tooltip). */
+  rail: {
+    select: "Pilih", text: "Teks", ocr: "OCR", erase: "Hapus", markup: "Tandai", draw: "Coret", shape: "Bentuk",
+    image: "Gambar", signature: "Tanda tangan", check: "Centang", cross: "Silang", pages: "Halaman", crop: "Potong",
+  },
   editor: {
     download: "Unduh",
     downloading: "Menyiapkan file…",
