@@ -84,3 +84,86 @@ test("dragging original text from the first click shows the smart guides and sna
   const [edit] = await edits(page);
   expect(Math.abs(edit.box.rect.x - P1.x)).toBeLessThan(2); // snapped back to the left edge it shares with paragraph 2, not 4 px off
 });
+
+// A scanned page (apps/api/scripts/e2e_scan_pdf.py): OCR's body paragraph starts at (72, 300). Needs Tesseract (ind+eng),
+// as ocr.spec.ts does.
+const SCAN = path.join(__dirname, "fixtures", "scan.pdf");
+
+test("text OCR read moves like any object: arrow keys and drag, from the first click; its cover stays where the print was", async ({ page }) => {
+  const { execFileSync } = await import("node:child_process");
+  let ok = false;
+  try { ok = /^ind$/m.test(execFileSync("tesseract", ["--list-langs"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })); } catch { /* none */ }
+  test.skip(!ok && process.env.EDITH_REQUIRE_TESSERACT !== "1", "tesseract with ind+eng is not installed");
+
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  const textLoaded = page.waitForResponse((r) => /\/documents\/[^/]+\/text$/.test(r.url()) && r.ok());
+  await page.getByTestId("file-input").setInputFiles(SCAN);
+  await expect(page).toHaveURL(/\/edit\//);
+  await textLoaded;
+  const box = (await page.getByTestId("page").first().boundingBox())!;
+  await page.getByTestId("ocr-button").click();
+  await expect(page.getByTestId("ocr-status")).toContainText(/Hasil OCR: \d+ paragraf/, { timeout: 45_000 });
+  await page.getByTestId("ocr-status-close").click();
+
+  type Op = { type: string; box: { rect: { x: number; y: number } }; cover: { x: number; y: number } };
+  const ocrEdits = async () => (await draftOps(page) as unknown as Op[]).filter((o) => o.type === "text.ocr_edit");
+  const del = page.getByTestId("properties-bar").getByRole("button", { name: "Hapus teks" });
+  await expect(async () => {
+    await page.mouse.click(box.x + 150, box.y + 300);
+    await expect(del).toBeVisible({ timeout: 1000 });
+  }).toPass();
+  expect(await ocrEdits()).toHaveLength(0); // only selected
+
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect.poll(async () => (await ocrEdits()).length).toBe(1);
+  const [a] = await ocrEdits();
+  const cover = { ...a.cover };
+
+  // Dragged by the pointer afterwards (the edit is an object now): 40 px down.
+  const y = box.y + 300 + a.box.rect.y - 300 + 10;
+  await page.mouse.move(box.x + a.box.rect.x + 30, y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(box.x + a.box.rect.x + 30, y + i * 5);
+  await page.mouse.up();
+  await expect.poll(async () => (await ocrEdits())[0].box.rect.y).toBeGreaterThan(a.box.rect.y + 20);
+  expect((await ocrEdits())[0].cover).toEqual(cover); // the covers stay on the print
+  expect(await ocrEdits()).toHaveLength(1);
+});
+
+test("text OCR read can be dragged straight after the first click: the text moves, the covers stay", async ({ page }) => {
+  const { execFileSync } = await import("node:child_process");
+  let ok = false;
+  try { ok = /^ind$/m.test(execFileSync("tesseract", ["--list-langs"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })); } catch { /* none */ }
+  test.skip(!ok && process.env.EDITH_REQUIRE_TESSERACT !== "1", "tesseract with ind+eng is not installed");
+
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  const textLoaded = page.waitForResponse((r) => /\/documents\/[^/]+\/text$/.test(r.url()) && r.ok());
+  await page.getByTestId("file-input").setInputFiles(SCAN);
+  await expect(page).toHaveURL(/\/edit\//);
+  await textLoaded;
+  const box = (await page.getByTestId("page").first().boundingBox())!;
+  await page.getByTestId("ocr-button").click();
+  await expect(page.getByTestId("ocr-status")).toContainText(/Hasil OCR: \d+ paragraf/, { timeout: 45_000 });
+  await page.getByTestId("ocr-status-close").click();
+
+  const del = page.getByTestId("properties-bar").getByRole("button", { name: "Hapus teks" });
+  await expect(async () => {
+    await page.mouse.click(box.x + 150, box.y + 300);
+    await expect(del).toBeVisible({ timeout: 1000 });
+  }).toPass();
+
+  const x = box.x + 150, y = box.y + 300;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(x + 3, y + i * 5);
+  await page.mouse.up();
+  await expect.poll(async () => (await draftOps(page)).filter((o) => o.type === "text.ocr_edit").length).toBe(1);
+  const [op] = (await draftOps(page)).filter((o) => o.type === "text.ocr_edit") as unknown as { box: { rect: { y: number } }; cover: { y: number } }[];
+  expect(op.box.rect.y).toBeGreaterThan(300 + 20); // moved down about 40
+  expect(op.cover.y).toBeLessThan(300); // the cover is still on the print
+});
+
