@@ -30,7 +30,7 @@ function CropMarks() {
   );
 }
 
-/** `at`: a nudge off the row (rem, left and top), so they lie thrown down and overlapping rather than in a row. */
+/** `at`: a nudge off the row (rem, left and top), so they lie thrown down rather than in a row. */
 const STICKERS: { rot: number; at: [number, number]; className: string; body: React.ReactNode }[] = [
   {
     rot: -4, at: [0, 0],
@@ -38,12 +38,12 @@ const STICKERS: { rot: number; at: [number, number]; className: string; body: Re
     body: <>Edit teks <span className="marker-sweep rounded-[3px] px-1">asli</span></>,
   },
   {
-    rot: 7, at: [-0.6, 0.4],
+    rot: 7, at: [0.2, 0.6],
     className: "rounded-full border border-chalk/70 px-4 py-2 font-condensed text-lg font-semibold uppercase tracking-wide text-ink",
     body: <span className="flex items-center gap-2"><Check /> Isi form</span>,
   },
   {
-    rot: -9, at: [-0.5, -0.3],
+    rot: -9, at: [0, -0.2],
     className: "rounded-full border border-dashed border-line-strong px-4 py-1.5",
     body: (
       <svg viewBox="0 0 90 36" className="h-8 w-20" aria-hidden>
@@ -53,33 +53,33 @@ const STICKERS: { rot: number; at: [number, number]; className: string; body: Re
     ),
   },
   {
-    rot: -13, at: [0.2, -0.5],
+    rot: -13, at: [0.4, 0.3],
     className: "rounded-md border-2 border-accent px-3 py-1 font-wide text-lg font-extrabold uppercase tracking-[0.18em] text-accent-text outline outline-1 outline-offset-2 outline-accent/60",
     body: <>Disetujui</>,
   },
   {
-    rot: 3, at: [-0.9, 0.3],
+    rot: 3, at: [0, 0],
     className: "rounded-full bg-accent px-5 py-2 font-condensed text-xl font-bold uppercase tracking-wide text-accent-ink",
     body: <>Highlight</>,
   },
   {
-    rot: -2, at: [-0.4, -0.2],
+    rot: -2, at: [0.3, 0.5],
     className: "rounded-full bg-paper px-4 py-2 font-mono text-sm font-medium text-paper-ink",
     body: <span className="flex items-center gap-2">NIK <span className="inline-block h-[1.1em] w-24 rounded-[2px] bg-paper-ink" /></span>,
   },
   {
-    rot: 10, at: [0.3, -0.6],
+    rot: 10, at: [0.1, -0.3],
     className: "ocr-scan relative overflow-hidden rounded-full border border-chalk/70 px-4 py-2 font-mono text-lg font-semibold tracking-[0.3em] text-ink",
     body: <>OCR</>,
   },
   {
-    rot: -6, at: [-0.2, -0.4],
+    rot: -6, at: [0.5, 0.2],
     className: "relative mx-2 px-3 py-1 font-wide text-2xl font-extrabold tracking-tight text-ink",
     body: <><CropMarks />Crop</>,
   },
 ];
 
-export function Stickers() {
+export function Stickers({ className }: { className?: string }) {
   const drag = useRef<{ el: HTMLElement; x: number; y: number; dx: number; dy: number } | null>(null);
 
   function down(e: React.PointerEvent<HTMLElement>) {
@@ -105,14 +105,16 @@ export function Stickers() {
   return (
     <>
       <ul className="sr-only">{t.upload.can.map((item) => <li key={item}>{item}</li>)}</ul>
-      <div aria-hidden className="flex max-w-lg flex-wrap items-center gap-x-1.5 gap-y-1">
-        {STICKERS.map((s, i) => (
+      <div aria-hidden className={`flex flex-wrap items-center gap-x-5 gap-y-5 ${className ?? ""}`}>
+        {STICKERS.map((s, i) => {
+          return (
           <span key={i} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
             className={`sticker select-none whitespace-nowrap ${s.className}`}
             style={{ "--r": `${s.rot}deg`, marginLeft: `${s.at[0]}rem`, marginTop: `${s.at[1]}rem`, animationDelay: `${1150 + i * 90}ms` } as React.CSSProperties}>
             {s.body}
           </span>
-        ))}
+          );
+        })}
       </div>
     </>
   );
