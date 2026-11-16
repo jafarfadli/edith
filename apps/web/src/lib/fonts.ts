@@ -1,4 +1,5 @@
 import * as fontkit from "fontkit";
+import { BASE_PATH } from "@/lib/basePath";
 import type { BundledFont, FontRef, OriginalFont } from "@edith/ops";
 import type { CjkScript, FallbackFonts } from "@/lib/fallback";
 import { pickerGroups, type PickerGroup } from "@/lib/fontPicker";
@@ -149,7 +150,7 @@ export class FontStore implements FallbackFonts {
   private files = new Map<string, Promise<{ buf: ArrayBuffer; metrics: FontMetrics }>>();
   private originalUrl: ((f: OriginalFont) => string) | null = null;
 
-  constructor(private baseUrl = "/fonts") {}
+  constructor(private baseUrl = `${BASE_PATH}/fonts`) {}
 
   /** Where original (embedded) fonts of the open document and its imports come from; forgets the previous document's. */
   setOriginalSource(url: ((f: OriginalFont) => string) | null): void {

@@ -1,10 +1,11 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { BASE_PATH } from "@/lib/basePath";
 
 let lib: Promise<typeof import("pdfjs-dist")> | null = null;
 
 function pdfjs() {
   lib ??= import("pdfjs-dist").then((m) => {
-    m.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+    m.GlobalWorkerOptions.workerSrc = `${BASE_PATH}/pdf.worker.min.mjs`;
     return m;
   });
   return lib;
@@ -14,11 +15,11 @@ function pdfjs() {
  *  pdf.js decodes no JBIG2 or CCITT fax image: a letterhead or signature scanned to 1-bit vanishes from the page
  *  (M5c, Nota Dinas). The trailing slashes are required. */
 export const PDFJS_ASSETS = {
-  wasmUrl: "/pdfjs/wasm/",
-  cMapUrl: "/pdfjs/cmaps/",
+  wasmUrl: `${BASE_PATH}/pdfjs/wasm/`,
+  cMapUrl: `${BASE_PATH}/pdfjs/cmaps/`,
   cMapPacked: true,
-  standardFontDataUrl: "/pdfjs/standard_fonts/",
-  iccUrl: "/pdfjs/iccs/",
+  standardFontDataUrl: `${BASE_PATH}/pdfjs/standard_fonts/`,
+  iccUrl: `${BASE_PATH}/pdfjs/iccs/`,
 } as const;
 
 export async function loadPdf(url: string): Promise<PDFDocumentProxy> {
