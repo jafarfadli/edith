@@ -13,7 +13,10 @@ from edith.routes.documents import read_limited
 
 router = APIRouter()
 
-TOOL_NAMES = {"unlock", "protect", "to-images", "to-text", "compress", "merge", "split", "extract", "images-to-pdf"}
+TOOL_NAMES = {"unlock", "protect", "to-images", "to-text", "compress", "merge", "split", "extract", "images-to-pdf",
+              "watermark", "page-numbers", "ocr"}
+# A whole document read by OCR (POST /tools/ocr): at most this many pages without text, in one request.
+OCR_MAX_PAGES = 60
 MAX_FILES = 50
 
 
@@ -28,7 +31,7 @@ def _disposition(name: str) -> str:
     return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
 
 
-SUFFIX = {"unlock": "terbuka", "protect": "terkunci", "compress": "kecil", "merge": "gabungan", "split": "terpisah",
+SUFFIX = {"watermark": "watermark", "page-numbers": "bernomor", "ocr": "bisa-dicari", "unlock": "terbuka", "protect": "terkunci", "compress": "kecil", "merge": "gabungan", "split": "terpisah",
           "extract": "halaman", "to-images": "gambar", "to-text": "teks", "images-to-pdf": "gambar"}
 
 
@@ -43,7 +46,12 @@ async def run_tool(
     pages: Annotated[str | None, Form()] = None,
     level: Annotated[str, Form()] = "medium",
     mode: Annotated[str, Form()] = "every", every: Annotated[int, Form()] = 1, ranges: Annotated[str | None, Form()] = None,
-    size: Annotated[str, Form()] = "a4", margin: Annotated[float, Form()] = 0,
+    size: Annotated[str, Form()] = "a4", margin: Annotated[float | None, Form()] = None,
+    text: Annotated[str | None, Form()] = None, font_size: Annotated[float | None, Form()] = None,
+    colour: Annotated[str | None, Form()] = None, opacity: Annotated[float, Form()] = 0.35,
+    diagonal: Annotated[bool, Form()] = True,
+    position: Annotated[str, Form()] = "bottom-center", number_format: Annotated[str, Form()] = "n",
+    start: Annotated[int, Form()] = 1,
 ) -> Response:
     if tool not in TOOL_NAMES:
         raise BadOptions(f"unknown tool {tool!r}", field="tool")
@@ -62,10 +70,29 @@ async def run_tool(
             raise TooLarge(f"files larger than {s.max_upload_bytes} bytes together", max_bytes=s.max_upload_bytes)
         blobs.append((data, up.filename or "dokumen.pdf"))
     stem = _stem(blobs[0][1])
+    registry = request.app.state.fonts
+
+    def sans(bold: bool) -> str:
+        return str(registry.path(registry.fallback("sans"), bold, False))
+
+    def read_scan(doc) -> tools.Output:
+        from edith import ocr
+        from edith.errors import OcrUnavailable
+        cmd = ocr.tesseract_cmd(s.tesseract_cmd)
+        if cmd is None or not ocr.available(s.tesseract_cmd):
+            raise OcrUnavailable("tesseract with Indonesian and English is not installed")
+        gate = request.app.state.ocr_gate
+        key = f"tool:{id(doc)}"
+        gate.enter(key)
+        try:
+            out, _read = tools.searchable(doc, cmd, "+".join(ocr.LANGS), s.ocr_timeout_seconds, OCR_MAX_PAGES)
+            return out
+        finally:
+            gate.leave(key)
 
     def _run() -> tools.Output:
         if tool == "images-to-pdf":
-            return tools.images_to_pdf(blobs, size, margin, s.max_pages)
+            return tools.images_to_pdf(blobs, size, margin or 0, s.max_pages)
         docs = [tools.open_input(data, s.max_pages, password) for data, _ in blobs]
         try:
             if tool == "merge":
@@ -86,6 +113,15 @@ async def run_tool(
                     return tools.compress(doc, level)
                 case "split":
                     return tools.split(doc, mode, stem, every, ranges)
+                case "watermark":
+                    return tools.watermark(doc, text or "", tools.parse_pages(pages, doc.page_count), sans(True),
+                                           font_size or 48, colour or "#9ca3af", opacity, diagonal)
+                case "page-numbers":
+                    return tools.page_numbers(doc, tools.parse_pages(pages, doc.page_count), sans(False), position,
+                                              number_format, start, font_size or 10, 28 if margin is None else margin,
+                                              colour or "#000000")
+                case "ocr":
+                    return read_scan(doc)
                 case _:  # extract
                     if not pages or not pages.strip():
                         raise BadOptions("pages are empty", field="pages")

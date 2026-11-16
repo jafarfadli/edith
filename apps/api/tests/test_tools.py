@@ -1,5 +1,6 @@
 """The PDF tools (edith.tools, POST /tools/{tool}) and the upload of a locked PDF with its password."""
 import io
+import os
 import zipfile
 
 import pymupdf
@@ -213,3 +214,38 @@ def test_export_refuses_unknown_output_options(client, output):
 def test_export_refuses_pages_past_the_end(client):
     r = export(client, make_pdf(2), {"pages": "3"})
     assert r.status_code == 400 and r.json()["error"]["field"] == "pages"
+
+
+def test_watermark_on_the_pages_asked(client):
+    doc = pdf_of(run(client, "watermark", [("a.pdf", make_pdf(3))], text="RAHASIA", pages="1, 3", opacity=0.3))
+    assert ["RAHASIA" in p.get_text() for p in doc] == [True, False, True]
+    r = run(client, "watermark", [("a.pdf", make_pdf(1))], text="  ")
+    assert r.json()["error"]["field"] == "text"
+
+
+def test_page_numbers_count_from_the_start_asked(client):
+    doc = pdf_of(run(client, "page-numbers", [("a.pdf", make_pdf(3))], number_format="page_n_of", start=5,
+                     position="bottom-right", pages="2-3"))
+    assert "Halaman 5 dari" not in doc[0].get_text()
+    assert "Halaman 5 dari 6" in doc[1].get_text() and "Halaman 6 dari 6" in doc[2].get_text()
+    numbers = [b for b in doc[1].get_text("words") if b[4] in ("5",)]
+    assert numbers and numbers[0][0] > 400 and numbers[0][1] > 750  # bottom right
+    assert run(client, "page-numbers", [("a.pdf", make_pdf(1))], position="middle").json()["error"]["field"] == "position"
+
+
+def has_tesseract() -> bool:
+    from edith import ocr
+    return ocr.available()
+
+
+@pytest.mark.skipif(not has_tesseract() and os.environ.get("EDITH_REQUIRE_TESSERACT") != "1", reason="no tesseract")
+def test_a_scan_becomes_searchable_and_keeps_its_look(client):
+    from pathlib import Path
+    scan = (Path(__file__).parents[2] / "web" / "e2e" / "fixtures" / "scan.pdf").read_bytes()
+    before = pymupdf.open(stream=scan)[0].get_pixmap(dpi=40).samples
+    doc = pdf_of(run(client, "ocr", [("scan.pdf", scan)]))
+    assert doc[0].search_for("PERMOHONAN")
+    assert doc[0].get_pixmap(dpi=40).samples == before  # the text is invisible
+    # A PDF with text already is left as it was.
+    doc = pdf_of(run(client, "ocr", [("a.pdf", make_pdf(1))]))
+    assert texts(doc) == ["Halaman 1"]

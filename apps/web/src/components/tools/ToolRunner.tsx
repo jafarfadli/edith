@@ -91,6 +91,13 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
     }
   }
 
+  const pagesField = (
+    <label className={LABEL}>
+      {t.tools.opts.onPages}
+      <input className={FIELD} value={o.pages} onChange={(e) => set({ pages: e.target.value })} inputMode="numeric"
+        placeholder={t.tools.opts.pagesAll} aria-invalid={bad === "pages"} />
+    </label>
+  );
   const optionsUi = (() => {
     switch (tool.api) {
       case "extract":
@@ -146,6 +153,33 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
             <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={o.allowCopy} onChange={(e) => set({ allowCopy: e.target.checked })} />{t.tools.opts.allowCopy}</label>
           </>
         );
+      case "watermark":
+        return (
+          <>
+            <label className={LABEL}>
+              {t.tools.opts.text}
+              <input className={FIELD} value={o.text} maxLength={120} onChange={(e) => set({ text: e.target.value })} placeholder={t.tools.opts.textHint} />
+            </label>
+            <Choice label={t.tools.opts.strength} value={o.strength} options={["light", "medium", "strong"] as const} names={t.tools.opts.strengths} onChange={(strength) => set({ strength })} />
+            <Choice label={t.tools.opts.direction} value={o.diagonal ? "diagonal" : "level"} options={["diagonal", "level"] as const} names={t.tools.opts.directions} onChange={(d) => set({ diagonal: d === "diagonal" })} />
+            <Choice label={t.tools.opts.colour} value={o.colour} options={Object.keys(t.tools.opts.colours)} names={t.tools.opts.colours} onChange={(colour) => set({ colour })} />
+            {pagesField}
+          </>
+        );
+      case "page-numbers":
+        return (
+          <>
+            <Choice label={t.tools.opts.position} value={o.position} options={["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"] as const} names={t.tools.opts.positions} onChange={(position) => set({ position })} />
+            <Choice label={t.tools.opts.numberFormat} value={o.numberFormat} options={["n", "n_of", "page_n", "page_n_of"] as const} names={t.tools.opts.numberFormats} onChange={(numberFormat) => set({ numberFormat })} />
+            <label className={LABEL}>
+              {t.tools.opts.start}
+              <input className={`${FIELD} w-24`} type="number" min={0} value={o.start} onChange={(e) => set({ start: Number(e.target.value) })} aria-invalid={bad === "start"} />
+            </label>
+            {pagesField}
+          </>
+        );
+      case "ocr":
+        return <p className="text-xs text-muted">{t.tools.opts.ocrNote}</p>;
       default:
         return null;
     }

@@ -3,7 +3,7 @@
 
 export type ToolSlug =
   | "gabung-pdf" | "pisah-pdf" | "ambil-halaman" | "kompres-pdf" | "pdf-ke-gambar" | "gambar-ke-pdf" | "pdf-ke-teks"
-  | "buka-kunci-pdf" | "kunci-pdf";
+  | "buka-kunci-pdf" | "kunci-pdf" | "watermark-pdf" | "nomor-halaman" | "pdf-bisa-dicari";
 
 export interface ToolDef {
   slug: ToolSlug;
@@ -27,6 +27,9 @@ export const TOOLS: ToolDef[] = [
   { slug: "pdf-ke-teks", api: "to-text", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "buka-kunci-pdf", api: "unlock", accepts: "pdf", min: 1, max: 1, password: true },
   { slug: "kunci-pdf", api: "protect", accepts: "pdf", min: 1, max: 1, password: false },
+  { slug: "watermark-pdf", api: "watermark", accepts: "pdf", min: 1, max: 1, password: false },
+  { slug: "nomor-halaman", api: "page-numbers", accepts: "pdf", min: 1, max: 1, password: false },
+  { slug: "pdf-bisa-dicari", api: "ocr", accepts: "pdf", min: 1, max: 1, password: false },
 ];
 
 export const toolBySlug = (slug: string): ToolDef | undefined => TOOLS.find((x) => x.slug === slug);
@@ -36,11 +39,18 @@ export interface ToolOptions {
   pages: string; format: "png" | "jpg"; dpi: 72 | 150 | 300; level: "low" | "medium" | "high";
   mode: "every" | "ranges"; every: number; ranges: string; size: "a4" | "fit"; margin: 0 | 20 | 40;
   newPassword: string; confirm: string; allowPrint: boolean; allowCopy: boolean;
+  text: string; strength: "light" | "medium" | "strong"; diagonal: boolean; colour: string;
+  position: "bottom-center" | "bottom-right" | "bottom-left" | "top-center" | "top-right" | "top-left";
+  numberFormat: "n" | "n_of" | "page_n" | "page_n_of"; start: number;
 }
+
+/** See-through of a watermark, by its strength. */
+export const OPACITY = { light: 0.15, medium: 0.3, strong: 0.5 } as const;
 
 export const DEFAULT_OPTIONS: ToolOptions = {
   pages: "", format: "png", dpi: 150, level: "medium", mode: "every", every: 1, ranges: "", size: "a4", margin: 20,
   newPassword: "", confirm: "", allowPrint: true, allowCopy: true,
+  text: "", strength: "medium", diagonal: true, colour: "#9ca3af", position: "bottom-center", numberFormat: "n", start: 1,
 };
 
 /** A file the tool takes (by type, or by name when the browser gives no type). */
@@ -53,8 +63,11 @@ export function accepted(tool: ToolDef, file: { name: string; type: string }): b
 const PAGES = /^\s*(\d+\s*(-\s*\d*)?|-\s*\d+)(\s*,\s*(\d+\s*(-\s*\d*)?|-\s*\d+))*\s*$/;
 
 /** Why the options cannot go to the server yet (a message key of t.tools), or null. */
-export function invalid(tool: ToolDef, o: ToolOptions): "pages" | "ranges" | "every" | "newPassword" | "mismatch" | null {
+export function invalid(tool: ToolDef, o: ToolOptions): "pages" | "ranges" | "every" | "newPassword" | "mismatch" | "text" | "start" | null {
+  const pagesOk = !o.pages.trim() || PAGES.test(o.pages);
   switch (tool.api) {
+    case "watermark": return !o.text.trim() || o.text.length > 120 ? "text" : pagesOk ? null : "pages";
+    case "page-numbers": return !Number.isInteger(o.start) || o.start < 0 ? "start" : pagesOk ? null : "pages";
     case "extract": return PAGES.test(o.pages) ? null : "pages";
     case "to-images": return !o.pages.trim() || PAGES.test(o.pages) ? null : "pages";
     case "split": return o.mode === "ranges" ? (PAGES.test(o.ranges) ? null : "ranges") : (Number.isInteger(o.every) && o.every >= 1 ? null : "every");
@@ -73,6 +86,8 @@ export function fields(tool: ToolDef, o: ToolOptions, password: string): Record<
     case "split": return o.mode === "ranges" ? { ...out, mode: "ranges", ranges: o.ranges } : { ...out, mode: "every", every: String(o.every) };
     case "images-to-pdf": return { size: o.size, margin: String(o.size === "fit" ? 0 : o.margin) };
     case "protect": return { ...out, new_password: o.newPassword, allow_print: String(o.allowPrint), allow_copy: String(o.allowCopy) };
+    case "watermark": return { ...out, text: o.text.trim(), opacity: String(OPACITY[o.strength]), diagonal: String(o.diagonal), colour: o.colour, pages: o.pages };
+    case "page-numbers": return { ...out, position: o.position, number_format: o.numberFormat, start: String(o.start), pages: o.pages };
     default: return out;
   }
 }
