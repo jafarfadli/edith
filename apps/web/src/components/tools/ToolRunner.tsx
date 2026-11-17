@@ -282,6 +282,20 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
         return (
           <>
             <Choice label={t.tools.opts.position} value={o.position} options={["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"] as const} names={t.tools.opts.positions} onChange={(position) => set({ position })} />
+            <Choice label={t.tools.opts.numerals} value={o.numerals} options={["arabic", "roman", "ROMAN", "roman_then_arabic"] as const} names={t.tools.opts.numeralNames} onChange={(numerals) => set({ numerals })} />
+            {o.numerals === "roman_then_arabic" && (
+              <div className="flex flex-col gap-2 rounded-md bg-base/50 p-3 ring-1 ring-inset ring-line">
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className={LABEL}>
+                    {t.tools.opts.romanTo}
+                    <input className={`${FIELD} w-24`} type="number" min={1} inputMode="numeric" value={o.romanTo} data-testid="roman-to"
+                      onChange={(e) => set({ romanTo: Number(e.target.value) })} aria-invalid={bad === "romanTo"} />
+                  </label>
+                  <button type="button" className={BTN_SECONDARY} onClick={() => set({ pages: "2-", start: 2 })}>{t.tools.opts.thesisPreset}</button>
+                </div>
+                <p className="text-xs text-muted">{Number.isInteger(o.romanTo) && o.romanTo >= 1 ? t.tools.opts.romanNote(o.romanTo) : ""} {t.tools.opts.thesisHint}</p>
+              </div>
+            )}
             <Choice label={t.tools.opts.numberFormat} value={o.numberFormat} options={["n", "n_of", "page_n", "page_n_of"] as const} names={t.tools.opts.numberFormats} onChange={(numberFormat) => set({ numberFormat })} />
             <label className={LABEL}>
               {t.tools.opts.start}

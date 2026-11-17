@@ -57,6 +57,8 @@ export interface ToolOptions {
   photoColour: "red" | "blue" | "white"; photoSize: "3x4" | "2x3" | "4x6" | "original";
   /** Paper size: the new paper, the whole page or its content, and the margins. */
   paper: "a4" | "f4" | "letter" | "legal"; fit: "page" | "content"; margins: "none" | "narrow" | "normal" | "thesis";
+  /** Page numbers: how they are written; with roman then arabic, the last page (1-based) in roman. */
+  numerals: "arabic" | "roman" | "ROMAN" | "roman_then_arabic"; romanTo: number;
   /** ID card to A4: the sheet, colour or grey, real size or larger. */
   cardPaper: "a4" | "f4"; cardColour: "color" | "gray"; cardScale: "real" | "large";
 }
@@ -72,6 +74,7 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   scanMode: "color", crop: true, photoColour: "red", photoSize: "3x4",
   paper: "a4", fit: "page", margins: "none",
   cardPaper: "a4", cardColour: "color", cardScale: "real",
+  numerals: "arabic", romanTo: 5,
 };
 
 /** Office documents LibreOffice converts (apps/api/edith/office.py OFFICE_TYPES), by extension. */
@@ -95,11 +98,14 @@ export function accepted(tool: ToolDef, file: { name: string; type: string }): b
 const PAGES = /^\s*(\d+\s*(-\s*\d*)?|-\s*\d+)(\s*,\s*(\d+\s*(-\s*\d*)?|-\s*\d+))*\s*$/;
 
 /** Why the options cannot go to the server yet (a message key of t.tools), or null. */
-export function invalid(tool: ToolDef, o: ToolOptions): "pages" | "ranges" | "every" | "newPassword" | "mismatch" | "text" | "start" | "target" | null {
+export function invalid(tool: ToolDef, o: ToolOptions): "pages" | "ranges" | "every" | "newPassword" | "mismatch" | "text" | "start" | "target" | "romanTo" | null {
   const pagesOk = !o.pages.trim() || PAGES.test(o.pages);
   switch (tool.api) {
     case "watermark": return !o.text.trim() || o.text.length > 120 ? "text" : pagesOk ? null : "pages";
-    case "page-numbers": return !Number.isInteger(o.start) || o.start < 0 ? "start" : pagesOk ? null : "pages";
+    case "page-numbers":
+      if (!Number.isInteger(o.start) || o.start < 0) return "start";
+      if (o.numerals === "roman_then_arabic" && !(Number.isInteger(o.romanTo) && o.romanTo >= 1)) return "romanTo";
+      return pagesOk ? null : "pages";
     case "compress": return o.compressBy === "size" && !(Number.isInteger(o.targetKb) && o.targetKb >= 10) ? "target" : null;
     case "extract": return PAGES.test(o.pages) ? null : "pages";
     case "to-images": return !o.pages.trim() || PAGES.test(o.pages) ? null : "pages";
@@ -124,7 +130,10 @@ export function fields(tool: ToolDef, o: ToolOptions, password: string): Record<
     case "paper-size": return { ...out, paper: o.paper, fit: o.fit, margins: o.fit === "content" && o.margins === "none" ? "narrow" : o.margins };
     case "protect": return { ...out, new_password: o.newPassword, allow_print: String(o.allowPrint), allow_copy: String(o.allowCopy) };
     case "watermark": return { ...out, text: o.text.trim(), opacity: String(OPACITY[o.strength]), diagonal: String(o.diagonal), colour: o.colour, pages: o.pages };
-    case "page-numbers": return { ...out, position: o.position, number_format: o.numberFormat, start: String(o.start), pages: o.pages };
+    case "page-numbers": return {
+      ...out, position: o.position, number_format: o.numberFormat, start: String(o.start), pages: o.pages, numerals: o.numerals,
+      ...(o.numerals === "roman_then_arabic" ? { roman_to: String(o.romanTo) } : {}),
+    };
     default: return out;
   }
 }

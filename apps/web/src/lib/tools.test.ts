@@ -55,7 +55,9 @@ describe("PDF tools", () => {
       { text: "DRAFT", opacity: "0.5", diagonal: "false", colour: "#9ca3af", pages: "" });
     expect(invalid(tool("nomor-halaman"), { ...o, start: -1 })).toBe("start");
     expect(fields(tool("nomor-halaman"), { ...o, position: "top-right", numberFormat: "n_of", start: 3 }, "")).toEqual(
-      { position: "top-right", number_format: "n_of", start: "3", pages: "" });
+      { position: "top-right", number_format: "n_of", start: "3", pages: "", numerals: "arabic" });
+    expect(fields(tool("nomor-halaman"), { ...o, numerals: "roman_then_arabic", romanTo: 4 }, "")).toMatchObject({ numerals: "roman_then_arabic", roman_to: "4" });
+    expect(invalid(tool("nomor-halaman"), { ...o, numerals: "roman_then_arabic", romanTo: 0 })).toBe("romanTo");
     expect(fields(tool("pdf-bisa-dicari"), o, "")).toEqual({});
   });
 
