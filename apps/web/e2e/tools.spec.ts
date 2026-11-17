@@ -24,7 +24,7 @@ const pageCount = (pdf: Buffer) => (pdf.toString("latin1").match(/\/Type\s*\/Pag
 test("the start page lists the tools; merging takes the PDFs in the order set", async ({ page }) => {
   await page.goto("/");
   const grid = page.getByTestId("tools-grid");
-  await expect(grid.getByRole("link")).toHaveCount(14);
+  await expect(grid.getByRole("link")).toHaveCount(15);
   await grid.getByRole("link", { name: /Merge PDF/ }).click();
   await expect(page).toHaveURL(/\/tools\/gabung-pdf$/);
   await expect(page.getByRole("heading", { name: "Merge PDF" })).toBeVisible();
@@ -69,6 +69,27 @@ test("compress to a size: the file comes back no larger than the size asked", as
   expect(data.length).toBeLessThanOrEqual(100 * 1024);
   await page.getByLabel("Ukuran maksimal (KB)").fill("5");
   await expect(page.getByTestId("tool-run")).toBeDisabled();
+});
+
+test("scan document: photos become one PDF page each, with the chosen look", async ({ page }) => {
+  // A picture of a page (made by PDF to Image) stands in for a phone photo.
+  await page.goto("/tools/pdf-ke-gambar");
+  await page.getByTestId("tool-input").setInputFiles(SAMPLE);
+  await page.getByLabel("Halaman").fill("1");
+  const photo = await runAndDownload(page);
+
+  await page.goto("/");
+  await page.getByTestId("tools-grid").getByRole("link", { name: /Scan Document/ }).click();
+  await expect(page).toHaveURL(/\/tools\/scan-dokumen$/);
+  await page.getByTestId("tool-input").setInputFiles([
+    { name: "foto-1.png", mimeType: "image/png", buffer: photo.data },
+    { name: "foto-2.png", mimeType: "image/png", buffer: photo.data },
+  ]);
+  await page.getByRole("button", { name: "Hitam putih" }).click();
+  const { name, data } = await runAndDownload(page);
+  expect(name).toBe("foto-1-scan.pdf");
+  expect(data.subarray(0, 5).toString()).toBe("%PDF-");
+  expect(pageCount(data)).toBe(2);
 });
 
 test("a PDF locked here asks its password to be unlocked, and on the start page to be edited", async ({ page }) => {

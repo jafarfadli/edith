@@ -16,7 +16,7 @@ from edith.routes.documents import read_limited
 router = APIRouter()
 
 TOOL_NAMES = {"unlock", "protect", "to-images", "to-text", "compress", "merge", "split", "extract", "images-to-pdf",
-              "watermark", "page-numbers", "ocr", "office-to-pdf", "to-docx"}
+              "watermark", "page-numbers", "ocr", "office-to-pdf", "to-docx", "scan"}
 # A whole document read by OCR (POST /tools/ocr): at most this many pages without text, in one request.
 OCR_MAX_PAGES = 60
 MAX_FILES = 50
@@ -34,7 +34,7 @@ def _disposition(name: str) -> str:
 
 
 SUFFIX = {"office-to-pdf": "", "to-docx": "", "watermark": "watermark", "page-numbers": "bernomor", "ocr": "bisa-dicari", "unlock": "terbuka", "protect": "terkunci", "compress": "kecil", "merge": "gabungan", "split": "terpisah",
-          "extract": "halaman", "to-images": "gambar", "to-text": "teks", "images-to-pdf": "gambar"}
+          "extract": "halaman", "to-images": "gambar", "to-text": "teks", "images-to-pdf": "gambar", "scan": "scan"}
 
 
 @router.post("/tools/{tool}")
@@ -55,6 +55,7 @@ async def run_tool(
     position: Annotated[str, Form()] = "bottom-center", number_format: Annotated[str, Form()] = "n",
     start: Annotated[int, Form()] = 1,
     target_kb: Annotated[int | None, Form()] = None,
+    scan_mode: Annotated[str, Form()] = "color", crop: Annotated[bool, Form()] = True,
 ) -> Response:
     if tool not in TOOL_NAMES:
         raise BadOptions(f"unknown tool {tool!r}", field="tool")
@@ -113,6 +114,9 @@ async def run_tool(
     def _run() -> tools.Output:
         if tool == "images-to-pdf":
             return tools.images_to_pdf(blobs, size, margin or 0, s.max_pages)
+        if tool == "scan":
+            from edith import scan
+            return scan.scan_pdf(blobs, scan_mode, crop, size, s.max_pages)
         if tool == "office-to-pdf":
             if len(blobs) != 1:
                 raise BadOptions("office-to-pdf takes one file", field="files")
