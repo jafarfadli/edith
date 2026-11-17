@@ -35,6 +35,8 @@ export const CompressIcon = icon("Compress", <><path d="M7 9h7l3 3v4H7z" /><path
 export const ScanIcon = icon("Scan", <><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" /><path d="m8.5 7.5 6.5-.5 1 9.5-7 .5z" /><path d="M10 11h4M10.25 13.5h3" /></>);
 /** A head and shoulders in an ID photo's frame. */
 export const PortraitIcon = icon("Portrait", <><rect x="5" y="3" width="14" height="18" rx="1.5" /><circle cx="12" cy="10" r="3" /><path d="M7 21c.5-3.5 2.5-5.5 5-5.5s4.5 2 5 5.5" /></>);
+/** Two cards, front and back, on a sheet. */
+export const CardsIcon = icon("Cards", <><path d="M5 3h10l4 4v14H5z" /><path d="M15 3v4h4" /><rect x="8" y="8.5" width="8" height="5" rx="1" /><rect x="8" y="15" width="8" height="5" rx="1" /><path d="M9.75 10.5h2" /></>);
 /** A smaller sheet inside a taller one, with arrows to its edges. */
 export const PaperSizeIcon = icon("PaperSize", <><path d="M5 3h10l4 4v14H5z" /><path d="M15 3v4h4" /><rect x="8" y="9.5" width="8" height="8.5" rx=".5" /><path d="M12 6v2.5M12 19v1.5" /></>);
 /** A picture on the sheet. */

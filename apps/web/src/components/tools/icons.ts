@@ -1,13 +1,13 @@
 import {
   CompressIcon, ExtractIcon, FromImagesIcon, LockIcon, MergeIcon, OfficeIcon, PageNumberIcon, SearchableIcon, SplitIcon,
-  PaperSizeIcon, PortraitIcon, ScanIcon, ToImagesIcon, ToTextIcon, ToWordIcon, UnlockIcon, WatermarkIcon, type Icon,
+  CardsIcon, PaperSizeIcon, PortraitIcon, ScanIcon, ToImagesIcon, ToTextIcon, ToWordIcon, UnlockIcon, WatermarkIcon, type Icon,
 } from "../brand/icons";
 import type { ToolSlug } from "@/lib/tools";
 
 export const TOOL_ICONS: Record<ToolSlug, Icon> = {
   "gabung-pdf": MergeIcon, "pisah-pdf": SplitIcon, "ambil-halaman": ExtractIcon, "kompres-pdf": CompressIcon,
   "pdf-ke-gambar": ToImagesIcon, "gambar-ke-pdf": FromImagesIcon, "pdf-ke-teks": ToTextIcon, "buka-kunci-pdf": UnlockIcon, "kunci-pdf": LockIcon,
-  "office-ke-pdf": OfficeIcon, "pdf-ke-word": ToWordIcon, "scan-dokumen": ScanIcon, "pas-foto": PortraitIcon, "ukuran-kertas": PaperSizeIcon,
+  "office-ke-pdf": OfficeIcon, "pdf-ke-word": ToWordIcon, "scan-dokumen": ScanIcon, "pas-foto": PortraitIcon, "kartu-ke-a4": CardsIcon, "ukuran-kertas": PaperSizeIcon,
   "watermark-pdf": WatermarkIcon, "nomor-halaman": PageNumberIcon, "pdf-bisa-dicari": SearchableIcon,
 };
 
@@ -15,7 +15,7 @@ export const TOOL_ICONS: Record<ToolSlug, Icon> = {
 export const TOOL_GROUPS: { name: "pages" | "convert" | "photo" | "security" | "size"; tools: ToolSlug[] }[] = [
   { name: "pages", tools: ["gabung-pdf", "pisah-pdf", "ambil-halaman", "nomor-halaman", "ukuran-kertas"] },
   { name: "convert", tools: ["pdf-ke-word", "office-ke-pdf", "pdf-ke-gambar", "gambar-ke-pdf", "pdf-ke-teks", "pdf-bisa-dicari"] },
-  { name: "photo", tools: ["scan-dokumen", "pas-foto"] },
+  { name: "photo", tools: ["scan-dokumen", "pas-foto", "kartu-ke-a4"] },
   { name: "security", tools: ["kunci-pdf", "buka-kunci-pdf", "watermark-pdf"] },
   { name: "size", tools: ["kompres-pdf"] },
 ];

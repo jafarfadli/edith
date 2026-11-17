@@ -24,7 +24,7 @@ const pageCount = (pdf: Buffer) => (pdf.toString("latin1").match(/\/Type\s*\/Pag
 test("the start page lists the tools; merging takes the PDFs in the order set", async ({ page }) => {
   await page.goto("/");
   const grid = page.getByTestId("tools-grid");
-  await expect(grid.getByRole("link")).toHaveCount(17);
+  await expect(grid.getByRole("link")).toHaveCount(18);
   await grid.getByRole("link", { name: /Merge PDF/ }).click();
   await expect(page).toHaveURL(/\/tools\/gabung-pdf$/);
   await expect(page.getByRole("heading", { name: "Merge PDF" })).toBeVisible();
@@ -118,6 +118,35 @@ test("pas foto: one photo, a colour and a size; the result is shown (or why not)
   } else {
     await expect(error).toHaveText(/belum siap di server|Tidak ada orang/);
   }
+});
+
+test("ID card to A4: front and back on one sheet, the sides named, the sheet shown", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("tools-grid").getByRole("link", { name: /ID Card to A4/ }).click();
+  await expect(page).toHaveURL(/\/tools\/kartu-ke-a4$/);
+  // A made-up card lying on a dark table.
+  const photo = (label: string) => page.evaluate((text) => {
+    const c = document.createElement("canvas");
+    c.width = 1200; c.height = 900;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#5a4636"; ctx.fillRect(0, 0, 1200, 900);
+    ctx.fillStyle = "#bcd7ec"; ctx.fillRect(260, 280, 680, 429);
+    ctx.fillStyle = "#1a1a1a"; ctx.font = "bold 40px sans-serif";
+    ["PROVINSI CONTOH", text, "NAMA : BUDI CONTOH", "ALAMAT : JALAN CONTOH"].forEach((s, i) => ctx.fillText(s, 290, 350 + i * 80));
+    return c.toDataURL("image/jpeg", 0.92).split(",")[1];
+  }, label);
+  await page.getByTestId("tool-input").setInputFiles([
+    { name: "ktp-depan.jpg", mimeType: "image/jpeg", buffer: Buffer.from(await photo("DEPAN"), "base64") },
+    { name: "ktp-belakang.jpg", mimeType: "image/jpeg", buffer: Buffer.from(await photo("BELAKANG"), "base64") },
+  ]);
+  await expect(page.getByTestId("card-side")).toHaveText(["Depan", "Belakang"]);
+  await page.getByRole("button", { name: "F4 / Folio" }).click();
+  await page.getByRole("button", { name: "Hitam putih" }).click();
+  const { name, data } = await runAndDownload(page);
+  expect(name).toBe("ktp-depan-kartu.pdf");
+  expect(pageCount(data)).toBe(1);
+  expect(data.toString("latin1")).toMatch(/MediaBox\s*\[\s*0 0 609\.4\d* 935\.4/);
+  await expect(page.getByTestId("tool-sheet")).toBeVisible();
 });
 
 test("paper size: an A4 page onto F4, then its content inside thesis margins", async ({ page }) => {
