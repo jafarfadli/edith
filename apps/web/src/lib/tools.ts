@@ -4,7 +4,7 @@
 export type ToolSlug =
   | "gabung-pdf" | "pisah-pdf" | "ambil-halaman" | "kompres-pdf" | "pdf-ke-gambar" | "gambar-ke-pdf" | "pdf-ke-teks"
   | "buka-kunci-pdf" | "kunci-pdf" | "watermark-pdf" | "nomor-halaman" | "pdf-bisa-dicari" | "office-ke-pdf" | "pdf-ke-word"
-  | "scan-dokumen" | "pas-foto";
+  | "scan-dokumen" | "pas-foto" | "ukuran-kertas";
 
 export interface ToolDef {
   slug: ToolSlug;
@@ -33,6 +33,7 @@ export const TOOLS: ToolDef[] = [
   { slug: "buka-kunci-pdf", api: "unlock", accepts: "pdf", min: 1, max: 1, password: true },
   { slug: "kunci-pdf", api: "protect", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "watermark-pdf", api: "watermark", accepts: "pdf", min: 1, max: 1, password: false },
+  { slug: "ukuran-kertas", api: "paper-size", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "nomor-halaman", api: "page-numbers", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "pdf-bisa-dicari", api: "ocr", accepts: "pdf", min: 1, max: 1, password: false },
 ];
@@ -53,6 +54,8 @@ export interface ToolOptions {
   scanMode: "color" | "gray" | "bw" | "original"; crop: boolean;
   /** Pas foto: the new background, and the photo size. */
   photoColour: "red" | "blue" | "white"; photoSize: "3x4" | "2x3" | "4x6" | "original";
+  /** Paper size: the new paper, the whole page or its content, and the margins. */
+  paper: "a4" | "f4" | "letter" | "legal"; fit: "page" | "content"; margins: "none" | "narrow" | "normal" | "thesis";
 }
 
 /** See-through of a watermark, by its strength. */
@@ -64,6 +67,7 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   text: "", strength: "medium", diagonal: true, colour: "#9ca3af", position: "bottom-center", numberFormat: "n", start: 1,
   compressBy: "level", targetKb: 500,
   scanMode: "color", crop: true, photoColour: "red", photoSize: "3x4",
+  paper: "a4", fit: "page", margins: "none",
 };
 
 /** Office documents LibreOffice converts (apps/api/edith/office.py OFFICE_TYPES), by extension. */
@@ -112,6 +116,7 @@ export function fields(tool: ToolDef, o: ToolOptions, password: string): Record<
     case "images-to-pdf": return { size: o.size, margin: String(o.size === "fit" ? 0 : o.margin) };
     case "scan": return { scan_mode: o.scanMode, crop: String(o.crop), size: o.size };
     case "pas-foto": return { colour: o.photoColour, size: o.photoSize };
+    case "paper-size": return { ...out, paper: o.paper, fit: o.fit, margins: o.fit === "content" && o.margins === "none" ? "narrow" : o.margins };
     case "protect": return { ...out, new_password: o.newPassword, allow_print: String(o.allowPrint), allow_copy: String(o.allowCopy) };
     case "watermark": return { ...out, text: o.text.trim(), opacity: String(OPACITY[o.strength]), diagonal: String(o.diagonal), colour: o.colour, pages: o.pages };
     case "page-numbers": return { ...out, position: o.position, number_format: o.numberFormat, start: String(o.start), pages: o.pages };

@@ -24,7 +24,7 @@ const pageCount = (pdf: Buffer) => (pdf.toString("latin1").match(/\/Type\s*\/Pag
 test("the start page lists the tools; merging takes the PDFs in the order set", async ({ page }) => {
   await page.goto("/");
   const grid = page.getByTestId("tools-grid");
-  await expect(grid.getByRole("link")).toHaveCount(16);
+  await expect(grid.getByRole("link")).toHaveCount(17);
   await grid.getByRole("link", { name: /Merge PDF/ }).click();
   await expect(page).toHaveURL(/\/tools\/gabung-pdf$/);
   await expect(page.getByRole("heading", { name: "Merge PDF" })).toBeVisible();
@@ -118,6 +118,20 @@ test("pas foto: one photo, a colour and a size; the result is shown (or why not)
   } else {
     await expect(error).toHaveText(/belum siap di server|Tidak ada orang/);
   }
+});
+
+test("paper size: an A4 page onto F4, then its content inside thesis margins", async ({ page }) => {
+  await page.goto("/tools/ukuran-kertas");
+  await page.getByTestId("tool-input").setInputFiles(SAMPLE);
+  await page.getByRole("button", { name: "F4 / Folio" }).click();
+  const whole = await runAndDownload(page);
+  expect(whole.name).toBe("sample-f4.pdf");
+  expect(whole.data.toString("latin1")).toMatch(/MediaBox\s*\[\s*0 0 609\.4\d* 935\.4/);
+  await page.getByRole("button", { name: "Atur ulang margin" }).click();
+  await page.getByRole("button", { name: "Skripsi (4-3-3-3)" }).click();
+  await expect(page.getByText("kiri dan atas 4 cm")).toBeVisible();
+  const laid = await runAndDownload(page);
+  expect(pageCount(laid.data)).toBe(3);
 });
 
 test("a PDF locked here asks its password to be unlocked, and on the start page to be edited", async ({ page }) => {
