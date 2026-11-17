@@ -16,6 +16,7 @@ import { ICON, ICON_SM } from "../ui/icon";
 import { BTN_DANGER, BTN_QUIET, FIELD, PROP_LABEL, swatch } from "../ui/styles";
 import { Tip } from "../ui/Tooltip";
 import { ColorField } from "./ColorField";
+import { AutoRedact } from "./marks/AutoRedact";
 import { GroupBar } from "./objects/GroupBar";
 import { deleteObjectOrText, deleteSelectedParagraph, editSelectedParagraph, isDeletedText, isTextEdit, textEditStore } from "./text/textEdit";
 
@@ -173,7 +174,7 @@ export function PropertiesBar() {
   const [foldHint, observeRow] = useHintFold(hint);
   // Hidden when it would be empty (Pilih with nothing selected).
   const empty = !hint && !selection && !showOpacity && !scanned && !noText
-    && (kind === null || (kind === "redact" && !o) || (kind === "stamp" && !o) || (kind === "text" && !editingText && !renderTextProps));
+    && (kind === null || (kind === "stamp" && !o) || (kind === "text" && !editingText && !renderTextProps));
   if (multi) {
     // A group: no one object's properties, but what applies to all of them.
     return (
@@ -226,6 +227,7 @@ export function PropertiesBar() {
             {fill !== null && <ColorField label={t.editor.fill} value={fill} onChange={(v) => set({ fill: v })} />}
           </div>
         )}
+        {kind === "redact" && !o && <AutoRedact />}
         {kind === "redact" && o && (
           <label className={PROP_LABEL}>
             {t.editor.fill}
