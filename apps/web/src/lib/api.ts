@@ -108,10 +108,22 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
 
 const json = (body: unknown): RequestInit => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
+/** A copy of the file held in memory. On Android a file picked from Drive or another cloud app is only a handle that
+ *  the browser reads while the request goes out; the read can fail midway and the request then dies as a network error
+ *  that never reached the server. Reading it first makes that failure happen here, with its own message
+ *  (file_unreadable), and sends the bytes themselves. */
+async function inMemory(file: File | Blob, name: string): Promise<File> {
+  try {
+    return new File([await file.arrayBuffer()], name, { type: file.type });
+  } catch {
+    throw new ApiError("file_unreadable", 0);
+  }
+}
+
 /** `password`: of a locked PDF (the server then stores an unlocked copy; see getSourceFile). */
 export async function uploadDocument(file: File | Blob, name = "document.pdf", password?: string): Promise<UploadResult> {
   const form = new FormData();
-  form.append("file", file, name);
+  form.append("file", await inMemory(file, name));
   if (password) form.append("password", password);
   return (await request("/documents", { method: "POST", body: form })).json();
 }
@@ -132,7 +144,7 @@ export function dispositionName(header: string | null, fallback: string): string
  *  Five minutes: compressing or picturing a big PDF takes a while. */
 export async function runTool(tool: string, files: File[], fields: Record<string, string>): Promise<{ blob: Blob; name: string }> {
   const form = new FormData();
-  for (const f of files) form.append("files", f, f.name);
+  for (const f of files) form.append("files", await inMemory(f, f.name));
   for (const [k, v] of Object.entries(fields)) form.append(k, v);
   const res = await request(`/tools/${tool}`, { method: "POST", body: form, signal: AbortSignal.timeout(300_000) });
   return { blob: await res.blob(), name: dispositionName(res.headers.get("Content-Disposition"), "hasil") };
