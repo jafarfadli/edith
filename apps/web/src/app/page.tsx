@@ -5,6 +5,7 @@ import { SheetDecor } from "@/components/bench/SheetDecor";
 import { Crumbs, Headline } from "@/components/hero/Headline";
 import { Stickers } from "@/components/hero/Stickers";
 import { UploadDropzone } from "@/components/UploadDropzone";
+import { HeaderSearch } from "@/components/tools/HeaderSearch";
 import { ToolsGrid } from "@/components/tools/ToolsGrid";
 import { t } from "@/lib/strings";
 
@@ -22,9 +23,11 @@ export default function Home() {
     <div className="relative flex min-h-dvh flex-col overflow-x-clip bg-base">
       <div aria-hidden className="bench-grid bench-fade pointer-events-none absolute inset-x-0 top-0 h-[60rem]" />
       <Crumbs className="absolute inset-x-0 top-0 h-[56rem]" />
-      <header className="relative z-20 mx-auto flex w-full max-w-[84rem] items-center justify-between px-5 pt-6 md:px-10">
+      <header className="relative z-30 mx-auto flex w-full max-w-[84rem] flex-wrap items-center justify-between gap-x-6 gap-y-4 px-5 pt-6 md:px-10">
         <Link href="/" aria-label={t.appName} className="rounded-md"><Logo /></Link>
-        <a href="#tools" className="rounded-md px-2 py-1 text-sm text-muted transition-colors hover:text-ink">{t.tools.heading}</a>
+        {/* In the middle from 640px; on a phone its own row under the logo. */}
+        <HeaderSearch className="order-last w-full sm:order-none sm:w-auto sm:max-w-md sm:flex-1" />
+        <a href="#tools" className="shrink-0 rounded-md px-2 py-1 text-sm text-muted transition-colors hover:text-ink">{t.tools.heading}</a>
       </header>
 
       <main className={`relative z-10 mx-auto grid w-full max-w-[84rem] content-center gap-x-12 gap-y-12 px-5 pb-24 pt-10 md:px-10 lg:min-h-[calc(100dvh-4.5rem)] lg:grid-cols-[auto_clamp(17rem,26vw,23rem)] lg:justify-center lg:gap-x-[clamp(4rem,8vw,9rem)] lg:gap-y-8 lg:pb-16 lg:pt-2 ${AREAS}`}>

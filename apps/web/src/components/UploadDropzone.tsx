@@ -105,7 +105,7 @@ export function UploadDropzone() {
         {busy
           ? <p className="text-2xs text-paper-ink/65" role="status">{t.upload.processing}</p>
           : <p className="font-mono text-2xs leading-relaxed text-paper-ink/65">{t.upload.limit}<span className="block text-balance">{t.upload.kept}</span></p>}
-        <input ref={input} type="file" accept="application/pdf,.pdf" hidden data-testid="file-input" onChange={(e) => handle(e.target.files?.[0])} />
+        <input ref={input} id="upload-pdf" type="file" accept="application/pdf,.pdf" hidden data-testid="file-input" onChange={(e) => handle(e.target.files?.[0])} />
       </div>
       {error && <p role="alert" className="absolute inset-x-0 top-full mt-5 text-center text-sm text-danger-text">{error}</p>}
     </div>
