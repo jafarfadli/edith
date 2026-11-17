@@ -10,6 +10,7 @@ import {
 import { t } from "@/lib/strings";
 import { POPOVER, PROP_LABEL, swatch } from "../ui/styles";
 import { returnFocus, usePopupFocus } from "../ui/usePopupFocus";
+import { Eyedropper } from "./Eyedropper";
 
 const SWATCHES = ["#111111", "#ffffff", "#e11d48", "#f59e0b", "#16a34a", "#2563eb", "#7c3aed"];
 const POP_W = 224;
@@ -19,7 +20,8 @@ const POP_W = 224;
  *  saturation/brightness field, a hue bar and the hex code to type. The picker is drawn in the page rather than the
  *  browser's colour input, whose separate picker window could get stuck and ignore the next click. The popover renders
  *  in a portal (the properties bar scrolls horizontally and would clip it). Picking a swatch closes it; the picker and
- *  the hex code change the colour live and keep it open. Keyboard: opened with Enter/Space, focus goes to the first
+ *  the hex code change the colour live and keep it open; the pipette beside the code takes a colour from the screen
+ *  (Eyedropper), the popover hidden meanwhile. Keyboard: opened with Enter/Space, focus goes to the first
  *  swatch; arrows, Home and End move between the items, the two sliders take their own arrows; Escape closes
  *  (usePopupFocus). `textProps`: it belongs to the text properties, so pressing it keeps the rich-text session open and
  *  the editor focused (opened by mouse, focus stays in the editor). */
@@ -29,6 +31,7 @@ export function ColorField({ label, value, onChange, textProps = false }: {
   const [at, setAt] = useState<{ top: number; left: number; keyboard: boolean } | null>(null);
   const chip = useRef<HTMLButtonElement>(null);
   const pop = useRef<HTMLDivElement>(null);
+  const [sampling, setSampling] = useState(false);
   const open = at !== null;
   const saved = useSyncExternalStore(subscribeSavedColors, savedColorsSnapshot, savedColorsServerSnapshot);
   const current = value.toLowerCase();
@@ -36,10 +39,11 @@ export function ColorField({ label, value, onChange, textProps = false }: {
   useEffect(() => {
     if (!open) return;
     const close = (e: PointerEvent) => {
-      const target = e.target as Node;
+      const target = e.target as Element;
+      if (target.closest?.("[data-eyedropper]")) return; // picking a colour from the page
       if (!pop.current?.contains(target) && !chip.current?.contains(target)) setAt(null);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setAt(null); chip.current?.focus(); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector("[data-eyedropper]")) { e.stopPropagation(); setAt(null); chip.current?.focus(); } };
     window.addEventListener("pointerdown", close, true);
     window.addEventListener("keydown", onKey, true);
     return () => { window.removeEventListener("pointerdown", close, true); window.removeEventListener("keydown", onKey, true); };
@@ -74,7 +78,7 @@ export function ColorField({ label, value, onChange, textProps = false }: {
         <div ref={pop} role="dialog" aria-label={label} style={{ top: at.top, left: at.left, width: POP_W }} data-text-props={textProps || undefined}
           onMouseDown={(e) => { if (textProps && (e.target as HTMLElement).tagName !== "INPUT") e.preventDefault(); }}
           onKeyDown={onPopKey}
-          className={`fixed z-50 flex flex-col gap-2.5 p-2.5 ${POPOVER}`}>
+          className={`fixed z-50 flex flex-col gap-2.5 p-2.5 ${POPOVER} ${sampling ? "pointer-events-none opacity-0" : ""}`}>
           <div className="flex flex-wrap gap-2">
             {SWATCHES.map((c) => (
               <button key={c} type="button" aria-label={`${label} ${c}`} aria-pressed={current === c} onClick={() => pick(c)}
@@ -114,7 +118,7 @@ export function ColorField({ label, value, onChange, textProps = false }: {
             </div>
           </div>
 
-          <Picker label={label} value={value} onChange={onChange} />
+          <Picker label={label} value={value} onChange={onChange} onSampling={setSampling} textProps={textProps} />
         </div>,
         document.body,
       )}
@@ -126,7 +130,9 @@ const clamp = (n: number) => Math.min(1, Math.max(0, n));
 
 /** The in-page picker: a saturation (across) by brightness (up) field, a hue bar under it, and the hex code. It keeps
  *  its own hue, so a grey or black picked in the field does not lose the hue the bar was on. */
-function Picker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Picker({ label, value, onChange, onSampling, textProps }: {
+  label: string; value: string; onChange: (v: string) => void; onSampling: (on: boolean) => void; textProps: boolean;
+}) {
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(value));
   const [draft, setDraft] = useState(() => (parseHex(value) ?? "#000000").slice(1));
 
@@ -196,7 +202,8 @@ function Picker({ label, value, onChange }: { label: string; value: string; onCh
         <span aria-hidden className="pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgb(0_0_0/0.4)]"
           style={{ left: `${(hsv.h / 360) * 100}%`, background: hue }} />
       </div>
-      <label className="flex h-8 items-center gap-1 rounded-md bg-base/60 px-2 font-mono text-xs ring-1 ring-inset ring-line focus-within:ring-ink/50">
+      <div className="flex gap-1.5">
+      <label className="flex h-8 min-w-0 flex-1 items-center gap-1 rounded-md bg-base/60 px-2 font-mono text-xs ring-1 ring-inset ring-line focus-within:ring-ink/50">
         <span aria-hidden className="mr-1 h-4 w-4 shrink-0 rounded ring-1 ring-inset ring-line-strong" style={{ background: value }} />
         <span aria-hidden className="text-faint">#</span>
         <input type="text" aria-label={`${label} ${t.editor.hex}`} value={draft} maxLength={7} spellCheck={false} autoComplete="off"
@@ -209,6 +216,9 @@ function Picker({ label, value, onChange }: { label: string; value: string; onCh
           }}
           className="min-w-0 flex-1 bg-transparent uppercase text-ink outline-none" />
       </label>
+      <Eyedropper label={label} textProps={textProps} onSampling={onSampling}
+        onPick={(hex) => { setDraft(hex.slice(1)); setHsv(hexToHsv(hex)); if (hex !== value.toLowerCase()) onChange(hex); }} />
+      </div>
     </div>
   );
 }
