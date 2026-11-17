@@ -16,7 +16,7 @@ from edith.routes.documents import read_limited
 router = APIRouter()
 
 TOOL_NAMES = {"unlock", "protect", "to-images", "to-text", "compress", "merge", "split", "extract", "images-to-pdf",
-              "watermark", "page-numbers", "ocr", "office-to-pdf", "to-docx", "scan"}
+              "watermark", "page-numbers", "ocr", "office-to-pdf", "to-docx", "scan", "pas-foto"}
 # A whole document read by OCR (POST /tools/ocr): at most this many pages without text, in one request.
 OCR_MAX_PAGES = 60
 MAX_FILES = 50
@@ -34,7 +34,7 @@ def _disposition(name: str) -> str:
 
 
 SUFFIX = {"office-to-pdf": "", "to-docx": "", "watermark": "watermark", "page-numbers": "bernomor", "ocr": "bisa-dicari", "unlock": "terbuka", "protect": "terkunci", "compress": "kecil", "merge": "gabungan", "split": "terpisah",
-          "extract": "halaman", "to-images": "gambar", "to-text": "teks", "images-to-pdf": "gambar", "scan": "scan"}
+          "extract": "halaman", "to-images": "gambar", "to-text": "teks", "images-to-pdf": "gambar", "scan": "scan", "pas-foto": "pasfoto"}
 
 
 @router.post("/tools/{tool}")
@@ -111,6 +111,12 @@ async def run_tool(
     def _run() -> tools.Output:
         if tool == "images-to-pdf":
             return tools.images_to_pdf(blobs, size, margin or 0, s.max_pages)
+        if tool == "pas-foto":
+            from edith import portrait
+            if len(blobs) != 1:
+                raise BadOptions("pas-foto takes one photo", field="files")
+            photo = portrait.pas_foto(*blobs[0], colour or "red", size if size != "a4" else "3x4", s.models_dir)
+            return tools.Output(photo, "image/jpeg", "jpg")
         if tool == "scan":
             from edith import scan
             return scan.scan_pdf(blobs, scan_mode, crop, size, s.max_pages)

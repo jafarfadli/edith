@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, runTool } from "@/lib/api";
 import { saveBlob } from "@/lib/download";
 import { errorMessage, t } from "@/lib/strings";
@@ -19,6 +19,18 @@ const LABEL = "flex flex-col gap-1.5 text-xs text-muted";
 
 function sizeText(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** A picture the tool made (pas foto), shown before it is saved again. */
+function ResultPicture({ blob }: { blob: Blob }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(blob);
+    setUrl(u); // eslint-disable-line react-hooks/set-state-in-effect -- an object URL lives with its effect
+    return () => URL.revokeObjectURL(u);
+  }, [blob]);
+  // eslint-disable-next-line @next/next/no-img-element -- a blob: URL made here
+  return url ? <img src={url} alt={t.tools.resultAlt} data-testid="tool-picture" className="max-h-72 w-auto rounded-sm shadow-sheet" /> : null;
 }
 
 /** Choices as a segmented control. */
@@ -139,6 +151,14 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
           <>
             <Choice label={t.tools.opts.size} value={o.size} options={["a4", "fit"] as const} names={t.tools.opts.sizes} onChange={(size) => set({ size })} />
             {o.size === "a4" && <Choice label={t.tools.opts.margin} value={o.margin} options={[0, 20, 40] as const} names={t.tools.opts.margins} onChange={(margin) => set({ margin })} />}
+          </>
+        );
+      case "pas-foto":
+        return (
+          <>
+            <Choice label={t.tools.opts.photoColour} value={o.photoColour} options={["red", "blue", "white"] as const} names={t.tools.opts.photoColours} onChange={(photoColour) => set({ photoColour })} />
+            <Choice label={t.tools.opts.photoSize} value={o.photoSize} options={["3x4", "2x3", "4x6", "original"] as const} names={t.tools.opts.photoSizes} onChange={(photoSize) => set({ photoSize })} />
+            <p className="text-xs text-muted">{t.tools.opts.photoNote}</p>
           </>
         );
       case "scan":
@@ -282,11 +302,12 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
           {files.length > 0 && files.length < tool.min && <span className="text-xs text-muted">{t.tools.needFiles(tool.min)}</span>}
           {total > MAX_BYTES && <span className="text-xs text-danger-text">{errorMessage("too_large")}</span>}
         </div>
-        {error && <p role="alert" className="text-sm text-danger-text">{error}</p>}
+        {error && <p role="alert" data-testid="tool-error" className="text-sm text-danger-text">{error}</p>}
         {result && (
           <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-ink" data-testid="tool-done">
             {t.tools.done(result.name)} <span className="text-xs text-faint">({sizeText(result.blob.size)})</span>
             <button type="button" className={BTN_SECONDARY} onClick={() => saveBlob(result.blob, result.name)}>{t.tools.again}</button>
+            {result.blob.type.startsWith("image/") && <div className="w-full"><ResultPicture blob={result.blob} /></div>}
           </div>
         )}
       </main>

@@ -94,6 +94,16 @@ class OcrUnavailable(EdithError):
     status, code = 503, "ocr_unavailable"
 
 
+class NoPerson(EdithError):
+    """Pas foto: the photo shows no person to keep (edith/portrait.py)."""
+    status, code = 422, "no_person"
+
+
+class ModelUnavailable(EdithError):
+    """An AI model a tool needs (edith/portrait.py) has not been downloaded onto this server."""
+    status, code = 503, "model_unavailable"
+
+
 class OcrBusy(EdithError):
     """OCR already runs for this document, or every OCR slot of the server is taken: try again shortly."""
     status, code = 429, "ocr_busy"

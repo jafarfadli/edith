@@ -26,3 +26,5 @@ packages/fonts/files/cjk
 
 # Audit screenshots of the owner's reference documents (personal data): local only
 docs/superpowers/plans/2026-11-09-m5b-pemisahan-teks/shots/
+# Downloaded AI models: cd apps/api && uv run python -m edith.portrait fetch
+apps/api/models/

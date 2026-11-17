@@ -24,7 +24,7 @@ const pageCount = (pdf: Buffer) => (pdf.toString("latin1").match(/\/Type\s*\/Pag
 test("the start page lists the tools; merging takes the PDFs in the order set", async ({ page }) => {
   await page.goto("/");
   const grid = page.getByTestId("tools-grid");
-  await expect(grid.getByRole("link")).toHaveCount(15);
+  await expect(grid.getByRole("link")).toHaveCount(16);
   await grid.getByRole("link", { name: /Merge PDF/ }).click();
   await expect(page).toHaveURL(/\/tools\/gabung-pdf$/);
   await expect(page.getByRole("heading", { name: "Merge PDF" })).toBeVisible();
@@ -76,6 +76,34 @@ test("scan document: photos become one PDF page each, with the chosen look", asy
   expect(name).toBe("foto-1-scan.pdf");
   expect(data.subarray(0, 5).toString()).toBe("%PDF-");
   expect(pageCount(data)).toBe(2);
+});
+
+test("pas foto: one photo, a colour and a size; the result is shown (or why not)", async ({ page }) => {
+  await page.goto("/tools/pas-foto");
+  await expect(page.getByRole("heading", { name: "Pas Foto" })).toBeVisible();
+  const png = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 600; c.height = 800;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#cfe3d6"; ctx.fillRect(0, 0, 600, 800);
+    ctx.fillStyle = "#3b3b3b"; ctx.beginPath(); ctx.ellipse(300, 760, 260, 230, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#c9a184"; ctx.beginPath(); ctx.ellipse(300, 330, 120, 160, 0, 0, Math.PI * 2); ctx.fill();
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.getByTestId("tool-input").setInputFiles({ name: "saya.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  await page.getByRole("button", { name: "Biru" }).click();
+  await page.getByRole("button", { name: "2 × 3" }).click();
+  await page.getByTestId("tool-run").click();
+  // With the model on this server: the picture, 2 × 3 cm at 300 dpi; without it (CI), or when it sees nobody in the
+  // drawing: a message.
+  const picture = page.getByTestId("tool-picture");
+  const error = page.getByTestId("tool-error");
+  await expect(picture.or(error)).toBeVisible({ timeout: 30_000 });
+  if (await picture.isVisible()) {
+    expect(await picture.evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight])).toEqual([236, 354]);
+  } else {
+    await expect(error).toHaveText(/belum siap di server|Tidak ada orang/);
+  }
 });
 
 test("a PDF locked here asks its password to be unlocked, and on the start page to be edited", async ({ page }) => {

@@ -33,6 +33,8 @@ export const ExtractIcon = icon("Extract", <><path d="M4 5h7l3 3v13H4z" /><path 
 export const CompressIcon = icon("Compress", <><path d="M7 9h7l3 3v4H7z" /><path d="M14 9v3h3" /><path d="M12 2v4M10 4.5 12 6.5l2-2M12 22v-3.5M10 20.5l2-2 2 2" /></>);
 /** A sheet seen at an angle, framed by a scanner's corner marks. */
 export const ScanIcon = icon("Scan", <><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" /><path d="m8.5 7.5 6.5-.5 1 9.5-7 .5z" /><path d="M10 11h4M10.25 13.5h3" /></>);
+/** A head and shoulders in an ID photo's frame. */
+export const PortraitIcon = icon("Portrait", <><rect x="5" y="3" width="14" height="18" rx="1.5" /><circle cx="12" cy="10" r="3" /><path d="M7 21c.5-3.5 2.5-5.5 5-5.5s4.5 2 5 5.5" /></>);
 /** A picture on the sheet. */
 export const ToImagesIcon = icon("ToImages", <><path d={SHEET} /><path d={FOLD} /><path d="m8.5 18 2.75-3 2 2 1.25-1.25L16 17.5" /><circle cx="10" cy="11" r="1.25" /></>);
 /** Pictures laid onto a sheet. */

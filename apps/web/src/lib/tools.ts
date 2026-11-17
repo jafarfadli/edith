@@ -4,7 +4,7 @@
 export type ToolSlug =
   | "gabung-pdf" | "pisah-pdf" | "ambil-halaman" | "kompres-pdf" | "pdf-ke-gambar" | "gambar-ke-pdf" | "pdf-ke-teks"
   | "buka-kunci-pdf" | "kunci-pdf" | "watermark-pdf" | "nomor-halaman" | "pdf-bisa-dicari" | "office-ke-pdf" | "pdf-ke-word"
-  | "scan-dokumen";
+  | "scan-dokumen" | "pas-foto";
 
 export interface ToolDef {
   slug: ToolSlug;
@@ -26,6 +26,7 @@ export const TOOLS: ToolDef[] = [
   { slug: "pdf-ke-gambar", api: "to-images", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "gambar-ke-pdf", api: "images-to-pdf", accepts: "images", min: 1, max: 50, password: false },
   { slug: "scan-dokumen", api: "scan", accepts: "images", min: 1, max: 50, password: false },
+  { slug: "pas-foto", api: "pas-foto", accepts: "images", min: 1, max: 1, password: false },
   { slug: "office-ke-pdf", api: "office-to-pdf", accepts: "office", min: 1, max: 1, password: false },
   { slug: "pdf-ke-word", api: "to-docx", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "pdf-ke-teks", api: "to-text", accepts: "pdf", min: 1, max: 1, password: false },
@@ -48,6 +49,8 @@ export interface ToolOptions {
   numberFormat: "n" | "n_of" | "page_n" | "page_n_of"; start: number;
   /** Scan: how the page comes out, and whether the sheet is cut out of the photo. */
   scanMode: "color" | "gray" | "bw" | "original"; crop: boolean;
+  /** Pas foto: the new background, and the photo size. */
+  photoColour: "red" | "blue" | "white"; photoSize: "3x4" | "2x3" | "4x6" | "original";
 }
 
 /** See-through of a watermark, by its strength. */
@@ -57,7 +60,7 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   pages: "", format: "png", dpi: 150, level: "medium", mode: "every", every: 1, ranges: "", size: "a4", margin: 20,
   newPassword: "", confirm: "", allowPrint: true, allowCopy: true,
   text: "", strength: "medium", diagonal: true, colour: "#9ca3af", position: "bottom-center", numberFormat: "n", start: 1,
-  scanMode: "color", crop: true,
+  scanMode: "color", crop: true, photoColour: "red", photoSize: "3x4",
 };
 
 /** Office documents LibreOffice converts (apps/api/edith/office.py OFFICE_TYPES), by extension. */
@@ -104,6 +107,7 @@ export function fields(tool: ToolDef, o: ToolOptions, password: string): Record<
     case "split": return o.mode === "ranges" ? { ...out, mode: "ranges", ranges: o.ranges } : { ...out, mode: "every", every: String(o.every) };
     case "images-to-pdf": return { size: o.size, margin: String(o.size === "fit" ? 0 : o.margin) };
     case "scan": return { scan_mode: o.scanMode, crop: String(o.crop), size: o.size };
+    case "pas-foto": return { colour: o.photoColour, size: o.photoSize };
     case "protect": return { ...out, new_password: o.newPassword, allow_print: String(o.allowPrint), allow_copy: String(o.allowCopy) };
     case "watermark": return { ...out, text: o.text.trim(), opacity: String(OPACITY[o.strength]), diagonal: String(o.diagonal), colour: o.colour, pages: o.pages };
     case "page-numbers": return { ...out, position: o.position, number_format: o.numberFormat, start: String(o.start), pages: o.pages };

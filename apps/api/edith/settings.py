@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # A public server (edith/guard.py): per-address request limits (off by default: tests and local use), how many heavy
     # jobs (PDF tools, exports) run at once and how long one more waits for a slot before 503 server_busy, and the free
     # disk below which uploads get 507 storage_full.
+    # Downloaded AI models (edith/portrait.py: python -m edith.portrait fetch); not in the repository.
+    models_dir: Path = Path(__file__).resolve().parents[1] / "models"
     rate_limit: bool = False
     heavy_slots: int = 3
     heavy_wait_seconds: float = 30.0
