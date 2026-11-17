@@ -102,6 +102,9 @@
   @keyframes drawer-right { from { translate: 100% 0; } }
   @keyframes drawer-up { from { translate: 0 100%; } }
   @keyframes fade-in { from { opacity: 0; } }
+  /* Work of unknown length: a short bar running across its track. */
+  --animate-progress: progress-slide 1.4s ease-in-out infinite;
+  @keyframes progress-slide { from { translate: -100% 0; } to { translate: 300% 0; } }
 }
 
 html, body { overflow-x: clip; }

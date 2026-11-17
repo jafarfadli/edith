@@ -416,6 +416,25 @@ export const t = {
     done: (name: string) => `Selesai: ${name}`,
     again: "Unduh lagi",
     resultAlt: "Hasil",
+    progress: {
+      upload: (pct: number) => `Mengunggah… ${pct}%`,
+      server: (s: number) => (s < 2 ? "Memproses di server…" : `Memproses di server… ${s} detik`),
+      notes: {
+        ocr: (pages: number) => `OCR membaca teks halaman demi halaman, sekitar 3–5 detik per halaman${pages ? ` (${pages} halaman)` : ""}`,
+        compress: () => "mencoba beberapa tingkat kompresi",
+        "pas-foto": () => "memisahkan orang dari latar, biasanya 5–15 detik",
+        "office-to-pdf": () => "LibreOffice sedang mengubah dokumen, biasanya 5–20 detik",
+        "to-docx": () => "menyusun dokumen Word, bisa agak lama untuk PDF tebal",
+        scan: () => "meluruskan dan membersihkan setiap foto",
+        cards: () => "mencari, meluruskan, dan memutar setiap kartu",
+        "paper-size": () => "mengatur setiap halaman ke kertas baru",
+      } as Record<string, (pages: number) => string>,
+    },
+    next: {
+      title: "Lanjutkan dengan hasil ini (tanpa unggah ulang):",
+      edit: "Edit di editor",
+      handed: "Hasil dari langkah sebelumnya sudah dimasukkan.",
+    },
     preview: {
       title: "Pratinjau PDF",
       pick: "Klik halaman untuk memilih atau membatalkannya.",

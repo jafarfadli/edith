@@ -143,13 +143,38 @@ export function dispositionName(header: string | null, fallback: string): string
 /** A tool of the "Alat PDF" (POST /tools/{tool}): the files and the options as form fields; the result and its name.
  *  Five minutes: compressing or picturing a big PDF takes a while. */
 /** `reached`: of a compression to a size, whether the file got that small (else it is the smallest the server made). */
-export async function runTool(tool: string, files: File[], fields: Record<string, string>): Promise<{ blob: Blob; name: string; reached?: boolean }> {
+/** Where a tool's request is: its files going up (`ratio` 0-1), or the server working on them. */
+export type ToolProgress = { phase: "upload"; ratio: number } | { phase: "server" };
+
+const TOOL_TIMEOUT_MS = 300_000;
+
+/** Runs a PDF tool. `onProgress` hears the upload and when the server has it all (an XMLHttpRequest: fetch reports no
+ *  upload progress). */
+export async function runTool(tool: string, files: File[], fields: Record<string, string>,
+  onProgress?: (p: ToolProgress) => void): Promise<{ blob: Blob; name: string; reached?: boolean }> {
   const form = new FormData();
   for (const f of files) form.append("files", await inMemory(f, f.name));
   for (const [k, v] of Object.entries(fields)) form.append(k, v);
-  const res = await request(`/tools/${tool}`, { method: "POST", body: form, signal: AbortSignal.timeout(300_000) });
-  const target = res.headers.get("X-Edith-Target");
-  return { blob: await res.blob(), name: dispositionName(res.headers.get("Content-Disposition"), "hasil"), ...(target ? { reached: target === "reached" } : {}) };
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", `${API_URL}/tools/${tool}`);
+  xhr.responseType = "blob";
+  xhr.timeout = TOOL_TIMEOUT_MS;
+  xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.({ phase: "upload", ratio: e.loaded / e.total }); };
+  xhr.upload.onload = () => onProgress?.({ phase: "server" });
+  await new Promise<void>((resolve, reject) => {
+    xhr.onload = () => resolve();
+    xhr.onerror = () => reject(new ApiError("network", 0));
+    xhr.ontimeout = () => reject(new ApiError("timeout", 0));
+    xhr.send(form);
+  });
+  const blob = xhr.response as Blob;
+  if (xhr.status < 200 || xhr.status >= 300) {
+    let err: Record<string, unknown> = {};
+    try { err = (JSON.parse(await blob.text()) as { error?: Record<string, unknown> }).error ?? {}; } catch { /* not JSON */ }
+    throw new ApiError(String(err.code ?? "generic"), xhr.status, err);
+  }
+  const target = xhr.getResponseHeader("X-Edith-Target");
+  return { blob, name: dispositionName(xhr.getResponseHeader("Content-Disposition"), "hasil"), ...(target ? { reached: target === "reached" } : {}) };
 }
 
 export async function getStructure(docId: string): Promise<Structure> {

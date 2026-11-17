@@ -109,3 +109,37 @@ function Thumb({ pdf, n, label, position, picked, accent, onPick, title }: {
     </li>
   );
 }
+
+/** A small picture of a chosen file: a PDF's first page, or the picture itself. */
+export function FileThumb({ file }: { file: File }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const pdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    if (!pdf) { setUrl(u); return () => URL.revokeObjectURL(u); } // eslint-disable-line react-hooks/set-state-in-effect -- an object URL lives with its effect
+    let live = true;
+    let doc: PDFDocumentProxy | null = null;
+    (async () => {
+      doc = await loadPdf(u);
+      const page = await doc.getPage(1);
+      const base = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: (40 * (window.devicePixelRatio || 1)) / base.width });
+      const c = canvas.current;
+      if (!live || !c) return;
+      c.width = Math.floor(vp.width);
+      c.height = Math.floor(vp.height);
+      await page.render({ canvas: c, viewport: vp }).promise;
+    })().catch(() => undefined);
+    return () => { live = false; URL.revokeObjectURL(u); if (doc) destroyPdf(doc); };
+  }, [file, pdf]);
+
+  return (
+    <span aria-hidden className="grid h-12 w-10 shrink-0 place-items-center overflow-hidden rounded-[2px] bg-paper shadow-sheet">
+      {pdf ? <canvas ref={canvas} className="max-h-full max-w-full" />
+        // eslint-disable-next-line @next/next/no-img-element -- a blob: URL made here
+        : url && <img src={url} alt="" className="h-full w-full object-cover" />}
+    </span>
+  );
+}
