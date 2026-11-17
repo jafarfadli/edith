@@ -143,7 +143,9 @@ export const t = {
   signature: {
     title: "Tanda tangan", draw: "Gambar", type: "Ketik", upload: "Unggah", clear: "Bersihkan", name: "Nama Anda",
     font: "Gaya tulisan", save: "Simpan tanda tangan", saved: "Tanda tangan tersimpan", use: "Pakai tanda tangan",
-    remove: "Hapus tanda tangan tersimpan", add: "Tambahkan", tooBig: "Tanda tangan ini terlalu besar untuk disimpan di browser",
+    remove: "Hapus tanda tangan tersimpan", add: "Tambahkan",
+    clearPaper: "Hapus latar kertas (hanya tinta yang dipakai)", previewAlt: "Pratinjau tanda tangan",
+    blank: "Tidak ada tinta yang terlihat. Matikan \"Hapus latar kertas\" atau pakai foto yang lebih jelas.", tooBig: "Tanda tangan ini terlalu besar untuk disimpan di browser",
     colors: { "#111111": "Hitam", "#1d4ed8": "Biru", "#b91c1c": "Merah" } as Record<string, string>,
   },
   pages: {
