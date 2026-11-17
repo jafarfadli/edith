@@ -141,6 +141,15 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
             {o.size === "a4" && <Choice label={t.tools.opts.margin} value={o.margin} options={[0, 20, 40] as const} names={t.tools.opts.margins} onChange={(margin) => set({ margin })} />}
           </>
         );
+      case "scan":
+        return (
+          <>
+            <Choice label={t.tools.opts.scanMode} value={o.scanMode} options={["color", "gray", "bw", "original"] as const} names={t.tools.opts.scanModes} onChange={(scanMode) => set({ scanMode })} />
+            <Choice label={t.tools.opts.size} value={o.size} options={["a4", "fit"] as const} names={t.tools.opts.sizes} onChange={(size) => set({ size })} />
+            <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={o.crop} onChange={(e) => set({ crop: e.target.checked })} />{t.tools.opts.crop}</label>
+            <p className="text-xs text-muted">{t.tools.opts.scanNote}</p>
+          </>
+        );
       case "protect":
         return (
           <>
