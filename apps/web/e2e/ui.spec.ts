@@ -139,7 +139,10 @@ test("tool menus and the colour popover work from the keyboard", async ({ page }
   await page.keyboard.press("ArrowRight");
   await expect(pop.getByRole("button", { name: "Warna #ffffff" })).toBeFocused();
   await page.keyboard.press("End");
-  await expect(pop.getByLabel("Warna Warna lain…")).toBeFocused();
+  await expect(pop.getByLabel("Warna Kode hex")).toBeFocused();
+  // In the hex code Home and End move the caret; Up goes back to the item before it (the hue bar).
+  await page.keyboard.press("ArrowUp");
+  await expect(pop.getByRole("slider", { name: "Warna Rona" })).toBeFocused();
   await page.keyboard.press("Home");
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
@@ -156,4 +159,30 @@ test("tool menus and the colour popover work from the keyboard", async ({ page }
   await expect(pop).toHaveCount(0);
   await expect(chip).toBeFocused();
   await expect(page.getByRole("button", { name: "Shape", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+  // A hex code typed in changes the colour live; "+" saves it, and every colour field offers it from then on.
+  await chip.click();
+  const hex = pop.getByLabel("Warna Kode hex");
+  await hex.fill("0a7");
+  await hex.press("Enter");
+  await expect(hex).toHaveValue("00aa77");
+  await expect(chip).toHaveCSS("background-color", "rgb(0, 170, 119)");
+  await pop.getByRole("button", { name: "Simpan warna ini" }).click();
+  await page.keyboard.press("Escape");
+  await chip.click();
+  await pop.getByRole("button", { name: "Warna #e11d48" }).click();
+  await chip.click();
+  const saved = pop.getByRole("button", { name: "Warna #00aa77" });
+  await saved.click();
+  await expect(pop).toHaveCount(0);
+  await expect(chip).toHaveCSS("background-color", "rgb(0, 170, 119)");
+  // The field and the hue bar pick by pointer; Delete on a saved colour drops it.
+  await chip.click();
+  const field = await pop.getByRole("slider", { name: "Warna Saturasi dan kecerahan" }).boundingBox();
+  await page.mouse.click(field!.x + field!.width - 2, field!.y + 2);
+  await expect(hex).toHaveValue(/^[0-9a-f]{6}$/);
+  expect(await hex.inputValue()).not.toBe("00aa77");
+  await saved.focus();
+  await page.keyboard.press("Delete");
+  await expect(saved).toHaveCount(0);
 });

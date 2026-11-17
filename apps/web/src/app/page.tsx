@@ -4,7 +4,6 @@ import { Cutter, Pencil } from "@/components/bench/Props";
 import { SheetDecor } from "@/components/bench/SheetDecor";
 import { Crumbs, Headline } from "@/components/hero/Headline";
 import { Stickers } from "@/components/hero/Stickers";
-import { RecentEdits } from "@/components/RecentEdits";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { ToolsGrid } from "@/components/tools/ToolsGrid";
 import { t } from "@/lib/strings";
@@ -17,7 +16,7 @@ import { t } from "@/lib/strings";
 const AREAS = "[grid-template-areas:'words'_'sheet'_'stickers'] lg:[grid-template-areas:'words_sheet'_'stickers_sheet']";
 
 /** The start page is the bench: a blank sheet clipped down, waiting for the PDF, with the headline and the tools lying
- *  around it; below it the tray of single-purpose PDF tools. */
+ *  around it; below it the tray with the edits this browser kept and the single-purpose PDF tools. */
 export default function Home() {
   return (
     <div className="relative flex min-h-dvh flex-col overflow-x-clip bg-base">
@@ -40,10 +39,9 @@ export default function Home() {
           <Cutter className="animate-slide-in pointer-events-none absolute -bottom-10 -right-14 z-10 w-52 rotate-[-24deg] md:-right-24 md:w-64" />
         </div>
 
-        <section className="flex min-w-0 flex-col gap-10 [grid-area:stickers] lg:self-start">
+        <div className="min-w-0 [grid-area:stickers] lg:self-start">
           <Stickers className="max-w-[44rem] lg:w-[min(44rem,calc(66vw-6rem))] lg:max-w-none" />
-          <RecentEdits />
-        </section>
+        </div>
       </main>
 
       <ToolsGrid />
