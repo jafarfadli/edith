@@ -58,8 +58,8 @@ def order(pts: np.ndarray) -> np.ndarray:
     return np.array([pts[np.argmin(s)], pts[np.argmin(d)], pts[np.argmax(s)], pts[np.argmax(d)]], dtype=np.float32)
 
 
-def _quad(mask: np.ndarray, min_area: float) -> np.ndarray | None:
-    """The biggest four-cornered convex outline in a binary picture, if it is big enough."""
+def _quad(mask: np.ndarray, min_area: float, ok=None) -> np.ndarray | None:
+    """The biggest four-cornered convex outline in a binary picture, if it is big enough (and `ok` takes it)."""
     contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     for c in sorted(contours, key=cv2.contourArea, reverse=True)[:8]:
         hull = cv2.convexHull(c)
@@ -69,7 +69,9 @@ def _quad(mask: np.ndarray, min_area: float) -> np.ndarray | None:
         for eps in (0.02, 0.03, 0.05):
             approx = cv2.approxPolyDP(hull, eps * peri, True)
             if len(approx) == 4 and cv2.isContourConvex(approx) and cv2.contourArea(approx) >= min_area:
-                return approx.reshape(4, 2)
+                if ok is None or ok(approx.reshape(4, 2)):
+                    return approx.reshape(4, 2)
+                break
     return None
 
 
@@ -85,17 +87,20 @@ def _support(quad: np.ndarray, edges: np.ndarray) -> float:
     return hits / total
 
 
-def find_sheet(img: np.ndarray) -> np.ndarray | None:
+def find_sheet(img: np.ndarray, min_share: float = MIN_SHEET_AREA, ok=None, biggest: bool = False) -> np.ndarray | None:
     """The corners of the sheet in the photo (ordered, in its pixels), or None when no sheet stands out. Outlines come
     from two looks, the paper as the bright region (on a darker table) and the edges in the photo (on a light table, or
-    under a shadow), and the one whose border runs along edges best wins."""
+    under a shadow), and the one whose border runs along edges best wins. `min_share`: of the photo the sheet covers at
+    least; `ok`: takes or refuses an outline (its corners, in the photo made small) by its shape; `biggest`: of the
+    outlines on edges, the biggest wins (a card whose top band is another colour: its light part alone is card-shaped
+    too)."""
     h, w = img.shape[:2]
     s = min(1.0, DETECT_SIDE / max(h, w))
     small = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA) if s < 1 else img
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
     # Close over the writing so the sheet reads as one surface.
     gray = cv2.morphologyEx(cv2.GaussianBlur(gray, (5, 5), 0), cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=2)
-    min_area = MIN_SHEET_AREA * gray.shape[0] * gray.shape[1]
+    min_area = min_share * gray.shape[0] * gray.shape[1]
 
     median = float(np.median(gray))
     grow = np.ones((3, 3), np.uint8)
@@ -103,12 +108,20 @@ def find_sheet(img: np.ndarray) -> np.ndarray | None:
     faint = cv2.dilate(cv2.Canny(gray, 20, 60), grow, iterations=2)
     strong = cv2.dilate(cv2.Canny(gray, int(max(20, 0.66 * median)), int(max(60, min(255, 1.33 * median)))), grow, iterations=2)
     _, bright = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    edges = faint
+    edges, masks = faint, [bright, strong, faint]
+    if biggest:  # a card: its border may differ from the table in colour more than in brightness
+        closed = cv2.morphologyEx(cv2.GaussianBlur(small, (5, 5), 0), cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=2)
+        colour = np.max([cv2.Canny(c, 20, 60) for c in cv2.split(closed)], axis=0)
+        edges = cv2.bitwise_or(faint, cv2.dilate(colour, grow, iterations=2))
+        masks.append(edges)
     best, score = None, 0.6  # an outline less than this much on edges is no sheet
-    for mask in (bright, strong, faint):
-        quad = _quad(mask, min_area)
-        if quad is not None and (sup := _support(quad.astype(np.float32), edges)) > score:
-            best, score = quad, sup
+    for mask in masks:
+        quad = _quad(mask, min_area, ok)
+        if quad is None or (sup := _support(quad.astype(np.float32), edges)) <= (0.6 if biggest else score):
+            continue
+        if biggest and best is not None and cv2.contourArea(quad.astype(np.float32)) <= cv2.contourArea(best.astype(np.float32)):
+            continue
+        best, score = quad, sup
     if best is None:
         return None
     corners = order(best / s)

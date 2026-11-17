@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, runTool } from "@/lib/api";
 import { saveBlob } from "@/lib/download";
+import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { errorMessage, t } from "@/lib/strings";
 import { acceptAttr, accepted, DEFAULT_OPTIONS, fields, invalid, type ToolDef, type ToolOptions } from "@/lib/tools";
 import { BTN_ICON, BTN_PRIMARY, BTN_SECONDARY, FIELD, SEGMENTED, segment } from "../ui/styles";
@@ -16,6 +17,8 @@ import { TOOL_ICONS } from "./icons";
 
 const MAX_BYTES = 50 * 1024 * 1024;
 const LABEL = "flex flex-col gap-1.5 text-xs text-muted";
+/** Tools whose PDF is shown (its first sheet) once made: where how it is laid out matters. */
+const SHEET_PREVIEW = new Set(["cards", "scan", "paper-size"]);
 
 function sizeText(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -31,6 +34,40 @@ function ResultPicture({ blob }: { blob: Blob }) {
   }, [blob]);
   // eslint-disable-next-line @next/next/no-img-element -- a blob: URL made here
   return url ? <img src={url} alt={t.tools.resultAlt} data-testid="tool-picture" className="max-h-72 w-auto rounded-sm shadow-sheet" /> : null;
+}
+
+/** The first sheet of a PDF the tool made (ID cards on A4, a scan, a new paper size), to see how it came out before
+ *  printing; "+ N" when there are more. */
+function ResultSheet({ blob }: { blob: Blob }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [pages, setPages] = useState(0);
+  useEffect(() => {
+    const url = URL.createObjectURL(blob);
+    let live = true;
+    let doc: Awaited<ReturnType<typeof loadPdf>> | null = null;
+    (async () => {
+      try {
+        doc = await loadPdf(url);
+        if (!live) return;
+        const page = await doc.getPage(1);
+        const c = canvas.current;
+        if (!live || !c) return;
+        const width = 320 * (window.devicePixelRatio || 1);
+        const viewport = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
+        c.width = Math.floor(viewport.width);
+        c.height = Math.floor(viewport.height);
+        await page.render({ canvas: c, viewport }).promise;
+        if (live) setPages(doc.numPages);
+      } catch { /* no preview: the file is saved all the same */ }
+    })();
+    return () => { live = false; URL.revokeObjectURL(url); if (doc) destroyPdf(doc); };
+  }, [blob]);
+  return (
+    <figure className={`flex items-end gap-3 ${pages ? "" : "hidden"}`}>
+      <canvas ref={canvas} data-testid="tool-sheet" aria-label={t.tools.resultAlt} className="w-40 rounded-sm bg-white shadow-sheet sm:w-56" />
+      {pages > 1 && <figcaption className="text-xs text-muted">{t.tools.morePages(pages - 1)}</figcaption>}
+    </figure>
+  );
 }
 
 /** Choices as a segmented control. */
@@ -194,6 +231,15 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
             <p className="text-xs text-muted">{t.tools.opts.photoNote}</p>
           </>
         );
+      case "cards":
+        return (
+          <>
+            <Choice label={t.tools.opts.paper} value={o.cardPaper} options={["a4", "f4"] as const} names={t.tools.opts.papers} onChange={(cardPaper) => set({ cardPaper })} />
+            <Choice label={t.tools.opts.cardColour} value={o.cardColour} options={["color", "gray"] as const} names={t.tools.opts.cardColours} onChange={(cardColour) => set({ cardColour })} />
+            <Choice label={t.tools.opts.cardScale} value={o.cardScale} options={["real", "large"] as const} names={t.tools.opts.cardScales} onChange={(cardScale) => set({ cardScale })} />
+            <p className="text-xs text-muted">{t.tools.opts.cardNote}</p>
+          </>
+        );
       case "scan":
         return (
           <>
@@ -300,6 +346,11 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
             {files.map((f, i) => (
               <li key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-md bg-panel px-3 py-2 ring-1 ring-inset ring-line">
                 {multiple && <span className="w-5 text-right text-xs tabular-nums text-faint">{i + 1}</span>}
+                {tool.api === "cards" && (
+                  <span data-testid="card-side" className={`w-[4.75rem] shrink-0 rounded-full px-2 py-0.5 text-center text-2xs font-medium ${i % 2 === 0 ? "bg-accent/15 text-accent-text" : "bg-hover text-muted"}`}>
+                    {t.tools.opts.cardSide(i)}
+                  </span>
+                )}
                 <span className="min-w-0 flex-1 truncate text-sm text-ink">{f.name}</span>
                 <span className="text-xs tabular-nums text-faint">{sizeText(f.size)}</span>
                 {multiple && (
@@ -342,6 +393,7 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
             <button type="button" className={BTN_SECONDARY} onClick={() => saveBlob(result.blob, result.name)}>{t.tools.again}</button>
             {result.reached === false && <p className="w-full text-xs text-muted">{t.tools.opts.targetMissed(o.targetKb)}</p>}
             {result.blob.type.startsWith("image/") && <div className="w-full"><ResultPicture blob={result.blob} /></div>}
+            {SHEET_PREVIEW.has(tool.api) && result.blob.type === "application/pdf" && <div className="w-full"><ResultSheet blob={result.blob} /></div>}
           </div>
         )}
       </main>

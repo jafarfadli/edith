@@ -125,6 +125,12 @@ def available(configured: str | None = None) -> bool:
     return cmd is not None and set(LANGS) <= _languages(cmd)
 
 
+def osd_cmd(configured: str | None = None) -> str | None:
+    """Tesseract, when it has the orientation detection data (osd): which way up a picture's writing reads."""
+    cmd = tesseract_cmd(configured)
+    return cmd if cmd is not None and "osd" in _languages(cmd) else None
+
+
 def run_tesseract(png: bytes, dpi: int, timeout: float, cmd: str, psm: int = 3) -> list[Word]:
     """Words Tesseract reads in `png` (`psm` 3: a page, 7: one line). No shell and no temporary files: the image goes
     in on stdin, the TSV comes out on stdout; the process is killed when `timeout` (s) passes. One thread

@@ -4,7 +4,7 @@
 export type ToolSlug =
   | "gabung-pdf" | "pisah-pdf" | "ambil-halaman" | "kompres-pdf" | "pdf-ke-gambar" | "gambar-ke-pdf" | "pdf-ke-teks"
   | "buka-kunci-pdf" | "kunci-pdf" | "watermark-pdf" | "nomor-halaman" | "pdf-bisa-dicari" | "office-ke-pdf" | "pdf-ke-word"
-  | "scan-dokumen" | "pas-foto" | "ukuran-kertas";
+  | "scan-dokumen" | "pas-foto" | "kartu-ke-a4" | "ukuran-kertas";
 
 export interface ToolDef {
   slug: ToolSlug;
@@ -27,6 +27,7 @@ export const TOOLS: ToolDef[] = [
   { slug: "gambar-ke-pdf", api: "images-to-pdf", accepts: "images", min: 1, max: 50, password: false },
   { slug: "scan-dokumen", api: "scan", accepts: "images", min: 1, max: 50, password: false },
   { slug: "pas-foto", api: "pas-foto", accepts: "images", min: 1, max: 1, password: false },
+  { slug: "kartu-ke-a4", api: "cards", accepts: "images", min: 1, max: 16, password: false },
   { slug: "office-ke-pdf", api: "office-to-pdf", accepts: "office", min: 1, max: 1, password: false },
   { slug: "pdf-ke-word", api: "to-docx", accepts: "pdf", min: 1, max: 1, password: false },
   { slug: "pdf-ke-teks", api: "to-text", accepts: "pdf", min: 1, max: 1, password: false },
@@ -56,6 +57,8 @@ export interface ToolOptions {
   photoColour: "red" | "blue" | "white"; photoSize: "3x4" | "2x3" | "4x6" | "original";
   /** Paper size: the new paper, the whole page or its content, and the margins. */
   paper: "a4" | "f4" | "letter" | "legal"; fit: "page" | "content"; margins: "none" | "narrow" | "normal" | "thesis";
+  /** ID card to A4: the sheet, colour or grey, real size or larger. */
+  cardPaper: "a4" | "f4"; cardColour: "color" | "gray"; cardScale: "real" | "large";
 }
 
 /** See-through of a watermark, by its strength. */
@@ -68,6 +71,7 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   compressBy: "level", targetKb: 500,
   scanMode: "color", crop: true, photoColour: "red", photoSize: "3x4",
   paper: "a4", fit: "page", margins: "none",
+  cardPaper: "a4", cardColour: "color", cardScale: "real",
 };
 
 /** Office documents LibreOffice converts (apps/api/edith/office.py OFFICE_TYPES), by extension. */
@@ -116,6 +120,7 @@ export function fields(tool: ToolDef, o: ToolOptions, password: string): Record<
     case "images-to-pdf": return { size: o.size, margin: String(o.size === "fit" ? 0 : o.margin) };
     case "scan": return { scan_mode: o.scanMode, crop: String(o.crop), size: o.size };
     case "pas-foto": return { colour: o.photoColour, size: o.photoSize };
+    case "cards": return { paper: o.cardPaper, scan_mode: o.cardColour, scale: o.cardScale };
     case "paper-size": return { ...out, paper: o.paper, fit: o.fit, margins: o.fit === "content" && o.margins === "none" ? "narrow" : o.margins };
     case "protect": return { ...out, new_password: o.newPassword, allow_print: String(o.allowPrint), allow_copy: String(o.allowCopy) };
     case "watermark": return { ...out, text: o.text.trim(), opacity: String(OPACITY[o.strength]), diagonal: String(o.diagonal), colour: o.colour, pages: o.pages };
