@@ -23,6 +23,7 @@ import { ObjectShape } from "./ObjectShape";
 import { usePolyTool } from "./shapes/usePolyTool";
 import { liveResizeStore, setLiveResize } from "./text/liveResize";
 import { runPageOcr } from "./text/ocrRun";
+import { captureArea } from "./capture";
 import { isDeletedText, textEditStore, updateTextOp } from "./text/textEdit";
 import { CANVAS } from "@/lib/theme";
 import { modHeld } from "@/lib/modKeys";
@@ -337,8 +338,8 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       if (cur.draft) setDrawDraft(extendInk(cur.draft, at));
     } else if (MARKUP_TOOLS.has(tool)) {
       setDrawDraft(markupFromDrag(tool as MarkupTool, pageKey, cur.start, at, "draft"));
-    } else if (tool === "link" || tool === "ocr") {
-      // An area to read (OCR) shows as a link's dashed box does while dragged.
+    } else if (tool === "link" || tool === "ocr" || tool === "capture") {
+      // An area to read (OCR) or to take as a picture shows as a link's dashed box does while dragged.
       setDrawDraft({ id: "draft", type: "link.add", pageKey, rect: normalizeRect(cur.start, at), target: { url: "https://" } });
     } else if (DRAG_TOOLS.has(tool)) {
       setDrawDraft(createFromDrag(tool as DragTool, cur.start, at, editorStore.getState().style, pageKey, "draft"));
@@ -362,6 +363,10 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       // Any part of the page read by OCR; its paragraphs join the page's OCR ones (one OCR of a document at a time).
       const rect = normalizeRect(cur.start, at);
       if (src && rect.w >= MIN_OCR_AREA && rect.h >= MIN_OCR_AREA) { s.setTool("select"); void runPageOcr(src.doc, src.index, rect); }
+    } else if (tool === "capture") {
+      // An area of the page taken as a picture onto the clipboard (to paste here or in another document).
+      const rect = normalizeRect(cur.start, at);
+      if (src && rect.w >= MIN_OCR_AREA && rect.h >= MIN_OCR_AREA) { s.setTool("select"); void captureArea(src.doc, src.index, pageKey, rect); }
     } else if (DRAG_TOOLS.has(tool)) {
       const op = createFromDrag(tool as DragTool, cur.start, at, s.style, pageKey, newId());
       if (op) { s.addObject(op); s.setTool("select"); s.select(op.id); }
@@ -418,7 +423,7 @@ export default function PageOverlay({ pageKey, geom, scale }: { pageKey: string;
       linkStore.getState().setFocusNote(note.id); // the properties bar shows its text field
     } else if (POLY_TOOLS.has(tool)) {
       poly.click(at);
-    } else if (tool === "link" || tool === "ocr" || DRAG_TOOLS.has(tool)) {
+    } else if (tool === "link" || tool === "ocr" || tool === "capture" || DRAG_TOOLS.has(tool)) {
       beginDraw(at, null);
     } else if (tool === "ink") {
       beginDraw(at, { id: "draft", type: "ink.add", pageKey, paths: [[at]], color: s.style.stroke, width: inkWidth(s.style.width) } as ContentOp);

@@ -29,7 +29,7 @@ export interface EditorDoc {
 }
 export type MarkupTool = "highlight" | "underline" | "strike";
 export type Tool = "select" | "text" | "whiteout" | "redact" | "ink" | "image" | "rect" | "ellipse" | "line" | "arrow" | "pan"
-  | MarkupTool | "check" | "cross" | "note" | "link" | "polygon" | "polyline" | "cloud" | "ocr";
+  | MarkupTool | "check" | "cross" | "note" | "link" | "polygon" | "polyline" | "cloud" | "ocr" | "capture";
 export interface ToolStyle {
   stroke: string; fill: string | null; width: number; color: string;
   fontFamily: string; fontSize: number; bold: boolean; italic: boolean;

@@ -10,7 +10,7 @@ import { errorMessage, t } from "@/lib/strings";
 import { toolKey } from "@/lib/toolKeys";
 import { editorStore, useEditor, type Tool } from "@/store/editor";
 import {
-  ArrowIcon, CheckIcon, CloudIcon, CropIcon, CrossIcon, EllipseIcon, HighlightIcon, ImageAddIcon, LineIcon, OcrAreaIcon, PagesIcon,
+  ArrowIcon, CaptureIcon, CheckIcon, CloudIcon, CropIcon, CrossIcon, EllipseIcon, HighlightIcon, ImageAddIcon, LineIcon, OcrAreaIcon, PagesIcon,
   PencilIcon, PointerIcon, PolygonIcon, PolylineIcon, RectIcon, RedactIcon, SignatureIcon, StampIcon, StrikeIcon, TextIcon,
   UnderlineIcon, WhiteoutIcon,
 } from "../brand/icons";
@@ -86,9 +86,10 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
           { tool: "cloud", label: t.editor.cloud, icon: CloudIcon },
         ]} />
         <Sep />
-        <SplitButton label={t.editor.image} caption={r.image} active={tool} options={[
+        <SplitButton label={t.editor.image} caption={r.image} active={tool} onPick={pick} options={[
           { key: "upload", label: t.annot.uploadImage, icon: ImageAddIcon, run: () => file.current?.click() },
           { key: "stamp", label: t.annot.stamp, icon: StampIcon, run: () => setStampOpen(true) },
+          { tool: "capture", label: t.capture.tool, icon: CaptureIcon },
         ]} />
         <IconButton label={t.annot.signature} caption={r.signature} icon={SignatureIcon} onClick={() => setSignatureOpen(true)} />
         <ToolButton tool="check" label={t.annot.check} caption={r.check} icon={CheckIcon} active={tool} />
