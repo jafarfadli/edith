@@ -1,6 +1,7 @@
 "use client";
 
 import type { BundledFont } from "@edith/ops";
+import { clearPaper } from "@/lib/clearPaper";
 import { cssFamily, fontStore } from "@/lib/fonts";
 
 /** A rendered signature image (transparent PNG). */
@@ -61,13 +62,30 @@ export function cropDrawing(canvas: HTMLCanvasElement): SignatureImage | null {
 }
 
 /** An uploaded PNG/JPEG, scaled down to fit MAX_UPLOAD, as a PNG (keeps transparency). */
-export async function loadUpload(file: File): Promise<SignatureImage> {
+/** An uploaded picture of a signature, at most MAX_UPLOAD. `clear`: the paper made see-through (lib/clearPaper.ts) and
+ *  the picture cut to the ink; null when nothing but paper is left. */
+export async function loadUpload(file: File, clear = false): Promise<SignatureImage | null> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_UPLOAD.w / bitmap.width, MAX_UPLOAD.h / bitmap.height);
+  // Cleared, it is first drawn larger: the cut to the ink then still leaves a sharp signature.
+  const room = clear ? 3 : 1;
+  const scale = Math.min(1, (MAX_UPLOAD.w * room) / bitmap.width, (MAX_UPLOAD.h * room) / bitmap.height);
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const ctx = canvas.getContext("2d", { willReadFrequently: clear })!;
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
-  return { dataUrl: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
+  if (!clear) return { dataUrl: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const box = clearPaper(img.data, canvas.width, canvas.height);
+  if (!box) return null;
+  ctx.putImageData(img, 0, 0);
+  const x = Math.max(0, box.x - PAD), y = Math.max(0, box.y - PAD);
+  const w = Math.min(canvas.width - x, box.w + 2 * PAD), h = Math.min(canvas.height - y, box.h + 2 * PAD);
+  const fit = Math.min(1, MAX_UPLOAD.w / w, MAX_UPLOAD.h / h);
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(w * fit));
+  out.height = Math.max(1, Math.round(h * fit));
+  out.getContext("2d")!.drawImage(canvas, x, y, w, h, 0, 0, out.width, out.height);
+  return { dataUrl: out.toDataURL("image/png"), width: out.width, height: out.height };
 }

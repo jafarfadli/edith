@@ -73,6 +73,8 @@ export function SignatureModal({ onClose, onNotice }: { onClose: () => void; onN
   const [name, setName] = useState("");
   const [family, setFamily] = useState<string>(SIGNATURE_FONTS[0]);
   const [file, setFile] = useState<File | null>(null);
+  const [clear, setClear] = useState(true);
+  const [preview, setPreview] = useState<SignatureImage | null | "blank">(null);
   const [save, setSave] = useState(true);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<SavedSignature[]>(() => loadSignatures());
@@ -101,8 +103,16 @@ export function SignatureModal({ onClose, onNotice }: { onClose: () => void; onN
   function make(): Promise<SignatureImage | null> {
     if (tab === "type") return name.trim() ? renderTyped(name.trim(), family, color) : Promise.resolve(null);
     if (tab === "draw") return Promise.resolve(pad.current ? cropDrawing(pad.current) : null);
-    return file ? loadUpload(file) : Promise.resolve(null);
+    return file ? loadUpload(file, clear) : Promise.resolve(null);
   }
+
+  // The upload as it will land: shown before it is added (with the paper cleared, on a checked ground).
+  useEffect(() => {
+    let live = true;
+    if (!file) return;
+    loadUpload(file, clear).then((img) => { if (live) setPreview(img ?? "blank"); }).catch(() => { if (live) setPreview(null); });
+    return () => { live = false; };
+  }, [file, clear]);
 
   return (
     <div className={`${BACKDROP} items-start pt-20`} onPointerDown={onClose}>
@@ -165,14 +175,27 @@ export function SignatureModal({ onClose, onNotice }: { onClose: () => void; onN
           </div>
         )}
         {tab === "upload" && (
-          <input type="file" accept="image/png,image/jpeg" aria-label={t.signature.upload} data-testid="signature-file"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="text-sm text-muted file:mr-3 file:h-8 file:cursor-pointer file:rounded-md file:border-0 file:bg-hover file:px-3 file:text-ink file:ring-1 file:ring-inset file:ring-line-strong" />
+          <div className="flex flex-col gap-3">
+            <input type="file" accept="image/png,image/jpeg" aria-label={t.signature.upload} data-testid="signature-file"
+              onChange={(e) => { setPreview(null); setFile(e.target.files?.[0] ?? null); }}
+              className="text-sm text-muted file:mr-3 file:h-8 file:cursor-pointer file:rounded-md file:border-0 file:bg-hover file:px-3 file:text-ink file:ring-1 file:ring-inset file:ring-line-strong" />
+            <label className="flex items-center gap-1.5 text-muted">
+              <input type="checkbox" checked={clear} onChange={(e) => setClear(e.target.checked)} data-testid="signature-clear" />{t.signature.clearPaper}
+            </label>
+            {preview && (
+              <div data-testid="signature-preview" className="grid h-28 place-items-center rounded-md bg-paper p-2 ring-1 ring-inset ring-line [background-image:repeating-conic-gradient(oklch(92%_0_0)_0_25%,transparent_0_50%)] [background-size:16px_16px]">
+                {preview === "blank"
+                  ? <span className="text-xs text-paper-ink/70">{t.signature.blank}</span>
+                  // eslint-disable-next-line @next/next/no-img-element -- a data: URL made here
+                  : <img src={preview.dataUrl} alt={t.signature.previewAlt} className="max-h-full max-w-full object-contain" />}
+              </div>
+            )}
+          </div>
         )}
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-muted"><input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />{t.signature.save}</label>
           <div className="flex-1" />
-          <button onClick={() => run(make, save)} disabled={busy} className={BTN_PRIMARY}>{t.signature.add}</button>
+          <button onClick={() => run(make, save)} disabled={busy || (tab === "upload" && preview === "blank")} className={BTN_PRIMARY}>{t.signature.add}</button>
         </div>
       </div>
     </div>

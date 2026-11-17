@@ -95,3 +95,49 @@ test("highlight, signature, stamp and form, then download", async ({ page }) => 
   expect(flat.pages[0].text).toContain("Budi Santoso");
   expect(flat.pages[0].annots.map((a) => a.type)).toEqual(["Highlight"]);
 });
+
+test("an uploaded photo of a signature lands without its paper", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  await page.getByTestId("file-input").setInputFiles(ANNOTS_PDF);
+  await expect(page).toHaveURL(/\/edit\//);
+
+  // A "photo": greyish paper lit from one side, a dark blue scribble across it.
+  const png = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 600; c.height = 300;
+    const ctx = c.getContext("2d")!;
+    const g = ctx.createLinearGradient(0, 0, 600, 0);
+    g.addColorStop(0, "rgb(235,232,225)"); g.addColorStop(1, "rgb(175,172,165)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 600, 300);
+    ctx.strokeStyle = "rgb(20,35,120)"; ctx.lineWidth = 7; ctx.beginPath();
+    ctx.moveTo(120, 180); ctx.bezierCurveTo(200, 40, 260, 260, 340, 120); ctx.bezierCurveTo(400, 60, 440, 220, 480, 150);
+    ctx.stroke();
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.getByRole("button", { name: "Signature", exact: true }).click();
+  const modal = page.getByRole("dialog", { name: "Tanda tangan" });
+  await modal.getByRole("tab", { name: "Unggah" }).click();
+  await modal.getByTestId("signature-file").setInputFiles({ name: "ttd.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  const preview = modal.getByRole("img", { name: "Pratinjau tanda tangan" });
+  await expect(preview).toBeVisible();
+  // Cut to the ink (wider than tall), the corners see-through, the stroke opaque.
+  const seen = await preview.evaluate(async (img: HTMLImageElement) => {
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let opaque = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 200) opaque++;
+    return { w: c.width, h: c.height, corner: d[3], far: d[d.length - 1], opaque };
+  });
+  expect(seen.w).toBeLessThan(600);
+  expect(seen.w).toBeGreaterThan(seen.h);
+  expect(seen.corner).toBe(0);
+  expect(seen.far).toBe(0);
+  expect(seen.opaque).toBeGreaterThan(500);
+  await modal.getByRole("button", { name: "Tambahkan", exact: true }).click();
+  await expect(modal).toHaveCount(0);
+});
