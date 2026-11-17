@@ -397,6 +397,10 @@ export const t = {
       numberFormats: { n: "1", n_of: "1 / 10", page_n: "Halaman 1", page_n_of: "Halaman 1 dari 10" } as Record<string, string>,
       start: "Mulai dari nomor",
       wordNote: "Paling bagus untuk PDF berisi teks dengan tata letak sederhana. PDF hasil scan jadikan bisa dicari (OCR) dulu.",
+      scanMode: "Hasil",
+      scanModes: { color: "Berwarna", gray: "Abu-abu", bw: "Hitam putih", original: "Asli" } as Record<string, string>,
+      crop: "Potong ke tepi kertas",
+      scanNote: "Foto kertas dari atas dengan latar yang kontras (misalnya meja gelap) agar tepinya mudah ditemukan. Jika tepi tidak terlihat, seluruh foto dipakai.",
       ocrNote: "Hanya halaman tanpa teks yang dibaca (maksimal 60 halaman). Tampilan halaman tidak berubah; teks hasil OCR ditambahkan tak terlihat sehingga bisa dicari dan disalin.",
     },
     items: {
@@ -405,6 +409,7 @@ export const t = {
       "ambil-halaman": { name: "Extract Pages", desc: "Simpan hanya halaman yang dipilih sebagai PDF baru." },
       "kompres-pdf": { name: "Compress PDF", desc: "Perkecil ukuran file, terutama PDF yang banyak gambarnya." },
       "pdf-ke-gambar": { name: "PDF to Image", desc: "Ubah halaman PDF jadi PNG atau JPG." },
+      "scan-dokumen": { name: "Scan Document", desc: "Foto dokumen dari HP jadi PDF rapi seperti hasil scanner: lurus, terpotong, dan bersih dari bayangan." },
       "gambar-ke-pdf": { name: "Image to PDF", desc: "Satukan foto atau gambar JPG/PNG jadi PDF." },
       "pdf-ke-teks": { name: "PDF to Text", desc: "Ambil semua teks PDF sebagai file .txt." },
       "buka-kunci-pdf": { name: "Unlock PDF", desc: "Hapus kata sandi dan batasan PDF (sandinya harus Anda ketahui)." },
