@@ -105,6 +105,8 @@ export const t = {
     shadeValue: (s: number, v: number) => `saturasi ${s}%, kecerahan ${v}%`,
     hue: "Rona",
     hex: "Kode hex",
+    eyedropper: "Ambil warna dari layar",
+    eyedropperHint: "Klik atau sentuh warna di halaman · Esc batal",
   },
   text: {
     underline: "Garis bawah",

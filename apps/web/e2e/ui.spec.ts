@@ -139,6 +139,8 @@ test("tool menus and the colour popover work from the keyboard", async ({ page }
   await page.keyboard.press("ArrowRight");
   await expect(pop.getByRole("button", { name: "Warna #ffffff" })).toBeFocused();
   await page.keyboard.press("End");
+  await expect(pop.getByTestId("eyedropper")).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
   await expect(pop.getByLabel("Warna Kode hex")).toBeFocused();
   // In the hex code Home and End move the caret; Up goes back to the item before it (the hue bar).
   await page.keyboard.press("ArrowUp");
@@ -185,4 +187,39 @@ test("tool menus and the colour popover work from the keyboard", async ({ page }
   await saved.focus();
   await page.keyboard.press("Delete");
   await expect(saved).toHaveCount(0);
+});
+
+test("the pipette takes a colour from the page", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  // tinted.pdf (apps/api/scripts/e2e_tinted_pdf.py): a cell tinted 255,235,180 at (100, 100)-(300, 130).
+  await page.getByTestId("file-input").setInputFiles(path.join(__dirname, "fixtures", "tinted.pdf"));
+  await expect(page).toHaveURL(/\/edit\//);
+  await page.waitForTimeout(2000); // the page draws
+  const box = (await page.getByTestId("page").first().boundingBox())!; // zoom 100 %: 1 pt = 1 px
+  // Chromium has its own eyedropper (it cannot be driven from a test): without it the page's picking layer is used.
+  await page.evaluate(() => { delete (window as { EyeDropper?: unknown }).EyeDropper; });
+
+  await page.getByRole("button", { name: "Shape", exact: true }).click();
+  const chip = page.getByTestId("properties-bar").getByRole("button", { name: "Warna", exact: true });
+  const pop = page.getByRole("dialog", { name: "Warna" });
+  await chip.click();
+
+  // Escape leaves the picking layer and keeps the popover.
+  await pop.getByTestId("eyedropper").click();
+  const layer = page.getByTestId("eyedropper-layer");
+  await expect(layer).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(layer).toHaveCount(0);
+  await expect(pop).toBeVisible();
+
+  await pop.getByTestId("eyedropper").click();
+  await page.mouse.move(box.x + 120, box.y + 105);
+  await expect(layer).toContainText("#ffebb4");
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(layer).toHaveCount(0);
+  await expect(pop.getByLabel("Warna Kode hex")).toHaveValue("ffebb4");
+  await expect(chip).toHaveCSS("background-color", "rgb(255, 235, 180)");
+  await expect(pop).toBeVisible();
 });
