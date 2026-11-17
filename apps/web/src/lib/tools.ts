@@ -47,6 +47,8 @@ export interface ToolOptions {
   text: string; strength: "light" | "medium" | "strong"; diagonal: boolean; colour: string;
   position: "bottom-center" | "bottom-right" | "bottom-left" | "top-center" | "top-right" | "top-left";
   numberFormat: "n" | "n_of" | "page_n" | "page_n_of"; start: number;
+  /** Compress: by a level, or down to a size (KB). */
+  compressBy: "level" | "size"; targetKb: number;
   /** Scan: how the page comes out, and whether the sheet is cut out of the photo. */
   scanMode: "color" | "gray" | "bw" | "original"; crop: boolean;
   /** Pas foto: the new background, and the photo size. */
@@ -60,6 +62,7 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   pages: "", format: "png", dpi: 150, level: "medium", mode: "every", every: 1, ranges: "", size: "a4", margin: 20,
   newPassword: "", confirm: "", allowPrint: true, allowCopy: true,
   text: "", strength: "medium", diagonal: true, colour: "#9ca3af", position: "bottom-center", numberFormat: "n", start: 1,
+  compressBy: "level", targetKb: 500,
   scanMode: "color", crop: true, photoColour: "red", photoSize: "3x4",
 };
 
@@ -84,11 +87,12 @@ export function accepted(tool: ToolDef, file: { name: string; type: string }): b
 const PAGES = /^\s*(\d+\s*(-\s*\d*)?|-\s*\d+)(\s*,\s*(\d+\s*(-\s*\d*)?|-\s*\d+))*\s*$/;
 
 /** Why the options cannot go to the server yet (a message key of t.tools), or null. */
-export function invalid(tool: ToolDef, o: ToolOptions): "pages" | "ranges" | "every" | "newPassword" | "mismatch" | "text" | "start" | null {
+export function invalid(tool: ToolDef, o: ToolOptions): "pages" | "ranges" | "every" | "newPassword" | "mismatch" | "text" | "start" | "target" | null {
   const pagesOk = !o.pages.trim() || PAGES.test(o.pages);
   switch (tool.api) {
     case "watermark": return !o.text.trim() || o.text.length > 120 ? "text" : pagesOk ? null : "pages";
     case "page-numbers": return !Number.isInteger(o.start) || o.start < 0 ? "start" : pagesOk ? null : "pages";
+    case "compress": return o.compressBy === "size" && !(Number.isInteger(o.targetKb) && o.targetKb >= 10) ? "target" : null;
     case "extract": return PAGES.test(o.pages) ? null : "pages";
     case "to-images": return !o.pages.trim() || PAGES.test(o.pages) ? null : "pages";
     case "split": return o.mode === "ranges" ? (PAGES.test(o.ranges) ? null : "ranges") : (Number.isInteger(o.every) && o.every >= 1 ? null : "every");
@@ -103,7 +107,7 @@ export function fields(tool: ToolDef, o: ToolOptions, password: string): Record<
   switch (tool.api) {
     case "extract": return { ...out, pages: o.pages };
     case "to-images": return { ...out, format: o.format, dpi: String(o.dpi), pages: o.pages };
-    case "compress": return { ...out, level: o.level };
+    case "compress": return o.compressBy === "size" ? { ...out, target_kb: String(o.targetKb) } : { ...out, level: o.level };
     case "split": return o.mode === "ranges" ? { ...out, mode: "ranges", ranges: o.ranges } : { ...out, mode: "every", every: String(o.every) };
     case "images-to-pdf": return { size: o.size, margin: String(o.size === "fit" ? 0 : o.margin) };
     case "scan": return { scan_mode: o.scanMode, crop: String(o.crop), size: o.size };

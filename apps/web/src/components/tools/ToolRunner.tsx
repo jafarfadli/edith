@@ -66,7 +66,7 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ blob: Blob; name: string } | null>(null);
+  const [result, setResult] = useState<{ blob: Blob; name: string; reached?: boolean } | null>(null);
   const set = (p: Partial<ToolOptions>) => { setO((x) => ({ ...x, ...p })); setResult(null); };
 
   function add(list: FileList | null | undefined) {
@@ -127,7 +127,30 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
           </label>
         );
       case "compress":
-        return <Choice label={t.tools.opts.level} value={o.level} options={["low", "medium", "high"] as const} names={t.tools.opts.levels} onChange={(level) => set({ level })} />;
+        return (
+          <>
+            <Choice label={t.tools.opts.compressBy} value={o.compressBy} options={["level", "size"] as const} names={t.tools.opts.compressBys} onChange={(compressBy) => set({ compressBy })} />
+            {o.compressBy === "level" ? (
+              <Choice label={t.tools.opts.level} value={o.level} options={["low", "medium", "high"] as const} names={t.tools.opts.levels} onChange={(level) => set({ level })} />
+            ) : (
+              <div className={LABEL}>
+                <label htmlFor="target-kb">{t.tools.opts.target}</label>
+                <span className="flex flex-wrap items-center gap-2">
+                  <input id="target-kb" className={`${FIELD} w-28`} type="number" min={10} step={10} inputMode="numeric" value={o.targetKb}
+                    onChange={(e) => set({ targetKb: Number(e.target.value) })} aria-invalid={bad === "target"} />
+                  <span className={SEGMENTED}>
+                    {t.tools.opts.targetPresets.map((kb) => (
+                      <button key={kb} type="button" aria-pressed={o.targetKb === kb} className={segment(o.targetKb === kb)} onClick={() => set({ targetKb: kb })}>
+                        {kb >= 1024 ? `${kb / 1024} MB` : `${kb} KB`}
+                      </button>
+                    ))}
+                  </span>
+                </span>
+                <span className="text-2xs text-faint">{t.tools.opts.targetHint}</span>
+              </div>
+            )}
+          </>
+        );
       case "split":
         return (
           <>
@@ -307,6 +330,7 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
           <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-ink" data-testid="tool-done">
             {t.tools.done(result.name)} <span className="text-xs text-faint">({sizeText(result.blob.size)})</span>
             <button type="button" className={BTN_SECONDARY} onClick={() => saveBlob(result.blob, result.name)}>{t.tools.again}</button>
+            {result.reached === false && <p className="w-full text-xs text-muted">{t.tools.opts.targetMissed(o.targetKb)}</p>}
             {result.blob.type.startsWith("image/") && <div className="w-full"><ResultPicture blob={result.blob} /></div>}
           </div>
         )}

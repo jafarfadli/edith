@@ -160,6 +160,53 @@ def compress(doc: pymupdf.Document, level: str) -> Output:
     return pdf(after if len(after) < len(before) else before)
 
 
+# Compressing to a size: steps from mild to strong (images above `threshold` dpi resampled to `target` dpi at JPEG
+# `quality`), the weakest one that reaches the size is taken.
+TARGET_STEPS = [
+    (220, 200, 85), (160, 144, 75), (130, 120, 68), (110, 96, 60), (96, 84, 52), (84, 72, 45), (72, 60, 38), (60, 50, 32),
+]
+
+
+def _rewritten(data: bytes, threshold: int, target: int, quality: int) -> bytes:
+    doc = pymupdf.open("pdf", data)
+    try:
+        doc.rewrite_images(dpi_threshold=threshold, dpi_target=target, quality=quality, lossless=True, bitonal=False)
+        return doc.tobytes(garbage=4, deflate=True, deflate_images=True, deflate_fonts=True, use_objstms=True,
+                           encryption=pymupdf.PDF_ENCRYPT_NONE)
+    finally:
+        doc.close()
+
+
+def compress_to(doc: pymupdf.Document, target_bytes: int) -> tuple[Output, bool]:
+    """`doc` at most `target_bytes` long, as little changed as that allows: the weakest of TARGET_STEPS that gets there,
+    found by halving (each try is a full rewrite). When none does (a PDF of text, or a size too small), the smallest
+    it got, and False."""
+    if target_bytes < 10_000:
+        raise BadOptions("target below 10 KB", field="target_kb")
+    before = plain_bytes(doc)
+    tried: dict[int, bytes] = {}
+
+    def at(i: int) -> bytes:
+        if i not in tried:
+            out = _rewritten(before, *TARGET_STEPS[i])
+            tried[i] = out if len(out) < len(before) else before
+        return tried[i]
+
+    if len(before) <= target_bytes and len(at(0)) <= target_bytes:
+        return pdf(at(0)), True
+    lo, hi, best = 0, len(TARGET_STEPS) - 1, None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if len(at(mid)) <= target_bytes:
+            best, hi = mid, mid - 1
+        else:
+            lo = mid + 1
+    if best is not None:
+        return pdf(at(best)), True
+    smallest = min([before, *tried.values()], key=len)
+    return pdf(smallest), False
+
+
 def merge(docs: list[pymupdf.Document], max_pages: int) -> Output:
     """The PDFs one after the other, in the order given."""
     if len(docs) < 2:
