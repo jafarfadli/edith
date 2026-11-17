@@ -7,7 +7,9 @@ import { saveBlob } from "@/lib/download";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { errorMessage, t } from "@/lib/strings";
 import { acceptAttr, accepted, DEFAULT_OPTIONS, fields, invalid, numberLabels, pageList, pagesOf, type ToolDef, type ToolOptions } from "@/lib/tools";
-import { PdfThumbs } from "./PdfThumbs";
+import { FileThumb, PdfThumbs } from "./PdfThumbs";
+import { NextSteps } from "./NextSteps";
+import { clearHandoff, peekHandoff } from "@/lib/handoff";
 import { BTN_ICON, BTN_PRIMARY, BTN_SECONDARY, FIELD, SEGMENTED, segment } from "../ui/styles";
 import { Logo } from "../brand/Logo";
 import {
@@ -20,6 +22,10 @@ const MAX_BYTES = 50 * 1024 * 1024;
 const LABEL = "flex flex-col gap-1.5 text-xs text-muted";
 /** Tools whose PDF is shown (its first sheet) once made: where how it is laid out matters. */
 const SHEET_PREVIEW = new Set(["cards", "scan", "paper-size"]);
+/** A key that stays with a chosen file while the list is reordered. */
+const keys = new WeakMap<File, string>();
+let nextKey = 0;
+const keyOf = (f: File) => { let k = keys.get(f); if (!k) keys.set(f, (k = `f${nextKey++}`)); return k; };
 
 function sizeText(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -71,6 +77,36 @@ function ResultSheet({ blob }: { blob: Blob }) {
   );
 }
 
+type Shown = { phase: "upload"; ratio: number } | { phase: "server"; since: number };
+
+/** Where a run is, told plainly: the files going up (a bar and a percentage), then the seconds the server has been at
+ *  it, with what the slow tools are doing meanwhile and roughly how long it takes. */
+function Progress({ progress, api, pages }: { progress: Shown; api: string; pages: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (progress.phase !== "server") return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [progress.phase]);
+  const p = t.tools.progress;
+  const upload = progress.phase === "upload";
+  const seconds = upload ? 0 : Math.max(0, Math.round((now - progress.since) / 1000));
+  const note = upload ? null : p.notes[api]?.(pages) ?? null;
+  return (
+    <div role="status" aria-live="polite" data-testid="tool-progress" className="flex flex-col gap-1.5">
+      <div className="h-1 w-full max-w-sm overflow-hidden rounded-full bg-hover">
+        {upload
+          ? <div className="h-full rounded-full bg-accent transition-[width] duration-200" style={{ width: `${Math.round(progress.ratio * 100)}%` }} />
+          : <div className="h-full w-1/3 animate-progress motion-reduce:animate-none rounded-full bg-accent" />}
+      </div>
+      <p className="text-xs text-muted">
+        {upload ? p.upload(Math.round(progress.ratio * 100)) : p.server(seconds)}
+        {note && <span className="text-faint"> · {note}</span>}
+      </p>
+    </div>
+  );
+}
+
 /** Choices as a segmented control. */
 function Choice<T extends string | number>({ label, value, options, names, onChange }: {
   label: string; value: T; options: readonly T[]; names: Record<string, string>; onChange: (v: T) => void;
@@ -97,7 +133,10 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
   const images = tool.accepts === "images";
   const multiple = tool.max > 1;
   const input = useRef<HTMLInputElement>(null);
-  const [files, setFiles] = useState<File[]>([]);
+  // A result handed on by the tool before ("Lanjutkan dengan"), when this tool takes it.
+  const [files, setFiles] = useState<File[]>(() => { const f = peekHandoff(); return f && accepted(tool, f) ? [f] : []; });
+  useEffect(() => clearHandoff(), []);
+  const [handed] = useState(() => { const f = peekHandoff(); return !!f && accepted(tool, f); });
   const [o, setO] = useState<ToolOptions>(DEFAULT_OPTIONS);
   const [password, setPassword] = useState("");
   const [askPassword, setAskPassword] = useState(tool.password);
@@ -105,6 +144,7 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ blob: Blob; name: string; reached?: boolean } | null>(null);
+  const [progress, setProgress] = useState<Shown | null>(null);
   const set = (p: Partial<ToolOptions>) => { setO((x) => ({ ...x, ...p })); setResult(null); };
 
   function add(list: FileList | null | undefined) {
@@ -117,6 +157,9 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
     setResult(null);
     if (!multiple) { setPassword(""); setAskPassword(tool.password); }
   }
+  // Reordering by dragging a row onto another (the arrows do the same from the keyboard).
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
   const move = (i: number, d: -1 | 1) => setFiles((cur) => {
     const next = [...cur];
     [next[i], next[i + d]] = [next[i + d], next[i]];
@@ -133,10 +176,12 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
   async function run() {
     if (!ready) return;
     setBusy(true);
+    setProgress(null);
     setError(null);
     setResult(null);
     try {
-      const out = await runTool(tool.api, files, fields(tool, o, password));
+      setProgress({ phase: "upload", ratio: 0 });
+      const out = await runTool(tool.api, files, fields(tool, o, password), (p) => setProgress(p.phase === "server" ? { phase: "server", since: Date.now() } : p));
       setResult(out);
       saveBlob(out.blob, out.name);
     } catch (e) {
@@ -359,11 +404,26 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
             onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
         </div>
 
+        {handed && files.length > 0 && <p className="-mb-3 text-xs text-muted">{t.tools.next.handed}</p>}
         {files.length > 0 && (
           <ol className="flex flex-col gap-1.5" data-testid="tool-files">
             {files.map((f, i) => (
-              <li key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-md bg-panel px-3 py-2 ring-1 ring-inset ring-line">
+              <li key={keyOf(f)} draggable={multiple}
+                onDragStart={(e) => { setDragFrom(i); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", f.name); }}
+                onDragOver={(e) => { if (dragFrom === null) return; e.preventDefault(); setDropAt(i); }}
+                onDragEnd={() => { setDragFrom(null); setDropAt(null); }}
+                onDrop={(e) => {
+                  const from = dragFrom;
+                  if (from === null) return;
+                  e.preventDefault();
+                  e.stopPropagation(); // not the drop zone's "add these files"
+                  setDragFrom(null);
+                  setDropAt(null);
+                  if (from !== i) { setFiles((cur) => { const next = [...cur]; const [m] = next.splice(from, 1); next.splice(i, 0, m); return next; }); setResult(null); }
+                }}
+                className={`flex items-center gap-2 rounded-md bg-panel px-3 py-2 ring-1 ring-inset transition-shadow ${dropAt === i && dragFrom !== i ? "ring-2 ring-accent" : "ring-line"} ${multiple ? "cursor-grab active:cursor-grabbing" : ""}`}>
                 {multiple && <span className="w-5 text-right text-xs tabular-nums text-faint">{i + 1}</span>}
+                <FileThumb file={f} />
                 {tool.api === "cards" && (
                   <span data-testid="card-side" className={`w-[4.75rem] shrink-0 rounded-full px-2 py-0.5 text-center text-2xs font-medium ${i % 2 === 0 ? "bg-accent/15 text-accent-text" : "bg-hover text-muted"}`}>
                     {t.tools.opts.cardSide(i)}
@@ -431,6 +491,7 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
           {files.length > 0 && files.length < tool.min && <span className="text-xs text-muted">{t.tools.needFiles(tool.min)}</span>}
           {total > MAX_BYTES && <span className="text-xs text-danger-text">{errorMessage("too_large")}</span>}
         </div>
+        {busy && progress && <Progress progress={progress} api={tool.api} pages={pageCount} />}
         {error && <p role="alert" data-testid="tool-error" className="text-sm text-danger-text">{error}</p>}
         {result && (
           <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-ink" data-testid="tool-done">
@@ -439,6 +500,7 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
             {result.reached === false && <p className="w-full text-xs text-muted">{t.tools.opts.targetMissed(o.targetKb)}</p>}
             {result.blob.type.startsWith("image/") && <div className="w-full"><ResultPicture blob={result.blob} /></div>}
             {SHEET_PREVIEW.has(tool.api) && result.blob.type === "application/pdf" && <div className="w-full"><ResultSheet blob={result.blob} /></div>}
+            {result.blob.type === "application/pdf" && <NextSteps result={result} from={tool} />}
           </div>
         )}
       </main>

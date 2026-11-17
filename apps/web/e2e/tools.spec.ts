@@ -38,20 +38,36 @@ test("the start page lists the tools; merging takes the PDFs in the order set", 
   await expect(files).toHaveCount(2);
   await page.getByRole("button", { name: "Naikkan kedua.pdf" }).click();
   await expect(files.first()).toContainText("kedua.pdf");
+  // Rows are dragged into order too.
+  await files.nth(0).dragTo(files.nth(1));
+  await expect(files.first()).toContainText("sample.pdf");
+  await files.nth(1).dragTo(files.nth(0));
+  await expect(files.first()).toContainText("kedua.pdf");
   const { name, data } = await runAndDownload(page);
   expect(name).toBe("kedua-gabungan.pdf");
   expect(data.subarray(0, 5).toString()).toBe("%PDF-");
   expect(pageCount(data)).toBe(6);
+
+  // The merged PDF goes on to Compress without being chosen again, then into the editor.
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "next.png"), fullPage: true });
+  await page.getByTestId("next-steps").getByRole("button", { name: "Compress PDF" }).click();
+  await expect(page).toHaveURL(/\/tools\/kompres-pdf$/);
+  await expect(page.getByTestId("tool-files")).toContainText("kedua-gabungan.pdf");
+  const small = await runAndDownload(page);
+  expect(small.name).toBe("kedua-gabungan-kecil.pdf");
+  await page.getByTestId("next-steps").getByRole("button", { name: "Edit di editor" }).click();
+  await expect(page).toHaveURL(/\/edit\//);
+  await expect(page.getByTestId("page")).toHaveCount(6);
 });
 
 test("PDF to pictures: one page is a PNG, several a ZIP", async ({ page }) => {
   await page.goto("/tools/pdf-ke-gambar");
   await page.getByTestId("tool-input").setInputFiles(SAMPLE);
-  await page.getByLabel("Halaman").fill("2");
+  await page.getByRole("textbox", { name: /^Halaman/ }).fill("2");
   const one = await runAndDownload(page);
   expect(one.name).toBe("sample-gambar.png");
   expect(one.data.subarray(1, 4).toString()).toBe("PNG");
-  await page.getByLabel("Halaman").fill("1-3");
+  await page.getByRole("textbox", { name: /^Halaman/ }).fill("1-3");
   await page.getByRole("button", { name: "JPG" }).click();
   const zip = await runAndDownload(page);
   expect(zip.name).toBe("sample-gambar.zip");
@@ -76,7 +92,7 @@ test("scan document: photos become one PDF page each, with the chosen look", asy
   // A picture of a page (made by PDF to Image) stands in for a phone photo.
   await page.goto("/tools/pdf-ke-gambar");
   await page.getByTestId("tool-input").setInputFiles(SAMPLE);
-  await page.getByLabel("Halaman").fill("1");
+  await page.getByRole("textbox", { name: /^Halaman/ }).fill("1");
   const photo = await runAndDownload(page);
 
   await page.goto("/");
@@ -295,4 +311,19 @@ test("the PDF's pages are shown before the tool runs: the numbers to be, and pag
   await page.getByTestId("tool-thumb").nth(2).click();
   await expect(page.getByRole("textbox", { name: /^Halaman/ })).toHaveValue("1, 3");
   await expect(page.getByTestId("tool-thumb").nth(2)).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a run says where it is while it waits", async ({ page }) => {
+  await page.goto("/tools/pdf-bisa-dicari");
+  await page.getByTestId("tool-input").setInputFiles(SAMPLE);
+  // The server's answer held back a while, so the waiting can be seen. (An intercepted request reports no upload
+  // progress, so here it stays on the upload; a real one goes on to the server's seconds.)
+  await page.route(/\/tools\/ocr$/, async (route) => {
+    const response = await route.fetch();
+    await new Promise((r) => setTimeout(r, 2500));
+    await route.fulfill({ response });
+  });
+  await page.getByTestId("tool-run").click();
+  await expect(page.getByTestId("tool-progress")).toContainText(/Mengunggah… \d+%|Memproses di server/);
+  await expect(page.getByTestId("tool-progress")).toHaveCount(0, { timeout: 15_000 });
 });
