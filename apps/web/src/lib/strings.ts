@@ -440,7 +440,7 @@ export const t = {
       placeholder: "Cari alat… (kecilkan, KTP, skripsi)",
       none: "Tidak ada alat yang cocok. Coba kata lain.",
       editor: "Mengedit isi PDF (teks, tanda tangan, sensor, stabilo) dikerjakan di editor:",
-      editorLink: "unggah PDF di atas.",
+      editorLink: "Pilih PDF untuk diedit",
     },
     preview: {
       title: "Pratinjau PDF",

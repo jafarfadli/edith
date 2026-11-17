@@ -334,7 +334,7 @@ test("the start page's search finds tools by what people need, and points PDF ed
   const search = page.getByTestId("tool-search");
   await expect(search).toBeFocused();
   await search.fill("fotokopi ktp");
-  const results = page.getByTestId("tool-results").getByRole("link");
+  const results = page.getByTestId("tool-results").getByRole("option");
   await expect(results.first()).toContainText("ID Card to A4");
   await search.fill("kecilkan");
   await expect(results.first()).toContainText("Compress PDF");
@@ -343,5 +343,9 @@ test("the start page's search finds tools by what people need, and points PDF ed
   await expect(page.getByTestId("tool-results")).toContainText("dikerjakan di editor");
   await search.press("Escape");
   await expect(page.getByTestId("tool-results")).toHaveCount(0);
+  await search.fill("nomor halaman");
+  await search.press("Enter");
+  await expect(page).toHaveURL(/\/tools\/nomor-halaman/);
+  await page.goBack();
   await expect(page.getByTestId("tools-grid").getByRole("link")).toHaveCount(18);
 });
