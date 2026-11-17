@@ -230,7 +230,7 @@ A hueless graphite ramp with one warm yellow accent, a chalk white for drawn mar
 - **Title** (700, 1.125rem, wide, tight tracking): panel and drawer titles, the wordmark beside the logo, the sheet's drop prompt (semibold there).
 - **Body Large** (400, 0.9375rem/1.5rem): start-page lists and tool names in the tray.
 - **Body** (400, 0.8125rem/1.25rem): the app's base size: controls, menus, dialogs, editor UI. Buttons use 500.
-- **Label** (600, 0.75rem, condensed, 0.14em, uppercase, faint): headings of a list or group (tool groups, recent edits). It names the list under it; it never sits above a larger headline.
+- **Label** (600, 0.75rem, condensed, 0.14em, uppercase, faint): headings of a list or group (tool groups). It names the list under it; it never sits above a larger headline.
 - **Caption** (500, 0.6875rem/0.8125rem, condensed): the short name under each rail icon.
 - **Mono** (Geist Mono, 0.6875rem): limits, sizes, page counts, colour values.
 
