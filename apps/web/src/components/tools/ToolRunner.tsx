@@ -6,7 +6,8 @@ import { ApiError, runTool } from "@/lib/api";
 import { saveBlob } from "@/lib/download";
 import { destroyPdf, loadPdf } from "@/lib/pdf";
 import { errorMessage, t } from "@/lib/strings";
-import { acceptAttr, accepted, DEFAULT_OPTIONS, fields, invalid, type ToolDef, type ToolOptions } from "@/lib/tools";
+import { acceptAttr, accepted, DEFAULT_OPTIONS, fields, invalid, numberLabels, pageList, pagesOf, type ToolDef, type ToolOptions } from "@/lib/tools";
+import { PdfThumbs } from "./PdfThumbs";
 import { BTN_ICON, BTN_PRIMARY, BTN_SECONDARY, FIELD, SEGMENTED, segment } from "../ui/styles";
 import { Logo } from "../brand/Logo";
 import {
@@ -123,6 +124,9 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
   });
 
   const total = files.reduce((n, f) => n + f.size, 0);
+  // The pages of the one PDF, once its preview has read it.
+  const [pageCount, setPageCount] = useState(0);
+  const preview = tool.accepts === "pdf" && !multiple && files[0] ? files[0] : null;
   const bad = invalid(tool, o);
   const ready = files.length >= tool.min && total <= MAX_BYTES && !bad && (!askPassword || !!password) && !busy;
 
@@ -378,6 +382,33 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
             ))}
           </ol>
         )}
+
+        {preview && (() => {
+          // Page Numbers: each page with the number it will get; in roman-then-1-2-3 a press ends the roman part there.
+          // Extract, to pictures, watermark: a press takes a page in or out of the page list.
+          const romanMode = tool.api === "page-numbers" && o.numerals === "roman_then_arabic";
+          const listKey = tool.api === "page-numbers" || tool.api === "watermark" || tool.api === "extract" || tool.api === "to-images" ? "pages" : null;
+          const chosen = listKey && pageCount ? pagesOf(o.pages, pageCount) : null;
+          // An empty list is every page, except for Extract (nothing yet).
+          const none = tool.api === "extract" && !o.pages.trim();
+          const toggle = (n: number) => {
+            const now = new Set(none ? [] : pagesOf(o.pages, pageCount) ?? []);
+            if (now.has(n)) now.delete(n); else now.add(n);
+            set({ pages: now.size === pageCount && tool.api !== "extract" ? "" : pageList(now) });
+          };
+          const hint = romanMode ? t.tools.preview.romanPick : listKey ? t.tools.preview.pick : null;
+          return (
+            <section className="flex flex-col gap-2" aria-label={t.tools.preview.title}>
+              {hint && pageCount > 0 && <p className="text-xs text-muted">{hint}</p>}
+              <PdfThumbs file={preview} onPages={setPageCount}
+                labels={tool.api === "page-numbers" && pageCount ? numberLabels(o, pageCount) : null} position={o.position}
+                accent={romanMode ? (n) => n <= o.romanTo : undefined}
+                picked={romanMode ? new Set([o.romanTo]) : tool.api === "page-numbers" || !chosen ? undefined : new Set(none ? [] : chosen)}
+                onPick={romanMode ? (n) => set({ romanTo: n }) : listKey ? toggle : undefined}
+                pickTitle={romanMode ? (n) => t.tools.preview.romanTo(n) : listKey ? (n) => t.tools.preview.toggle(n) : undefined} />
+            </section>
+          );
+        })()}
 
         {(optionsUi || imageFormat || askPassword) && (
           <div className="flex flex-col gap-4 rounded-lg bg-panel p-4 ring-1 ring-inset ring-line">

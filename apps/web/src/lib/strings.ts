@@ -399,6 +399,13 @@ export const t = {
     done: (name: string) => `Selesai: ${name}`,
     again: "Unduh lagi",
     resultAlt: "Hasil",
+    preview: {
+      title: "Pratinjau PDF",
+      pick: "Klik halaman untuk memilih atau membatalkannya.",
+      romanPick: "Klik halaman terakhir yang memakai angka romawi (sebelum Bab I). Halaman setelahnya mulai dari 1.",
+      romanTo: (n: number) => `Romawi sampai halaman ${n}`,
+      toggle: (n: number) => `Pilih halaman ${n}`,
+    },
     morePages: (n: number) => `+ ${n} halaman lagi`,
     password: "Kata sandi PDF",
     passwordHint: "PDF ini terkunci. Masukkan sandinya untuk melanjutkan.",
