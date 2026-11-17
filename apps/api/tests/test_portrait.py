@@ -96,3 +96,15 @@ def test_route_with_the_real_model(tmp_path):
         assert r.headers["content-type"] == "image/jpeg"
         assert "foto-pasfoto.jpg" in r.headers["content-disposition"]
         assert decode(r.content).shape[:2] == (354, 236)
+
+
+def test_tidy_fills_dark_clothes_open_to_the_bottom_but_not_gaps_in_the_hair():
+    a = np.zeros((600, 400), np.float32)
+    cv2.ellipse(a, (200, 200), (90, 120), 0, 0, 360, 1.0, -1)  # head
+    a[300:, 40:360] = 1.0  # shoulders and chest, running off the bottom
+    a[520:, 150:180] = 0.3  # a dark jacket's fold read as half background, open to the bottom edge
+    a[110:118, 150:158] = 0.3  # a small gap between strands of hair
+    t = portrait.tidy(a)
+    assert t[580, 165] > 0.95
+    assert t[114, 154] < 0.5
+    assert t[20, 20] == 0 and t[400, 10] == 0  # the real background beside the shoulders stays

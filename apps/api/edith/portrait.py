@@ -67,27 +67,28 @@ def tidy(alpha: np.ndarray) -> np.ndarray:
     if n <= 1:
         return alpha
     keep = (labels == 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))).astype(np.uint8)
-    # Holes: what the outside cannot reach once the person is a wall.
-    outside = np.zeros((keep.shape[0] + 2, keep.shape[1] + 2), np.uint8)
-    seeds = [(x, y) for y in (0, keep.shape[0] - 1) for x in range(0, keep.shape[1], 8) if not keep[y, x]]
-    seeds += [(x, y) for x in (0, keep.shape[1] - 1) for y in range(0, keep.shape[0], 8) if not keep[y, x]]
-    flood = keep.copy()
-    for seed in seeds:
-        if not outside[seed[1] + 1, seed[0] + 1]:
-            cv2.floodFill(flood, outside, seed, 1, flags=4 | cv2.FLOODFILL_MASK_ONLY | (1 << 8))
-    holes = (outside[1:-1, 1:-1] == 0) & (keep == 0)
     near = cv2.dilate(keep, np.ones((15, 15), np.uint8)) > 0  # the soft edge around the person
     out = np.where(near, alpha, 0).astype(np.float32)
-    # Only holes the model half saw as the person (real background between an arm and the body stays clear), with
-    # their rims: the matte's soft edge around such a hole is the same mistake.
-    # Small gaps between strands of hair are real background: only holes of some size count.
-    m, hole_labels, hole_stats, _ = cv2.connectedComponentsWithStats(holes.astype(np.uint8), connectivity=8)
+    # Holes: the regions of not-person that are not the real background. The real background reaches the top edge, or
+    # is a big region at a side edge (beside the shoulders). Not the bottom edge: in a chest-up photo the body runs off
+    # it, so a gap in the clothes open to the bottom, or a small one at a side, is inside the person.
+    h, w = alpha.shape
+    rows = np.flatnonzero(keep.any(axis=1))
+    body_from = rows[0] + 0.5 * (h - rows[0])  # below the head: shoulders and chest
+    m, hole_labels, hole_stats, centres = cv2.connectedComponentsWithStats((1 - keep).astype(np.uint8), connectivity=8)
     fill = np.zeros(alpha.shape, np.uint8)
     for i in range(1, m):
+        x, y, cw, ch, area = hole_stats[i]
+        at_side = x == 0 or x + cw == w
+        if y == 0 or (at_side and area >= 0.01 * alpha.size):
+            continue  # the background
         part = hole_labels == i
-        if hole_stats[i, cv2.CC_STAT_AREA] >= 0.002 * alpha.size and float(alpha[part].mean()) > 0.15:
+        # Only regions the model half saw as the person (real background between an arm and the body stays clear).
+        # Small gaps between strands of hair are real background: around the head only holes of some size count.
+        big = area >= 0.002 * alpha.size
+        if float(alpha[part].mean()) > 0.15 and (big or centres[i][1] > body_from):
             fill[part] = 1
-    if fill.any():
+    if fill.any():  # with their rims: the matte's soft edge around such a hole is the same mistake
         grown = cv2.dilate(fill, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))).astype(np.float32)
         out = np.maximum(out, cv2.GaussianBlur(grown, (0, 0), 2))
     return out
