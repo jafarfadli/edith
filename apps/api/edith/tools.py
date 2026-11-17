@@ -398,12 +398,32 @@ def watermark(doc: pymupdf.Document, text: str, pages: list[int], font_path: str
 
 NUMBER_FORMATS = {"n": "{n}", "n_of": "{n} / {total}", "page_n": "Halaman {n}", "page_n_of": "Halaman {n} dari {total}"}
 POSITIONS = {"bottom-center", "bottom-right", "bottom-left", "top-center", "top-right", "top-left"}
+# How the numbers are written: 1, 2, 3; i, ii, iii; I, II, III; or roman for the first pages (a thesis's front matter)
+# and 1, 2, 3 from the page after them on.
+NUMERALS = {"arabic", "roman", "ROMAN", "roman_then_arabic"}
+_ROMAN = [(1000, "m"), (900, "cm"), (500, "d"), (400, "cd"), (100, "c"), (90, "xc"), (50, "l"), (40, "xl"), (10, "x"),
+          (9, "ix"), (5, "v"), (4, "iv"), (1, "i")]
+
+
+def roman(n: int) -> str:
+    """`n` in lower-case roman numerals (0 and below as they are: there is no roman zero)."""
+    if n <= 0:
+        return str(n)
+    out = []
+    for value, letters in _ROMAN:
+        while n >= value:
+            out.append(letters)
+            n -= value
+    return "".join(out)
 
 
 def page_numbers(doc: pymupdf.Document, pages: list[int], font_path: str, position: str = "bottom-center",
-                 fmt: str = "n", start: int = 1, size: float = 10, margin: float = 28, colour: str = "#000000") -> Output:
+                 fmt: str = "n", start: int = 1, size: float = 10, margin: float = 28, colour: str = "#000000",
+                 numerals: str = "arabic", roman_to: int | None = None) -> Output:
     """A number on each of `pages`: `start` on the first of them, counting on; `{total}` is how many are numbered
-    (from `start`). Placed at `position` of the page as shown, `margin` pt from its edges."""
+    (from `start`). Placed at `position` of the page as shown, `margin` pt from its edges. `numerals`: how they are
+    written (NUMERALS); "roman_then_arabic": the numbered pages up to page `roman_to` (1-based, of the document) in
+    i, ii, iii from `start`, the ones after it in 1, 2, 3 from 1, each part with its own `{total}`."""
     if position not in POSITIONS:
         raise BadOptions(f"position {position!r}", field="position")
     if fmt not in NUMBER_FORMATS:
@@ -414,12 +434,25 @@ def page_numbers(doc: pymupdf.Document, pages: list[int], font_path: str, positi
         raise BadOptions("size outside 6-48", field="size")
     if not 0 <= margin <= 144:
         raise BadOptions("margin outside 0-144", field="margin")
+    if numerals not in NUMERALS:
+        raise BadOptions(f"numerals {numerals!r}", field="numerals")
+    if numerals == "roman_then_arabic" and (roman_to is None or not 1 <= roman_to <= doc.page_count):
+        raise BadOptions("roman_to outside the document", field="roman_to")
     rgb = _hex_colour(colour, "colour")
-    total = start + len(pages) - 1
-    for k, i in enumerate(sorted(pages)):
+    ordered = sorted(pages)
+    front = [i for i in ordered if numerals == "roman_then_arabic" and i < (roman_to or 0)]
+    body = [i for i in ordered if i not in set(front)]
+    labels: dict[int, str] = {}
+    for part, first, write in ((front, start, roman), (body, 1 if front else start, None)):
+        total = first + len(part) - 1
+        if write is None:
+            write = {"roman": roman, "ROMAN": lambda n: roman(n).upper()}.get(numerals, str)
+        for k, i in enumerate(part):
+            labels[i] = NUMBER_FORMATS[fmt].format(n=write(first + k), total=write(total))
+    for i in ordered:
         page = doc[i]
         font, name = _face(page, font_path, False)
-        label = NUMBER_FORMATS[fmt].format(n=start + k, total=total)
+        label = labels[i]
         w = font.text_length(label, fontsize=size)
         r = page.rect
         vert, horiz = position.split("-")

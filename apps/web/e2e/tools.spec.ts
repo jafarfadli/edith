@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pdfInfo } from "./pdfText";
 
 // The "Alat PDF": each tool's page takes files, asks its options and downloads the result; a locked PDF is opened with
 // its password, in a tool and on the start page (then edited as any other). sample.pdf: three pages.
@@ -225,6 +226,22 @@ test("watermark and page numbers: the options go with the PDF", async ({ page })
   await page.getByLabel("Mulai dari nomor").fill("3");
   const nums = await runAndDownload(page);
   expect(nums.name).toBe("sample-bernomor.pdf");
+
+  // A thesis: the cover unnumbered, page 2 in roman (ii), page 3 starting the body at 1.
+  await page.getByRole("button", { name: "1", exact: true }).click();
+  await page.getByRole("button", { name: "Romawi, lalu 1, 2, 3" }).click();
+  await page.getByRole("button", { name: "Pola skripsi" }).click();
+  await expect(page.getByLabel("Pada halaman")).toHaveValue("2-");
+  await page.getByTestId("roman-to").fill("2");
+  await expect(page.getByText("halaman 3 dan seterusnya mulai lagi dari 1")).toBeVisible();
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "roman.png"), fullPage: true });
+  const thesis = await runAndDownload(page);
+  const file = path.join(test.info().outputDir, "thesis.pdf");
+  writeFileSync(file, thesis.data);
+  const text = (await pdfInfo(file)).pages.map((p) => p.text);
+  expect(text[0]).not.toMatch(/\bi\b/);
+  expect(text[1]).toMatch(/\bii\b/);
+  expect(text[2]).toMatch(/\b1\b/);
 });
 
 function hasSoffice(): boolean {

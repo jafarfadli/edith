@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "arimo",
+        "createdAt": "2026-11-17T09:37:14.704Z",
+        "reason": "Claude triage: Arimo is the bundled PDF font for text placed in documents (editor default style, font stand-in), not UI typography"
+      }
+    ]
+  }
+}

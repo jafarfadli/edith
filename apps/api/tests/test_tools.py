@@ -6,6 +6,7 @@ import zipfile
 import pymupdf
 import pytest
 
+from edith import tools
 from tests.test_documents import upload
 
 
@@ -270,6 +271,22 @@ def test_page_numbers_count_from_the_start_asked(client):
     numbers = [b for b in doc[1].get_text("words") if b[4] in ("5",)]
     assert numbers and numbers[0][0] > 400 and numbers[0][1] > 750  # bottom right
     assert run(client, "page-numbers", [("a.pdf", make_pdf(1))], position="middle").json()["error"]["field"] == "position"
+
+
+def test_roman_numerals():
+    assert [tools.roman(n) for n in (1, 4, 9, 14, 40, 90, 400, 1994)] == ["i", "iv", "ix", "xiv", "xl", "xc", "cd", "mcmxciv"]
+
+
+def test_page_numbers_in_roman_for_the_front_pages_then_from_1(client):
+    # A thesis: the cover unnumbered, the front matter (pages 2-4) ii, iii, iv, chapter one (page 5) on 1, 2.
+    doc = pdf_of(run(client, "page-numbers", [("a.pdf", make_pdf(6))], pages="2-", start=2,
+                     numerals="roman_then_arabic", roman_to=4))
+    words = [[w[4] for w in p.get_text("words") if w[1] > 750] for p in doc]
+    assert words == [[], ["ii"], ["iii"], ["iv"], ["1"], ["2"]]
+    doc = pdf_of(run(client, "page-numbers", [("a.pdf", make_pdf(3))], numerals="ROMAN", number_format="page_n_of"))
+    assert "Halaman III dari III" in doc[2].get_text()
+    r = run(client, "page-numbers", [("a.pdf", make_pdf(3))], numerals="roman_then_arabic", roman_to=9)
+    assert r.json()["error"]["field"] == "roman_to"
 
 
 def has_tesseract() -> bool:

@@ -58,6 +58,7 @@ async def run_tool(
     paper: Annotated[str, Form()] = "a4", fit: Annotated[str, Form()] = "page", margins: Annotated[str, Form()] = "none",
     scan_mode: Annotated[str, Form()] = "color", crop: Annotated[bool, Form()] = True,
     scale: Annotated[str, Form()] = "real",
+    numerals: Annotated[str, Form()] = "arabic", roman_to: Annotated[int | None, Form()] = None,
 ) -> Response:
     if tool not in TOOL_NAMES:
         raise BadOptions(f"unknown tool {tool!r}", field="tool")
@@ -162,7 +163,7 @@ async def run_tool(
                 case "page-numbers":
                     return tools.page_numbers(doc, tools.parse_pages(pages, doc.page_count), sans(False), position,
                                               number_format, start, font_size or 10, 28 if margin is None else margin,
-                                              colour or "#000000")
+                                              colour or "#000000", numerals, roman_to)
                 case "ocr":
                     return read_scan(doc)
                 case "paper-size":
