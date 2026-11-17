@@ -136,6 +136,7 @@ const assetKey = (id: string, assetId: string) => `${id}/${assetId}`;
 export const putSource = (id: string, pdf: Blob) => run(SOURCES, "readwrite", (s) => s.put(pdf, id));
 export const getSource = (id: string) => run<Blob | undefined>(SOURCES, "readonly", (s) => s.get(id));
 export const putAsset = (id: string, assetId: string, image: Blob) => run(ASSETS, "readwrite", (s) => s.put(image, assetKey(id, assetId)));
+export const getAsset = (id: string, assetId: string) => run<Blob | undefined>(ASSETS, "readonly", (s) => s.get(assetKey(id, assetId)));
 
 /** Every image of the edit, by asset id. */
 export async function getAssets(id: string): Promise<Record<string, Blob>> {

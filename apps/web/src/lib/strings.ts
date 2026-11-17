@@ -199,6 +199,12 @@ export const t = {
     cross: "Klik di halaman untuk menaruh tanda silang.",
     pan: "Seret untuk menggeser halaman.",
     ocr: "Seret di halaman untuk memilih bagian yang teksnya ingin dikenali (OCR).",
+    capture: "Seret di atas logo, tabel, atau bagian halaman mana pun untuk menyalinnya sebagai gambar.",
+  },
+  capture: {
+    tool: "Salin area halaman",
+    done: "Area disalin. Tekan Ctrl+V (⌘V di Mac) untuk menempelkannya di halaman lain atau di PDF lain.",
+    failed: "Area ini tidak bisa disalin.",
   },
   objectKinds: {
     text: "Teks", textEdit: "Teks diedit", image: "Gambar", signature: "Tanda tangan", ink: "Gambar bebas",

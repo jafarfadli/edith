@@ -73,6 +73,8 @@ export const SpinnerIcon = icon("Spinner", <><circle cx="12" cy="12" r="8" opaci
 export const PointerIcon = icon("Pointer", <path d="M5.5 4 18 10.5l-5.5 1.75L10 18z" />);
 export const TextIcon = icon("Text", <path d="M5.5 7V4.5h13V7M12 4.5v15M9.5 19.5h5" />);
 /** Reading text in an area: the area's corners around two lines. */
+/** A dashed area with a picture in it. */
+export const CaptureIcon = icon("Capture", <><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" /><path d="m7.5 16 3-3.5 2.25 2.25 1.25-1.25L16.5 16" /><circle cx="10" cy="9.5" r="1.25" /></>);
 export const OcrAreaIcon = icon("OcrArea", <><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" /><path d="M8 10h8M8 14h5" /></>);
 /** Whiteout: a block of correction tape over the line. */
 export const WhiteoutIcon = icon("Whiteout", <><path d="M3.5 12h3M17.5 12h3" /><rect x="6.5" y="8" width="11" height="8" rx="1.5" /><path d="m9.5 16 2.5-2.5" /></>);
