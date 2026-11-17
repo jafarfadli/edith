@@ -201,6 +201,14 @@ export const t = {
     ocr: "Seret di halaman untuk memilih bagian yang teksnya ingin dikenali (OCR).",
     capture: "Seret di atas logo, tabel, atau bagian halaman mana pun untuk menyalinnya sebagai gambar.",
   },
+  tabs: {
+    row: "Dokumen yang terbuka",
+    openAnother: "Buka PDF lain",
+    fromDevice: "Pilih PDF dari perangkat…",
+    isOpen: "terbuka",
+    close: (name: string) => `Tutup ${name}`,
+    locked: "PDF ini dikunci kata sandi. Buka dari halaman utama untuk memasukkan sandinya.",
+  },
   capture: {
     tool: "Salin area halaman",
     done: "Area disalin. Tekan Ctrl+V (⌘V di Mac) untuk menempelkannya di halaman lain atau di PDF lain.",

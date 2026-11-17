@@ -80,3 +80,27 @@ test("a paragraph of one PDF and an area of another, pasted into a third documen
   const withPicture = await download(page, "with-picture.pdf");
   expect(pdfReport(withPicture).pages[0].images).toBeGreaterThanOrEqual(1);
 });
+
+test("another PDF opens as a tab; the tabs switch between the documents and close", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  await open(page, SAMPLE);
+  const first = page.url();
+  await expect(page.getByTestId("doc-tabs")).toHaveCount(0); // one document: no row
+
+  await page.getByTestId("open-another-input").setInputFiles(TEXT_PDF);
+  await expect(page).not.toHaveURL(first);
+  const tabs = page.getByTestId("doc-tabs");
+  await expect(tabs.locator('button[title$=".pdf"]')).toHaveText(["sample.pdf", "text.pdf"]);
+  await expect(tabs.getByRole("button", { name: "text.pdf", exact: true })).toHaveAttribute("aria-current", "page");
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "tabs.png") });
+
+  await tabs.getByRole("button", { name: "sample.pdf", exact: true }).click();
+  await expect(page).toHaveURL(first);
+  await expect(page.getByTestId("page")).toHaveCount(3);
+
+  // The menu lists the recent edits too: text.pdf is open already.
+  await page.getByRole("button", { name: "Tutup text.pdf" }).click();
+  await expect(page.getByTestId("doc-tabs")).toHaveCount(0);
+  await expect(page).toHaveURL(first);
+});

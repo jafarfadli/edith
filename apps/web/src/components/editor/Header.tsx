@@ -1,5 +1,6 @@
 "use client";
 
+import { FilePlus2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { ExportOutput, Op } from "@edith/ops";
@@ -19,6 +20,7 @@ import { IconButton } from "../ui/IconButton";
 import { Tip } from "../ui/Tooltip";
 import { openFind } from "./find/findStore";
 import { afterTextCommitted, whenTextCommitted } from "./text/textEdit";
+import { OpenAnother } from "./DocTabs";
 
 /** The editor's top bar: the mark (home) and the file name, then Urungkan/Ulangi, Cari, Ratakan form and Unduh. The
  *  tools are on the rail (Toolbar). */
@@ -105,6 +107,10 @@ export function Header({ onNotice }: { onNotice: (n: NoticeMsg | null) => void }
         onChange={(e) => { setName(e.target.value); downloadStore.setState({ fileName: e.target.value }); }}
         className="h-8 w-36 min-w-0 flex-1 truncate rounded-md font-medium sm:flex-none xl:w-60 border border-transparent bg-transparent px-2 text-sm text-muted hover:border-line-strong focus:border-accent focus:text-ink focus:outline-none focus:ring-1 focus:ring-accent"
       />
+      <OpenAnother onNotice={onNotice} className="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted hover:bg-hover hover:text-ink aria-expanded:bg-hover aria-expanded:text-ink">
+        <FilePlus2 {...ICON} aria-hidden />
+        <span className="hidden lg:inline">{t.tabs.openAnother}</span>
+      </OpenAnother>
       <div className="hidden flex-1 sm:block" />
       <div className="flex shrink-0 items-center gap-0.5">
         <IconButton label={t.editor.undo} icon={UndoIcon} keys="Mod+Z" disabled={!canUndo} onClick={() => afterTextCommitted(() => editorStore.getState().undo())} />
