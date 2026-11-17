@@ -57,6 +57,20 @@ test("PDF to pictures: one page is a PNG, several a ZIP", async ({ page }) => {
   expect(zip.data.subarray(0, 2).toString()).toBe("PK");
 });
 
+test("compress to a size: the file comes back no larger than the size asked", async ({ page }) => {
+  await page.goto("/tools/kompres-pdf");
+  await page.getByTestId("tool-input").setInputFiles(path.join(__dirname, "fixtures", "scan.pdf"));
+  await page.getByRole("button", { name: "Ke ukuran tertentu" }).click();
+  await page.getByRole("button", { name: "200 KB" }).click();
+  await expect(page.getByLabel("Ukuran maksimal (KB)")).toHaveValue("200");
+  await page.getByLabel("Ukuran maksimal (KB)").fill("100"); // scan.pdf is about 180 KB
+  const { name, data } = await runAndDownload(page);
+  expect(name).toBe("scan-kecil.pdf");
+  expect(data.length).toBeLessThanOrEqual(100 * 1024);
+  await page.getByLabel("Ukuran maksimal (KB)").fill("5");
+  await expect(page.getByTestId("tool-run")).toBeDisabled();
+});
+
 test("scan document: photos become one PDF page each, with the chosen look", async ({ page }) => {
   // A picture of a page (made by PDF to Image) stands in for a phone photo.
   await page.goto("/tools/pdf-ke-gambar");

@@ -17,6 +17,15 @@ describe("PDF tools", () => {
     expect(accepted(tool("gambar-ke-pdf"), { name: "a.pdf", type: "application/pdf" })).toBe(false);
   });
 
+  it("compresses by a level, or down to a size of 10 KB or more", () => {
+    const o = DEFAULT_OPTIONS;
+    expect(fields(tool("kompres-pdf"), o, "")).toEqual({ level: "medium" });
+    expect(fields(tool("kompres-pdf"), { ...o, compressBy: "size", targetKb: 200 }, "")).toEqual({ target_kb: "200" });
+    expect(invalid(tool("kompres-pdf"), { ...o, compressBy: "size", targetKb: 5 })).toBe("target");
+    expect(invalid(tool("kompres-pdf"), { ...o, compressBy: "size", targetKb: 2.5 })).toBe("target");
+    expect(invalid(tool("kompres-pdf"), { ...o, compressBy: "level", targetKb: 0 })).toBeNull();
+  });
+
   it("checks page numbers, ranges and passwords before asking the server", () => {
     const o = DEFAULT_OPTIONS;
     expect(invalid(tool("ambil-halaman"), { ...o, pages: "" })).toBe("pages");
