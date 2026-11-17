@@ -25,6 +25,8 @@ import { BTN_PRIMARY } from "../ui/styles";
 import { FormLayer } from "./forms/FormLayer";
 import { DocTabs } from "./DocTabs";
 import { SidePane } from "./SidePane";
+import { CommandPalette } from "./CommandPalette";
+import { FileDrop } from "./FileDrop";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
 import { PageList } from "./PageList";
@@ -260,6 +262,8 @@ export function Editor({ docId: editId, initialName }: { docId: string; initialN
         {pdf ? <Sidebar /> : <aside className="hidden w-52 shrink-0 border-l border-line bg-panel xl:block" />}
       </div>
       <FindBar />
+      <CommandPalette />
+      <FileDrop onNotice={setNotice} />
       <ObjectContextMenu />
     </div>
   );

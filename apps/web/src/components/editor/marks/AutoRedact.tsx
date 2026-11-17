@@ -11,6 +11,7 @@ import { editorStore } from "@/store/editor";
 import { CloseIcon as X, SpinnerIcon } from "../../brand/icons";
 import { BACKDROP, BTN_ICON, BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, DIALOG, DIALOG_TITLE } from "../../ui/styles";
 import { markLines } from "./markupTool";
+import { useCommand } from "../commands";
 
 /** Pages read at once while looking (each is one request for its character boxes). */
 const AT_ONCE = 4;
@@ -49,6 +50,7 @@ export function AutoRedact() {
   const [found, setFound] = useState<PageFindings[] | null>(null);
   const [off, setOff] = useState<Set<string>>(new Set());
   const box = useRef<HTMLDivElement>(null);
+  useCommand("autoRedact", () => setOpen(true));
 
   useEffect(() => {
     if (!open) return;

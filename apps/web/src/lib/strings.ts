@@ -201,6 +201,23 @@ export const t = {
     ocr: "Seret di halaman untuk memilih bagian yang teksnya ingin dikenali (OCR).",
     capture: "Seret di atas logo, tabel, atau bagian halaman mana pun untuk menyalinnya sebagai gambar.",
   },
+  drop: {
+    pdf: "Lepas untuk membuka PDF ini sebagai tab baru",
+    image: "Lepas untuk menaruh gambar ini di halaman yang sedang dilihat",
+    file: "Lepas PDF untuk membukanya, atau gambar PNG/JPG untuk menaruhnya di halaman",
+    opening: (name: string) => `Membuka ${name}…`,
+    unknown: "Hanya PDF, PNG, atau JPG yang bisa dilepas di sini.",
+  },
+  palette: {
+    title: "Perintah",
+    open: "Cari perintah",
+    placeholder: "Cari alat atau perintah… (misal: sensor, tanda tangan, salin area)",
+    none: "Tidak ada perintah yang cocok.",
+    footer: "↑↓ pilih · Enter jalankan · Esc tutup · tekan ? kapan saja untuk membuka daftar ini",
+    groups: { tools: "Alat", insert: "Sisipkan", document: "Dokumen", view: "Tampilan" } as Record<string, string>,
+    selectAll: "Pilih semua objek di halaman",
+    zoom100: "Zoom 100%",
+  },
   tabs: {
     row: "Dokumen yang terbuka",
     openAnother: "Buka PDF lain",
