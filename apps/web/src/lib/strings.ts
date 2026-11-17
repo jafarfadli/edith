@@ -442,6 +442,7 @@ export const t = {
     text_outdated: "Edith diperbarui sejak halaman ini dibuka. Muat ulang halaman, lalu ulangi suntingan teks asli.",
     text_locked: "Teks yang disorot ternyata gambar dan tidak bisa diedit langsung. Hapus suntingannya, lalu pakai Whiteout dan Teks baru.",
     network: "Tidak dapat terhubung ke server. Periksa koneksi Anda.",
+    file_unreadable: "File tidak bisa dibaca. Jika file ada di Google Drive atau penyimpanan cloud, unduh dulu ke HP lalu pilih lagi dari folder Download.",
     timeout: "Server terlalu lama membuat PDF.",
     internal: "Server mengalami kesalahan saat membuat PDF.",
     bad_response: "Server tidak mengirim file PDF.",

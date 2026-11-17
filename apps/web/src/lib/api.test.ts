@@ -20,6 +20,23 @@ describe("api client", () => {
     expect(init.body).toBeInstanceOf(FormData);
   });
 
+  it("sends the bytes read into memory, under the given name", async () => {
+    const fn = mockFetch(201, { doc_id: "x", sha256: "s", page_count: 1 });
+    await uploadDocument(new File(["%PDF-1"], "orig.pdf", { type: "application/pdf" }), "a.pdf");
+    const sent = ((fn.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData).get("file") as File;
+    expect(sent.name).toBe("a.pdf");
+    expect(sent.type).toBe("application/pdf");
+    expect(await sent.text()).toBe("%PDF-1");
+  });
+
+  it("says the file is unreadable, without calling the server, when the browser cannot read it", async () => {
+    const fn = mockFetch(201, {});
+    const bad = new File(["x"], "a.pdf");
+    vi.spyOn(bad, "arrayBuffer").mockRejectedValue(new DOMException("gone", "NotReadableError"));
+    await expect(uploadDocument(bad, "a.pdf")).rejects.toMatchObject({ code: "file_unreadable" });
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it("maps error bodies to ApiError", async () => {
     mockFetch(410, { error: { code: "doc_expired", message: "gone" } });
     await expect(getStructure("x")).rejects.toMatchObject({ code: "doc_expired", status: 410 });
