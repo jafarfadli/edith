@@ -141,3 +141,30 @@ test("an uploaded photo of a signature lands without its paper", async ({ page }
   await modal.getByRole("button", { name: "Tambahkan", exact: true }).click();
   await expect(modal).toHaveCount(0);
 });
+
+test("auto redaction finds personal data and blacks out what stays ticked", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  await page.getByTestId("file-input").setInputFiles(path.join(__dirname, "fixtures", "sensitive.pdf"));
+  await expect(page).toHaveURL(/\/edit\//);
+  await page.getByRole("button", { name: "Erase pilihan" }).click();
+  await page.getByRole("menuitem", { name: "Redact" }).click();
+  await page.getByTestId("auto-redact").click();
+  const dialog = page.getByRole("dialog", { name: "Sensor otomatis" });
+  const list = dialog.getByTestId("auto-redact-list");
+  await expect(list).toBeVisible();
+  for (const text of ["3201234508910004", "01.234.567.8-901.234", "0812-3456-7890", "budi.santoso@contoh.co.id", "123 456 7890"]) {
+    await expect(list).toContainText(text);
+  }
+  await expect(list).not.toContainText("1234567890 tidak");
+  await list.getByRole("checkbox").nth(3).uncheck(); // keep the email
+  await dialog.getByRole("button", { name: "Sensor 4 bagian" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const pdf = await download(page, "sensitive-redacted.pdf");
+  const text = pdfReport(pdf).pages[0].text;
+  expect(text).not.toContain("3201234508910004");
+  expect(text).not.toContain("0812-3456-7890");
+  expect(text).toContain("budi.santoso@contoh.co.id");
+  expect(text).toContain("Budi Santoso");
+});

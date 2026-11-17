@@ -148,6 +148,17 @@ export const t = {
     blank: "Tidak ada tinta yang terlihat. Matikan \"Hapus latar kertas\" atau pakai foto yang lebih jelas.", tooBig: "Tanda tangan ini terlalu besar untuk disimpan di browser",
     colors: { "#111111": "Hitam", "#1d4ed8": "Biru", "#b91c1c": "Merah" } as Record<string, string>,
   },
+  redact: {
+    find: "Cari data pribadi",
+    title: "Sensor otomatis",
+    starting: "Membaca dokumen…",
+    reading: (done: number, total: number) => `Membaca halaman ${done} dari ${total}…`,
+    none: "Tidak ditemukan NIK, NPWP, nomor HP, email, atau nomor rekening di teks dokumen ini.",
+    intro: "Centang yang ingin ditutup kotak hitam. Isinya terhapus permanen dari PDF saat diunduh.",
+    scanNote: "Halaman hasil scan (gambar) hanya terbaca setelah di-OCR.",
+    apply: (n: number) => `Sensor ${n} bagian`,
+    kinds: { nik: "NIK", npwp: "NPWP", phone: "Nomor HP", email: "Email", account: "No. rekening" } as Record<string, string>,
+  },
   pages: {
     duplicate: "Duplikat halaman",
     insert: "Sisipkan halaman",

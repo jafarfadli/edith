@@ -21,7 +21,7 @@ export interface CharLine { text: string; boxes: [number, number][]; baseline: n
 export interface Caret { line: number; index: number }
 type Pt = [number, number];
 
-function band(l: CharLine): { top: number; bottom: number } {
+export function band(l: CharLine): { top: number; bottom: number } {
   return { top: l.baseline - MARK_ASCENT * l.size, bottom: l.baseline + MARK_DESCENT * l.size };
 }
 
