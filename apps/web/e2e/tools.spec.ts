@@ -271,3 +271,28 @@ test("PDF to Word, and the Word document back to PDF", async ({ page }) => {
   expect(back.name).toBe("kembali.pdf");
   expect(back.data.subarray(0, 5).toString()).toBe("%PDF-");
 });
+
+test("the PDF's pages are shown before the tool runs: the numbers to be, and pages picked by a press", async ({ page }) => {
+  await page.goto("/tools/nomor-halaman");
+  await page.getByTestId("tool-input").setInputFiles(SAMPLE);
+  const thumbs = page.getByTestId("tool-thumb");
+  await expect(thumbs).toHaveCount(3);
+  await expect(page.getByTestId("thumb-label")).toHaveText(["1", "2", "3"]);
+
+  // Roman, then 1, 2, 3: a press on page 2 ends the roman part there.
+  await page.getByRole("button", { name: "Romawi, lalu 1, 2, 3" }).click();
+  await page.getByRole("button", { name: "Pola skripsi" }).click();
+  await thumbs.nth(1).click();
+  await expect(page.getByTestId("roman-to")).toHaveValue("2");
+  await expect(page.getByTestId("thumb-label")).toHaveText(["ii", "1"]);
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "preview.png"), fullPage: true });
+
+  // Extract: presses pick the pages.
+  await page.goto("/tools/ambil-halaman");
+  await page.getByTestId("tool-input").setInputFiles(SAMPLE);
+  await expect(page.getByTestId("tool-thumb")).toHaveCount(3);
+  await page.getByTestId("tool-thumb").nth(0).click();
+  await page.getByTestId("tool-thumb").nth(2).click();
+  await expect(page.getByRole("textbox", { name: /^Halaman/ })).toHaveValue("1, 3");
+  await expect(page.getByTestId("tool-thumb").nth(2)).toHaveAttribute("aria-pressed", "true");
+});

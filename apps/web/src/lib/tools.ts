@@ -141,7 +141,13 @@ export function fields(tool: ToolDef, o: ToolOptions, password: string): Record<
 /** How many of a document's `total` pages a page list ("1-3, 5, 8-"; empty: all) takes, each page once; null when
  *  the list does not parse. */
 export function countPages(spec: string, total: number): number | null {
-  if (!spec.trim()) return total;
+  return pagesOf(spec, total)?.length ?? null;
+}
+
+/** The pages (1-based, ascending, each once) a page list takes of a document of `total` pages; null when it does not
+ *  parse. Empty: all of them. */
+export function pagesOf(spec: string, total: number): number[] | null {
+  if (!spec.trim()) return Array.from({ length: total }, (_, i) => i + 1);
   if (!PAGES.test(spec)) return null;
   const taken = new Set<number>();
   for (const part of spec.split(",")) {
@@ -150,5 +156,48 @@ export function countPages(spec: string, total: number): number | null {
     const to = part.includes("-") ? (b ? Number(b) : total) : from;
     for (let p = Math.max(1, from); p <= Math.min(total, to); p++) taken.add(p);
   }
-  return taken.size;
+  return [...taken].sort((x, y) => x - y);
+}
+
+/** A page list for `pages` (1-based), runs written as ranges: [1, 2, 3, 5] → "1-3, 5". */
+export function pageList(pages: Iterable<number>): string {
+  const sorted = [...new Set(pages)].sort((x, y) => x - y);
+  const parts: string[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+    parts.push(j > i ? `${sorted[i]}-${sorted[j]}` : String(sorted[i]));
+    i = j;
+  }
+  return parts.join(", ");
+}
+
+/** `n` in lower-case roman numerals (as apps/api/edith/tools.py writes them). */
+export function roman(n: number): string {
+  if (n <= 0) return String(n);
+  const table: [number, string][] = [[1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"], [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]];
+  let out = "";
+  for (const [value, letters] of table) while (n >= value) { out += letters; n -= value; }
+  return out;
+}
+
+const NUMBER_TEXT: Record<ToolOptions["numberFormat"], (n: string, total: string) => string> = {
+  n: (n) => n, n_of: (n, total) => `${n} / ${total}`, page_n: (n) => `Halaman ${n}`, page_n_of: (n, total) => `Halaman ${n} dari ${total}`,
+};
+
+/** The number Page Numbers will write on each page of a document of `total` pages (1-based page → text), as the server
+ *  does (tools.page_numbers); pages without one are left out. Null while the page list does not parse. */
+export function numberLabels(o: ToolOptions, total: number): Map<number, string> | null {
+  const chosen = pagesOf(o.pages, total);
+  if (!chosen) return null;
+  const mixed = o.numerals === "roman_then_arabic";
+  const front = mixed ? chosen.filter((p) => p <= o.romanTo) : [];
+  const body = chosen.filter((p) => !front.includes(p));
+  const plain = o.numerals === "roman" ? roman : o.numerals === "ROMAN" ? (n: number) => roman(n).toUpperCase() : String;
+  const out = new Map<number, string>();
+  for (const [part, first, write] of [[front, o.start, roman], [body, front.length ? 1 : o.start, plain]] as const) {
+    const last = write(first + part.length - 1);
+    part.forEach((p, k) => out.set(p, NUMBER_TEXT[o.numberFormat](write(first + k), last)));
+  }
+  return out;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accepted, countPages, DEFAULT_OPTIONS, fields, invalid, toolBySlug, TOOLS } from "./tools";
+import { accepted, countPages, DEFAULT_OPTIONS, fields, invalid, numberLabels, pageList, pagesOf, roman, toolBySlug, TOOLS } from "./tools";
 import { t } from "./strings";
 
 const tool = (slug: string) => toolBySlug(slug)!;
@@ -62,11 +62,21 @@ describe("PDF tools", () => {
   });
 
   it("counts the pages a page list takes, each once and only those the document has", () => {
+    expect(pagesOf("3, 1-2, 2", 5)).toEqual([1, 2, 3]);
+    expect(pageList([5, 1, 2, 3, 9, 10])).toBe("1-3, 5, 9-10");
+    expect(roman(14)).toBe("xiv");
     expect(countPages("", 7)).toBe(7);
     expect(countPages("2-3", 7)).toBe(2);
     expect(countPages("1-3, 2, 8-", 9)).toBe(5); // 1, 2, 3, 8, 9
     expect(countPages("-2, 6-", 7)).toBe(4);
     expect(countPages("5-9", 6)).toBe(2);
     expect(countPages("1,,2", 6)).toBeNull();
+  });
+
+  it("labels the pages as Page Numbers will number them", () => {
+    const o = { ...DEFAULT_OPTIONS, pages: "2-", start: 2, numerals: "roman_then_arabic" as const, romanTo: 4 };
+    expect([...numberLabels(o, 6)!]).toEqual([[2, "ii"], [3, "iii"], [4, "iv"], [5, "1"], [6, "2"]]);
+    expect(numberLabels({ ...DEFAULT_OPTIONS, numerals: "ROMAN", numberFormat: "page_n_of" }, 3)!.get(3)).toBe("Halaman III dari III");
+    expect(numberLabels({ ...DEFAULT_OPTIONS, pages: "x" }, 3)).toBeNull();
   });
 });
