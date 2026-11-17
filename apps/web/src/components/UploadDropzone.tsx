@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { ApiError, getSourceFile, uploadDocument } from "@/lib/api";
-import { putSource, saveRecord } from "@/lib/library";
+import { ApiError } from "@/lib/api";
+import { openPdf } from "@/lib/openPdf";
 import { errorMessage, t } from "@/lib/strings";
 import { ScissorsIcon, SpinnerIcon, UploadIcon } from "./brand/icons";
 import { BinderClip } from "./bench/Props";
@@ -37,13 +37,7 @@ export function UploadDropzone() {
       inFlight.current = true;
       setBusy(true);
       try {
-        const res = await uploadDocument(file, file.name, pw);
-        // A copy stays in this browser, so the edit goes on when the server has dropped its own (lib/session.ts): of a
-        // locked PDF, the unlocked copy the server made (the password is not kept).
-        saveRecord({ id: res.doc_id, serverId: res.doc_id, name: file.name, pageCount: res.page_count, edited: false, updatedAt: Date.now() });
-        const copy = pw ? await getSourceFile(res.doc_id).catch(() => null) : file;
-        if (copy) await putSource(res.doc_id, copy).catch(() => undefined);
-        router.push(`/edit/${res.doc_id}?name=${encodeURIComponent(file.name)}`);
+        router.push(await openPdf(file, pw));
       } catch (e) {
         const code = e instanceof ApiError ? e.code : "generic";
         if (code === "pdf_encrypted") { setLocked(file); setPassword(""); }

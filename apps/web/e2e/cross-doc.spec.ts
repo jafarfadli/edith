@@ -80,3 +80,65 @@ test("a paragraph of one PDF and an area of another, pasted into a third documen
   const withPicture = await download(page, "with-picture.pdf");
   expect(pdfReport(withPicture).pages[0].images).toBeGreaterThanOrEqual(1);
 });
+
+test("another PDF opens as a tab; the tabs switch between the documents and close", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  await open(page, SAMPLE);
+  const first = page.url();
+  await expect(page.getByTestId("doc-tabs")).toHaveCount(0); // one document: no row
+
+  await page.getByTestId("open-another-input").setInputFiles(TEXT_PDF);
+  await expect(page).not.toHaveURL(first);
+  const tabs = page.getByTestId("doc-tabs");
+  await expect(tabs.locator('button[title$=".pdf"]')).toHaveText(["sample.pdf", "text.pdf"]);
+  await expect(tabs.getByRole("button", { name: "text.pdf", exact: true })).toHaveAttribute("aria-current", "page");
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "tabs.png") });
+
+  await tabs.getByRole("button", { name: "sample.pdf", exact: true }).click();
+  await expect(page).toHaveURL(first);
+  await expect(page.getByTestId("page")).toHaveCount(3);
+
+  // The menu lists the recent edits too: text.pdf is open already.
+  await page.getByRole("button", { name: "Tutup text.pdf" }).click();
+  await expect(page.getByTestId("doc-tabs")).toHaveCount(0);
+  await expect(page).toHaveURL(first);
+});
+
+test("side by side: a paragraph of the other PDF dragged onto a page, another copied by a click, a page inserted", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  await open(page, TEXT_PDF);
+  await page.getByTestId("open-another-input").setInputFiles(SAMPLE);
+  await expect(page.getByTestId("page")).toHaveCount(3);
+  // Back to text.pdf, with sample.pdf beside it.
+  await page.getByTestId("doc-tabs").getByRole("button", { name: "text.pdf", exact: true }).click();
+  await expect(page.getByTestId("page")).toHaveCount(1);
+  await page.getByTestId("side-toggle").click();
+  const pane = page.getByTestId("side-pane");
+  await expect(pane.getByTestId("side-page")).toHaveCount(3);
+  const paragraph = pane.getByTestId("side-paragraph").first();
+  await expect(paragraph).toBeVisible();
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "side.png") });
+
+  // Dragged onto the page: a text box where it was dropped.
+  const target = page.getByTestId("page").first();
+  await paragraph.dragTo(target, { targetPosition: { x: 100, y: 500 } });
+  await expect.poll(async () => (await draftOps(page)).filter((o) => o.type === "text.add").map(textOf).join(" ")).toContain("Page 0");
+
+  // A click copies it; Ctrl/Cmd+V pastes it.
+  await paragraph.click();
+  await expect(page.getByText("Paragraf disalin")).toBeVisible();
+  await page.mouse.click((await target.boundingBox())!.x + 400, (await target.boundingBox())!.y + 750);
+  await page.keyboard.press(`${MOD}+v`);
+  await expect.poll(async () => (await draftOps(page)).filter((o) => o.type === "text.add").length).toBe(2);
+
+  // Its second page inserted after the page in view.
+  await pane.getByTestId("side-insert").nth(1).click();
+  await expect(page.getByTestId("page")).toHaveCount(2);
+  const file = await download(page, "with-page.pdf");
+  const pages = (await pdfInfo(file)).pages;
+  expect(pages).toHaveLength(2);
+  expect(pages[0].text).toContain("Page 0");
+  expect(pages[1].text).toContain("Page 1");
+});

@@ -106,8 +106,10 @@ export function blankPage(size: { width: number; height: number }, pageKey = new
 
 /** The pages of an imported PDF, in order, with new keys; `doc.imports` records the document so a restored
  *  draft can tell its pages from the main document's. */
-export function importPages(doc: EditorDoc, index: number, docId: string, count: number, makeKey = () => newId("u")): EditorDoc {
-  const entries: PageEntry[] = Array.from({ length: count }, (_, i) => ({ pageKey: makeKey(), src: { doc: docId, index: i }, rotate: 0 }));
+export function importPages(doc: EditorDoc, index: number, docId: string, count: number | number[], makeKey = () => newId("u")): EditorDoc {
+  // `count`: all of its first pages, or the indexes of the pages to take, in that order.
+  const indexes = typeof count === "number" ? Array.from({ length: count }, (_, i) => i) : count;
+  const entries: PageEntry[] = indexes.map((i) => ({ pageKey: makeKey(), src: { doc: docId, index: i }, rotate: 0 }));
   const next = insertPages(doc, index, entries);
   const imports = doc.imports?.includes(docId) ? doc.imports : [...(doc.imports ?? []), docId];
   return { ...next, imports };

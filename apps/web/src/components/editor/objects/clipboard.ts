@@ -205,7 +205,7 @@ function toTextAdd(op: ContentOp): ContentOp {
 }
 
 /** `box` with every embedded font of another PDF replaced by its stand-in, laid out again with it. */
-async function standIn(box: TextBox, fonts: Record<string, BundledFont>): Promise<TextBox> {
+export async function standIn(box: TextBox, fonts: Record<string, BundledFont>): Promise<TextBox> {
   const swap = (f: FontRef): FontRef => (isOriginal(f) ? fonts[fontId(f)] ?? { kind: "bundled", family: "Arimo" } : f);
   const paragraphs = box.paragraphs.map((p) => p.map((r) => ({ ...r, font: swap(r.font) })));
   await Promise.all(paragraphs.flat().map((r) => fontStore.load(r.font)));
