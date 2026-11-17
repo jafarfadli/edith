@@ -14,7 +14,7 @@ export function ToolsGrid() {
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h2 id="tools-heading" className="font-wide text-2xl font-bold tracking-tight text-ink">{t.tools.heading}</h2>
         </div>
-        <div className="mt-10 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-[1fr_1.25fr_1fr_0.8fr]">
+        <div className="mt-10 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-[1fr_1.25fr_1fr_1fr_0.8fr]">
           {TOOL_GROUPS.map((group) => (
             <div key={group.name}>
               <h3 className="font-condensed text-xs font-semibold uppercase tracking-[0.14em] text-faint">{t.tools.groups[group.name]}</h3>

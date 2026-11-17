@@ -15,6 +15,7 @@ WORKDIR /app/apps/api
 COPY apps/api/pyproject.toml apps/api/uv.lock ./
 RUN uv sync --frozen --no-dev
 COPY apps/api/edith ./edith
+RUN uv run --no-dev python -m edith.portrait fetch
 COPY --from=fonts /app/packages/fonts /app/packages/fonts
 ENV EDITH_DATA_DIR=/data EDITH_FONTS_DIR=/app/packages/fonts
 VOLUME /data

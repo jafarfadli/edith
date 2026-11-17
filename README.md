@@ -65,7 +65,7 @@ Catatan perilaku (review M5d):
 
 ## Menjalankan untuk pengembangan
 
-Prasyarat: Node 22+, uv. Untuk OCR: Tesseract dengan data bahasa `ind` dan `eng` (macOS: `brew install tesseract tesseract-lang`; Debian/Ubuntu: `apt-get install tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng`). Tanpa Tesseract Edith tetap jalan; tombol OCR menjawab "OCR belum terpasang di server ini" dan tes OCR dilewati (di CI `EDITH_REQUIRE_TESSERACT=1` membuatnya gagal).
+Prasyarat: Node 22+, uv. Untuk OCR: Tesseract dengan data bahasa `ind` dan `eng` (macOS: `brew install tesseract tesseract-lang`; Debian/Ubuntu: `apt-get install tesseract-ocr tesseract-ocr-ind tesseract-ocr-eng`). Tanpa Tesseract Edith tetap jalan; tombol OCR menjawab "OCR belum terpasang di server ini" dan tes OCR dilewati (di CI `EDITH_REQUIRE_TESSERACT=1` membuatnya gagal). Untuk Pas Foto: model MODNet (25 MB, Apache-2.0) diunduh sekali dengan `cd apps/api && uv run python -m edith.portrait fetch` ke `apps/api/models/` (atau `EDITH_MODELS_DIR`); tanpanya alat itu menjawab "belum siap di server".
 
     npm install
     npm run dev:api      # http://localhost:8000
