@@ -142,12 +142,14 @@ export function dispositionName(header: string | null, fallback: string): string
 
 /** A tool of the "Alat PDF" (POST /tools/{tool}): the files and the options as form fields; the result and its name.
  *  Five minutes: compressing or picturing a big PDF takes a while. */
-export async function runTool(tool: string, files: File[], fields: Record<string, string>): Promise<{ blob: Blob; name: string }> {
+/** `reached`: of a compression to a size, whether the file got that small (else it is the smallest the server made). */
+export async function runTool(tool: string, files: File[], fields: Record<string, string>): Promise<{ blob: Blob; name: string; reached?: boolean }> {
   const form = new FormData();
   for (const f of files) form.append("files", await inMemory(f, f.name));
   for (const [k, v] of Object.entries(fields)) form.append(k, v);
   const res = await request(`/tools/${tool}`, { method: "POST", body: form, signal: AbortSignal.timeout(300_000) });
-  return { blob: await res.blob(), name: dispositionName(res.headers.get("Content-Disposition"), "hasil") };
+  const target = res.headers.get("X-Edith-Target");
+  return { blob: await res.blob(), name: dispositionName(res.headers.get("Content-Disposition"), "hasil"), ...(target ? { reached: target === "reached" } : {}) };
 }
 
 export async function getStructure(docId: string): Promise<Structure> {

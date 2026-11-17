@@ -125,6 +125,45 @@ def test_compress_never_makes_a_pdf_bigger(client):
     assert len(r.content) <= len(pymupdf.open(stream=data).tobytes(garbage=3, deflate=True)) + 16
 
 
+def photo_pdf(pages: int = 2) -> bytes:
+    """Pages with a photo-like picture each (noise over a gradient: it does not deflate away)."""
+    import numpy as np
+    rng = np.random.default_rng(7)
+    doc = pymupdf.open()
+    for i in range(pages):
+        page = doc.new_page()
+        page.insert_text((72, 72), f"Halaman {i + 1}", fontsize=14)
+        base = np.linspace(40, 220, 1600, dtype=np.float32)[None, :, None]
+        img = np.clip(base + rng.normal(0, 25, (1600, 1600, 3)), 0, 255).astype(np.uint8)
+        pix = pymupdf.Pixmap(pymupdf.csRGB, 1600, 1600, img.tobytes(), False)
+        page.insert_image(pymupdf.Rect(72, 100, 523, 551), stream=pix.tobytes("jpeg", jpg_quality=95))
+    return doc.tobytes(garbage=3, deflate=True)
+
+
+def test_compress_to_a_size_takes_the_mildest_step_that_gets_there(client):
+    data = photo_pdf()
+    target_kb = len(data) // 1024 // 4
+    r = run(client, "compress", [("a.pdf", data)], target_kb=target_kb)
+    doc = pdf_of(r)
+    assert r.headers["x-edith-target"] == "reached"
+    assert len(r.content) <= target_kb * 1024
+    assert texts(doc) == ["Halaman 1", "Halaman 2"]
+    # A looser target keeps more of the pictures.
+    loose = run(client, "compress", [("a.pdf", data)], target_kb=target_kb * 3)
+    assert target_kb * 1024 < len(loose.content) <= target_kb * 3 * 1024
+
+
+def test_compress_to_a_size_out_of_reach_gives_the_smallest_and_says_so(client):
+    data = make_pdf(2)  # text only: nothing to shrink
+    r = run(client, "compress", [("a.pdf", data)], target_kb=10)
+    assert r.status_code == 200 and r.headers["x-edith-target"] in ("reached", "missed")
+    tiny = run(client, "compress", [("a.pdf", photo_pdf(3))], target_kb=12)
+    assert tiny.headers["x-edith-target"] == "missed"
+    assert texts(pdf_of(tiny)) == ["Halaman 1", "Halaman 2", "Halaman 3"]
+    assert run(client, "compress", [("a.pdf", data)], target_kb=5).status_code == 400
+    assert "x-edith-target" not in run(client, "compress", [("a.pdf", data)], level="high").headers
+
+
 def test_merge_in_the_order_given(client):
     a, b = make_pdf(1), make_pdf(2)
     doc = pdf_of(run(client, "merge", [("b.pdf", b), ("a.pdf", a)]))

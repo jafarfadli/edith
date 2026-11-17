@@ -54,6 +54,7 @@ async def run_tool(
     diagonal: Annotated[bool, Form()] = True,
     position: Annotated[str, Form()] = "bottom-center", number_format: Annotated[str, Form()] = "n",
     start: Annotated[int, Form()] = 1,
+    target_kb: Annotated[int | None, Form()] = None,
 ) -> Response:
     if tool not in TOOL_NAMES:
         raise BadOptions(f"unknown tool {tool!r}", field="tool")
@@ -107,6 +108,8 @@ async def run_tool(
         finally:
             gate.leave(key)
 
+    reached: list[bool] = []  # compress to a size: whether the size was reached
+
     def _run() -> tools.Output:
         if tool == "images-to-pdf":
             return tools.images_to_pdf(blobs, size, margin or 0, s.max_pages)
@@ -131,7 +134,11 @@ async def run_tool(
                 case "to-text":
                     return tools.to_text(doc)
                 case "compress":
-                    return tools.compress(doc, level)
+                    if target_kb is None:
+                        return tools.compress(doc, level)
+                    out, ok = tools.compress_to(doc, target_kb * 1024)
+                    reached.append(ok)
+                    return out
                 case "split":
                     return tools.split(doc, mode, stem, every, ranges)
                 case "watermark":
@@ -156,4 +163,7 @@ async def run_tool(
 
     out = await run_in_threadpool(_run)
     name = f"{stem}-{SUFFIX[tool]}.{out.extension}" if SUFFIX[tool] else f"{stem}.{out.extension}"
-    return Response(out.data, media_type=out.media_type, headers={"Content-Disposition": _disposition(name)})
+    headers = {"Content-Disposition": _disposition(name)}
+    if reached:
+        headers["X-Edith-Target"] = "reached" if reached[0] else "missed"
+    return Response(out.data, media_type=out.media_type, headers=headers)
