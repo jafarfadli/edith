@@ -327,3 +327,21 @@ test("a run says where it is while it waits", async ({ page }) => {
   await expect(page.getByTestId("tool-progress")).toContainText(/Mengunggah… \d+%|Memproses di server/);
   await expect(page.getByTestId("tool-progress")).toHaveCount(0, { timeout: 15_000 });
 });
+
+test("the start page's search finds tools by what people need, and points PDF edits to the editor", async ({ page }) => {
+  await page.goto("/");
+  await page.keyboard.press("/");
+  const search = page.getByTestId("tool-search");
+  await expect(search).toBeFocused();
+  await search.fill("fotokopi ktp");
+  const results = page.getByTestId("tool-results").getByRole("link");
+  await expect(results.first()).toContainText("ID Card to A4");
+  await search.fill("kecilkan");
+  await expect(results.first()).toContainText("Compress PDF");
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "search.png"), fullPage: true });
+  await search.fill("tanda tangan");
+  await expect(page.getByTestId("tool-results")).toContainText("dikerjakan di editor");
+  await search.press("Escape");
+  await expect(page.getByTestId("tool-results")).toHaveCount(0);
+  await expect(page.getByTestId("tools-grid").getByRole("link")).toHaveCount(18);
+});

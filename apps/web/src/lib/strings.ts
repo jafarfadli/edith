@@ -435,6 +435,13 @@ export const t = {
       edit: "Edit di editor",
       handed: "Hasil dari langkah sebelumnya sudah dimasukkan.",
     },
+    search: {
+      label: "Cari alat",
+      placeholder: "Cari alat… (kecilkan, KTP, skripsi)",
+      none: "Tidak ada alat yang cocok. Coba kata lain.",
+      editor: "Mengedit isi PDF (teks, tanda tangan, sensor, stabilo) dikerjakan di editor:",
+      editorLink: "unggah PDF di atas.",
+    },
     preview: {
       title: "Pratinjau PDF",
       pick: "Klik halaman untuk memilih atau membatalkannya.",
