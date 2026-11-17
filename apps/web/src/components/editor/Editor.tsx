@@ -24,6 +24,7 @@ import { hasPictureText, imageTextOf, isPrint, paragraphsOf, textStore } from "@
 import { BTN_PRIMARY } from "../ui/styles";
 import { FormLayer } from "./forms/FormLayer";
 import { DocTabs } from "./DocTabs";
+import { SidePane } from "./SidePane";
 import { Header } from "./Header";
 import { Notice } from "./Notice";
 import { PageList } from "./PageList";
@@ -253,6 +254,7 @@ export function Editor({ docId: editId, initialName }: { docId: string; initialN
           {/* Over the canvas (centred on it, above the zoom pill), not on the window. */}
           {notice && <Notice kind={notice.kind} action={notice.action} onClose={() => setNotice(null)}>{notice.text}</Notice>}
         </div>
+        <SidePane />
         {/* The pages and annotations panel, right of the canvas; below xl the rail's Halaman takes its place
             (the canvas keeps the room the properties bar needs). */}
         {pdf ? <Sidebar /> : <aside className="hidden w-52 shrink-0 border-l border-line bg-panel xl:block" />}

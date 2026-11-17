@@ -53,7 +53,7 @@ function edgeScroller(): { move(at: Pt): void; stop(): void } {
 }
 
 /** The page (its key and box on screen) under client point (x, y), if any. */
-function pageUnder(x: number, y: number): { key: string; rect: DOMRect } | null {
+export function pageUnder(x: number, y: number): { key: string; rect: DOMRect } | null {
   for (const el of document.querySelectorAll<HTMLElement>('[data-testid="page"]')) {
     const r = el.getBoundingClientRect();
     if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom && el.dataset.pageKey) return { key: el.dataset.pageKey, rect: r };
@@ -62,7 +62,7 @@ function pageUnder(x: number, y: number): { key: string; rect: DOMRect } | null 
 }
 
 /** The point of page `key` under client point `at`, in page points (its geometry and the zoom as drawn). */
-function pagePoint(key: string, at: Pt): Pt | null {
+export function pagePoint(key: string, at: Pt): Pt | null {
   const s = editorStore.getState();
   const entry = s.doc.pages.find((p) => p.pageKey === key);
   const el = document.querySelector<HTMLElement>(`[data-testid="page"][data-page-key="${key}"]`);

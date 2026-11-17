@@ -1,6 +1,7 @@
 "use client";
 
-import { FileText, FileUp } from "lucide-react";
+import { Columns2, FileText, FileUp } from "lucide-react";
+import { useStore } from "zustand";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ApiError } from "@/lib/api";
@@ -14,6 +15,7 @@ import { CloseIcon, PlusIcon, SpinnerIcon } from "../brand/icons";
 import { ICON } from "../ui/icon";
 import { MenuButton, type MenuItem } from "./MenuButton";
 import { afterTextCommitted } from "./text/textEdit";
+import { sideStore } from "./SidePane";
 
 const MAX_BYTES = 50 * 1024 * 1024;
 
@@ -72,7 +74,12 @@ export function DocTabs({ onNotice }: { onNotice: (n: NoticeMsg | null) => void 
   const go = useGoTo();
   const info = useEditor((s) => s.info);
   const tabs = useSyncExternalStore(subscribeTabs, tabsSnapshot, tabsServerSnapshot);
+  const side = useStore(sideStore, (s) => s.editId);
   useEffect(() => { if (info) openTab({ id: info.editId, name: info.fileName }); }, [info]);
+  // The document beside this one went (its tab closed, or it is the one now edited): the pane closes.
+  useEffect(() => {
+    if (side && (side === info?.editId || !tabs.some((x) => x.id === side))) sideStore.getState().show(null);
+  }, [side, tabs, info]);
 
   if (!info || tabs.length < 2) return null;
   const close = (id: string) => {
@@ -103,6 +110,13 @@ export function DocTabs({ onNotice }: { onNotice: (n: NoticeMsg | null) => void 
       <OpenAnother onNotice={onNotice} className="mb-1 grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted hover:bg-hover hover:text-ink">
         <PlusIcon size={15} aria-hidden />
       </OpenAnother>
+      <div className="flex-1" />
+      {/* Another document beside this one (wide screens only: two pages need the room). */}
+      <button type="button" aria-pressed={!!side} title={t.side.openTip} data-testid="side-toggle"
+        onClick={() => sideStore.getState().show(side ? null : (tabs.find((x) => x.id !== info.editId)?.id ?? null))}
+        className={`mb-1 hidden h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs lg:flex ${side ? "bg-accent/15 text-accent-text" : "text-muted hover:bg-hover hover:text-ink"}`}>
+        <Columns2 size={14} aria-hidden />{t.side.open}
+      </button>
     </nav>
   );
 }

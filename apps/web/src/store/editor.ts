@@ -71,8 +71,9 @@ export interface EditorState {
   duplicatePage(pageKey: string): string | null;
   /** Registers the page sizes of an imported PDF (before its pages are inserted). */
   addImport(docId: string, pages: StructurePage[], fields?: FormField[]): void;
-  /** Inserts all pages of imported PDF `docId` after `pageKey` (null: at the start); returns their keys. */
-  insertImportAfter(pageKey: string | null, docId: string): string[];
+  /** Inserts the pages of imported PDF `docId` (all, or `indexes` in that order) after `pageKey` (null: at the start);
+   *  returns their keys. */
+  insertImportAfter(pageKey: string | null, docId: string, indexes?: number[]): string[];
   /** Crops the pages (null removes the crop) as one undo step. */
   setCrop(pageKeys: string[], crop: CropBox | null): void;
   /** Replaces the whole document as one undo step (the Manage Pages modal's Simpan). */
@@ -274,11 +275,12 @@ export function createEditorStore(now: () => number = Date.now): StoreApi<Editor
         if (info) set({ info: { ...info, imports: { ...info.imports, [docId]: pages }, importFields: { ...info.importFields, [docId]: fields } } });
       },
 
-      insertImportAfter(key, docId) {
+      insertImportAfter(key, docId, indexes) {
         const count = get().info?.imports?.[docId]?.length ?? 0;
-        if (!count) return [];
+        const take = indexes?.filter((i) => i >= 0 && i < count) ?? count;
+        if (!count || (Array.isArray(take) && !take.length)) return [];
         const before = new Set(get().doc.pages.map((p) => p.pageKey));
-        commit((d) => P.importPages(d, key === null ? 0 : d.pages.findIndex((p) => p.pageKey === key) + 1, docId, count));
+        commit((d) => P.importPages(d, key === null ? 0 : d.pages.findIndex((p) => p.pageKey === key) + 1, docId, take));
         return get().doc.pages.filter((p) => !before.has(p.pageKey)).map((p) => p.pageKey);
       },
 
