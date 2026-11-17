@@ -176,6 +176,16 @@ export function ToolRunner({ tool }: { tool: ToolDef }) {
             {o.size === "a4" && <Choice label={t.tools.opts.margin} value={o.margin} options={[0, 20, 40] as const} names={t.tools.opts.margins} onChange={(margin) => set({ margin })} />}
           </>
         );
+      case "paper-size":
+        return (
+          <>
+            <Choice label={t.tools.opts.paper} value={o.paper} options={["a4", "f4", "letter", "legal"] as const} names={t.tools.opts.papers} onChange={(paper) => set({ paper })} />
+            <Choice label={t.tools.opts.fit} value={o.fit} options={["page", "content"] as const} names={t.tools.opts.fits} onChange={(fit) => set({ fit, margins: fit === "content" && o.margins === "none" ? "normal" : o.margins })} />
+            <Choice label={t.tools.opts.margin} value={o.margins} options={(o.fit === "content" ? ["narrow", "normal", "thesis"] : ["none", "narrow", "normal", "thesis"]) as ToolOptions["margins"][]}
+              names={t.tools.opts.marginsFor} onChange={(margins) => set({ margins })} />
+            <p className="text-xs text-muted">{t.tools.opts.fitNote[o.fit]}</p>
+          </>
+        );
       case "pas-foto":
         return (
           <>

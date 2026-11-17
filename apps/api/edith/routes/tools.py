@@ -16,7 +16,7 @@ from edith.routes.documents import read_limited
 router = APIRouter()
 
 TOOL_NAMES = {"unlock", "protect", "to-images", "to-text", "compress", "merge", "split", "extract", "images-to-pdf",
-              "watermark", "page-numbers", "ocr", "office-to-pdf", "to-docx", "scan", "pas-foto"}
+              "watermark", "page-numbers", "ocr", "office-to-pdf", "to-docx", "scan", "pas-foto", "paper-size"}
 # A whole document read by OCR (POST /tools/ocr): at most this many pages without text, in one request.
 OCR_MAX_PAGES = 60
 MAX_FILES = 50
@@ -34,7 +34,7 @@ def _disposition(name: str) -> str:
 
 
 SUFFIX = {"office-to-pdf": "", "to-docx": "", "watermark": "watermark", "page-numbers": "bernomor", "ocr": "bisa-dicari", "unlock": "terbuka", "protect": "terkunci", "compress": "kecil", "merge": "gabungan", "split": "terpisah",
-          "extract": "halaman", "to-images": "gambar", "to-text": "teks", "images-to-pdf": "gambar", "scan": "scan", "pas-foto": "pasfoto"}
+          "extract": "halaman", "to-images": "gambar", "to-text": "teks", "images-to-pdf": "gambar", "scan": "scan", "pas-foto": "pasfoto", "paper-size": ""}
 
 
 @router.post("/tools/{tool}")
@@ -55,6 +55,7 @@ async def run_tool(
     position: Annotated[str, Form()] = "bottom-center", number_format: Annotated[str, Form()] = "n",
     start: Annotated[int, Form()] = 1,
     target_kb: Annotated[int | None, Form()] = None,
+    paper: Annotated[str, Form()] = "a4", fit: Annotated[str, Form()] = "page", margins: Annotated[str, Form()] = "none",
     scan_mode: Annotated[str, Form()] = "color", crop: Annotated[bool, Form()] = True,
 ) -> Response:
     if tool not in TOOL_NAMES:
@@ -160,6 +161,9 @@ async def run_tool(
                                               colour or "#000000")
                 case "ocr":
                     return read_scan(doc)
+                case "paper-size":
+                    from edith import paper as paper_mod
+                    return tools.pdf(paper_mod.resize(doc, paper, fit, margins))
                 case "to-docx":
                     data = office.pdf_to_docx(doc)
                     return tools.Output(data, DOCX, "docx")
@@ -172,7 +176,8 @@ async def run_tool(
                 d.close()
 
     out = await run_in_threadpool(_run)
-    name = f"{stem}-{SUFFIX[tool]}.{out.extension}" if SUFFIX[tool] else f"{stem}.{out.extension}"
+    suffix = paper.lower() if tool == "paper-size" else SUFFIX[tool]
+    name = f"{stem}-{suffix}.{out.extension}" if suffix else f"{stem}.{out.extension}"
     headers = {"Content-Disposition": _disposition(name)}
     if reached:
         headers["X-Edith-Target"] = "reached" if reached[0] else "missed"
