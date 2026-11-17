@@ -16,6 +16,7 @@ import { ICON } from "../ui/icon";
 import { MenuButton, type MenuItem } from "./MenuButton";
 import { afterTextCommitted } from "./text/textEdit";
 import { sideStore } from "./SidePane";
+import { useCommand } from "./commands";
 
 const MAX_BYTES = 50 * 1024 * 1024;
 
@@ -33,6 +34,7 @@ export function OpenAnother({ onNotice, className, children }: {
   const go = useGoTo();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  useCommand("openPdf", () => input.current?.click());
   const here = useEditor((s) => s.info?.editId);
   const index = useSyncExternalStore(subscribeIndex, rawIndex, () => "[]");
   const open = new Set(useSyncExternalStore(subscribeTabs, tabsSnapshot, tabsServerSnapshot).map((x) => x.id));

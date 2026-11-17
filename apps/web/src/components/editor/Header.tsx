@@ -1,6 +1,6 @@
 "use client";
 
-import { FilePlus2 } from "lucide-react";
+import { Command, FilePlus2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { ExportOutput, Op } from "@edith/ops";
@@ -21,6 +21,8 @@ import { Tip } from "../ui/Tooltip";
 import { openFind } from "./find/findStore";
 import { afterTextCommitted, whenTextCommitted } from "./text/textEdit";
 import { OpenAnother } from "./DocTabs";
+import { useCommand } from "./commands";
+import { paletteStore } from "./CommandPalette";
 
 /** The editor's top bar: the mark (home) and the file name, then Urungkan/Ulangi, Cari, Ratakan form and Unduh. The
  *  tools are on the rail (Toolbar). */
@@ -88,6 +90,7 @@ export function Header({ onNotice }: { onNotice: (n: NoticeMsg | null) => void }
     }
   }
   useEffect(() => { latest.current = () => download(lastOutput.current); });
+  useCommand("download", () => void download());
   // A download the options dialog asked for.
   const asked = useStore(downloadStore, (x) => x.request);
   useEffect(() => {
@@ -117,6 +120,7 @@ export function Header({ onNotice }: { onNotice: (n: NoticeMsg | null) => void }
         <IconButton label={t.editor.redo} icon={RedoIcon} keys="Mod+Shift+Z" disabled={!canRedo} onClick={() => afterTextCommitted(() => editorStore.getState().redo())} />
         <span aria-hidden className="mx-1 h-5 w-px bg-line" />
         <IconButton label={t.find.open} icon={SearchIcon} keys="Mod+F" disabled={!info} onClick={openFind} />
+        <IconButton label={t.palette.open} icon={Command} keys="Mod+K" disabled={!info} onClick={() => paletteStore.getState().set(true)} />
         {hasForm && (
           // Below xl only the checkbox shows (its name in the tooltip), so every tool still fits the bar at 1024 px.
           <Tip label={`${t.form.flatten}. ${t.form.flattenHint}.`} wide>

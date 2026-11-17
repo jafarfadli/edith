@@ -1,12 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { ContentOp } from "@edith/ops";
-import { ApiError, uploadAsset } from "@/lib/api";
-import { putAsset } from "@/lib/library";
-import { newId } from "@/lib/id";
-import { fitImage } from "@/lib/image";
-import { errorMessage, t } from "@/lib/strings";
+import { useCommand } from "./commands";
+import { insertImage } from "./insertImage";
+import { t } from "@/lib/strings";
 import { toolKey } from "@/lib/toolKeys";
 import { editorStore, useEditor, type Tool } from "@/store/editor";
 import {
@@ -19,7 +16,7 @@ import { SignatureModal } from "./marks/SignatureModal";
 import { cropStore } from "./pages/cropStore";
 import { ManagePagesModal } from "./pages/ManagePagesModal";
 import { StampPicker } from "./marks/StampPicker";
-import { currentPage, placeObject } from "./placement";
+import { currentPage } from "./placement";
 import { SplitButton } from "./SplitButton";
 
 type NoticeFn = (n: { kind: "error" | "info"; text: string }) => void;
@@ -38,21 +35,14 @@ export function Toolbar({ onNotice }: { onNotice: NoticeFn }) {
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [pagesOpen, setPagesOpen] = useState(false);
   const pick = (x: Tool) => editorStore.getState().setTool(x);
+  useCommand("uploadImage", () => file.current?.click());
+  useCommand("stamp", () => setStampOpen(true));
+  useCommand("signature", () => setSignatureOpen(true));
+  useCommand("managePages", () => setPagesOpen(true));
 
   async function addImage(f: File | undefined) {
-    const st = editorStore.getState();
-    const at = currentPage();
-    if (!f || !st.info || !at) return;
-    try {
-      const asset = await uploadAsset(st.info.docId, f);
-      void putAsset(st.info.editId, asset.asset_id, f).catch(() => undefined); // kept for when the server drops the document
-      const rect = fitImage(asset.width, asset.height, at.size.width, at.size.height);
-      placeObject({ id: newId(), type: "image.add", pageKey: at.entry.pageKey, rect, assetId: asset.asset_id } as ContentOp);
-    } catch (e) {
-      onNotice({ kind: "error", text: errorMessage(e instanceof ApiError ? e.code : "generic") });
-    } finally {
-      if (file.current) file.current.value = "";
-    }
+    if (f) await insertImage(f, onNotice);
+    if (file.current) file.current.value = "";
   }
 
   const r = t.rail;
